@@ -1,0 +1,8 @@
+.output
+.nitro
+dist
+node_modules
+bun.lock
+pnpm-lock.yaml
+dev-server*.log
+app.config.timestamp_*

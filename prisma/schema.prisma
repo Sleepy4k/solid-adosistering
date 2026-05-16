@@ -4,7 +4,6 @@ generator client {
 
 datasource db {
   provider = "mysql"
-  url      = env("DATABASE_URL")
 }
 
 enum Role {
@@ -60,22 +59,18 @@ model User {
   id                   String                  @id @default(cuid())
   email                String                  @unique
   name                 String
-  passwordHash         String
+  passwordHash         String                  @map("password_hash")
   role                 Role                    @default(USER)
-  isActive             Boolean                 @default(true)
-  createdAt            DateTime                @default(now())
-  updatedAt            DateTime                @updatedAt
+  isActive             Boolean                 @default(true) @map("is_active")
+  createdAt            DateTime                @default(now()) @map("created_at")
+  updatedAt            DateTime                @updatedAt @map("updated_at")
   profile              UserProfile?
   sessions             Session[]
   passwordResetTokens  PasswordResetToken[]
   administeredRegions  AdminRegionAssignment[] @relation("AdminRegionAssignments")
   assignedRegions      UserRegionAssignment[]  @relation("UserRegionAssignments")
-  assignedBlocks       UserBlockAssignment[]   @relation("UserBlockAssignments")
-  assignedSprayers     UserSprayerAssignment[] @relation("UserSprayerAssignments")
   assignedAdminRegions AdminRegionAssignment[] @relation("AdminRegionAssignedBy")
   assignedUserRegions  UserRegionAssignment[]  @relation("UserRegionAssignedBy")
-  assignedUserBlocks   UserBlockAssignment[]   @relation("UserBlockAssignedBy")
-  assignedUserSprayers UserSprayerAssignment[] @relation("UserSprayerAssignedBy")
   createdRegions       Region[]                @relation("RegionCreator")
   updatedRegions       Region[]                @relation("RegionUpdater")
   createdBlocks        Block[]                 @relation("BlockCreator")
@@ -85,75 +80,82 @@ model User {
   irrigationEvents     IrrigationEvent[]       @relation("IrrigationActor")
   alertNotifications   AlertNotification[]     @relation("AlertRecipient")
   sentEmails           EmailDelivery[]         @relation("EmailRecipient")
+
+  @@index([role, createdAt])
+  @@index([isActive, createdAt])
+  @@map("user")
 }
 
 model Session {
   id        String   @id @default(cuid())
-  userId    String
-  tokenHash String   @unique
-  expiresAt DateTime
-  createdAt DateTime @default(now())
+  userId    String   @map("user_id")
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
+  @@map("session")
 }
 
 model PasswordResetToken {
   id        String    @id @default(cuid())
-  userId    String
-  tokenHash String    @unique
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
+  userId    String    @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
+  @@map("password_reset_token")
 }
 
 model Region {
   id                 String                  @id @default(cuid())
   name               String                  @unique
   description        String?
-  latitude           Decimal?                @db.Decimal(10, 7)
-  longitude          Decimal?                @db.Decimal(10, 7)
-  createdById        String
-  updatedById        String?
-  firebaseSyncStatus SyncStatus              @default(PENDING)
-  firebaseSyncedAt   DateTime?
-  createdAt          DateTime                @default(now())
-  updatedAt          DateTime                @updatedAt
+  latitude           Decimal?                @db.Decimal(18, 16)
+  longitude          Decimal?                @db.Decimal(19, 16)
+  createdById        String                  @map("created_by_id")
+  updatedById        String?                 @map("updated_by_id")
+  firebaseSyncStatus SyncStatus              @default(PENDING) @map("firebase_sync_status")
+  firebaseSyncedAt   DateTime?               @map("firebase_synced_at")
+  createdAt          DateTime                @default(now()) @map("created_at")
+  updatedAt          DateTime                @updatedAt @map("updated_at")
   createdBy          User                    @relation("RegionCreator", fields: [createdById], references: [id])
   updatedBy          User?                   @relation("RegionUpdater", fields: [updatedById], references: [id])
   blocks             Block[]
   adminAssignments   AdminRegionAssignment[]
   userAssignments    UserRegionAssignment[]
+  thresholds         IndicatorThreshold[]
   mapLayers          MapLayer[]
   activityLogs       ActivityLog[]
   alertNotifications AlertNotification[]
 
   @@index([createdById])
+  @@index([firebaseSyncStatus, createdAt])
+  @@map("region")
 }
 
 model Block {
-  id                 String                @id @default(cuid())
-  regionId           String
+  id                 String              @id @default(cuid())
+  regionId           String              @map("region_id")
   name               String
-  areaHectare        Decimal?              @db.Decimal(10, 2)
-  polygonGeojson     Json?
-  createdById        String
-  updatedById        String?
-  firebaseSyncStatus SyncStatus            @default(PENDING)
-  firebaseSyncedAt   DateTime?
-  createdAt          DateTime              @default(now())
-  updatedAt          DateTime              @updatedAt
-  region             Region                @relation(fields: [regionId], references: [id], onDelete: Cascade)
-  createdBy          User                  @relation("BlockCreator", fields: [createdById], references: [id])
-  updatedBy          User?                 @relation("BlockUpdater", fields: [updatedById], references: [id])
+  areaHectare        Decimal?            @map("area_hectare") @db.Decimal(10, 2)
+  polygonGeojson     Json?               @map("polygon_geojson")
+  createdById        String              @map("created_by_id")
+  updatedById        String?             @map("updated_by_id")
+  firebaseSyncStatus SyncStatus          @default(PENDING) @map("firebase_sync_status")
+  firebaseSyncedAt   DateTime?           @map("firebase_synced_at")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  region             Region              @relation(fields: [regionId], references: [id], onDelete: Cascade)
+  createdBy          User                @relation("BlockCreator", fields: [createdById], references: [id])
+  updatedBy          User?               @relation("BlockUpdater", fields: [updatedById], references: [id])
   sprayers           Sprayer[]
-  userAssignments    UserBlockAssignment[]
-  thresholds         IndicatorThreshold[]
   sensorReadings     SensorReading[]
   irrigationEvents   IrrigationEvent[]
   activityLogs       ActivityLog[]
@@ -161,33 +163,35 @@ model Block {
 
   @@unique([regionId, name])
   @@index([createdById])
+  @@map("block")
 }
 
 model Sprayer {
-  id                 String                  @id @default(cuid())
-  blockId            String
-  hardwareId         String                  @unique
-  displayName        String
-  installedAt        DateTime?
-  isActive           Boolean                 @default(true)
-  firebaseSyncStatus SyncStatus              @default(PENDING)
-  firebaseSyncedAt   DateTime?
-  createdAt          DateTime                @default(now())
-  updatedAt          DateTime                @updatedAt
-  block              Block                   @relation(fields: [blockId], references: [id], onDelete: Cascade)
-  userAssignments    UserSprayerAssignment[]
+  id                 String              @id @default(cuid())
+  blockId            String              @map("block_id")
+  hardwareId         String              @map("hardware_id")
+  displayName        String              @map("display_name")
+  installedAt        DateTime?           @map("installed_at")
+  isActive           Boolean             @default(true) @map("is_active")
+  firebaseSyncStatus SyncStatus          @default(PENDING) @map("firebase_sync_status")
+  firebaseSyncedAt   DateTime?           @map("firebase_synced_at")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  block              Block               @relation(fields: [blockId], references: [id], onDelete: Cascade)
   sensorReadings     SensorReading[]
   irrigationEvents   IrrigationEvent[]
   alertNotifications AlertNotification[]
 
+  @@unique([blockId, hardwareId])
   @@index([blockId])
+  @@map("sprayer")
 }
 
 model AdminRegionAssignment {
-  adminId      String
-  regionId     String
-  assignedById String
-  assignedAt   DateTime @default(now())
+  adminId      String   @map("admin_id")
+  regionId     String   @map("region_id")
+  assignedById String   @map("assigned_by_id")
+  assignedAt   DateTime @default(now()) @map("assigned_at")
   admin        User     @relation("AdminRegionAssignments", fields: [adminId], references: [id], onDelete: Cascade)
   assignedBy   User     @relation("AdminRegionAssignedBy", fields: [assignedById], references: [id])
   region       Region   @relation(fields: [regionId], references: [id], onDelete: Cascade)
@@ -195,13 +199,14 @@ model AdminRegionAssignment {
   @@id([adminId, regionId])
   @@index([regionId])
   @@index([assignedById])
+  @@map("admin_region_assignment")
 }
 
 model UserRegionAssignment {
-  userId       String
-  regionId     String
-  assignedById String
-  assignedAt   DateTime @default(now())
+  userId       String   @map("user_id")
+  regionId     String   @map("region_id")
+  assignedById String   @map("assigned_by_id")
+  assignedAt   DateTime @default(now()) @map("assigned_at")
   user         User     @relation("UserRegionAssignments", fields: [userId], references: [id], onDelete: Cascade)
   assignedBy   User     @relation("UserRegionAssignedBy", fields: [assignedById], references: [id])
   region       Region   @relation(fields: [regionId], references: [id], onDelete: Cascade)
@@ -209,113 +214,102 @@ model UserRegionAssignment {
   @@id([userId, regionId])
   @@index([regionId])
   @@index([assignedById])
-}
-
-model UserBlockAssignment {
-  userId       String
-  blockId      String
-  assignedById String
-  assignedAt   DateTime @default(now())
-  user         User     @relation("UserBlockAssignments", fields: [userId], references: [id], onDelete: Cascade)
-  assignedBy   User     @relation("UserBlockAssignedBy", fields: [assignedById], references: [id])
-  block        Block    @relation(fields: [blockId], references: [id], onDelete: Cascade)
-
-  @@id([userId, blockId])
-  @@index([blockId])
-  @@index([assignedById])
-}
-
-model UserSprayerAssignment {
-  userId       String
-  sprayerId    String
-  assignedById String
-  assignedAt   DateTime @default(now())
-  user         User     @relation("UserSprayerAssignments", fields: [userId], references: [id], onDelete: Cascade)
-  assignedBy   User     @relation("UserSprayerAssignedBy", fields: [assignedById], references: [id])
-  sprayer      Sprayer  @relation(fields: [sprayerId], references: [id], onDelete: Cascade)
-
-  @@id([userId, sprayerId])
-  @@index([sprayerId])
-  @@index([assignedById])
+  @@map("user_region_assignment")
 }
 
 model IndicatorThreshold {
-  id            String   @id @default(cuid())
-  userId        String
-  blockId       String
-  dryMaxPercent Int
-  wetMinPercent Int
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  block         Block    @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  id                     String         @id @default(cuid())
+  userId                 String         @map("user_id")
+  regionId               String         @map("region_id")
+  dryMaxPercent          Int            @map("dry_max_percent")
+  wetMinPercent          Int            @map("wet_min_percent")
+  displayDryMaxPercent   Int            @default(40) @map("display_dry_max_percent")
+  displayMoistMaxPercent Int            @default(70) @map("display_moist_max_percent")
+  displayWetMinPercent   Int            @default(80) @map("display_wet_min_percent")
+  landPreference         MoistureStatus @default(LEMBAB) @map("land_preference")
+  createdAt              DateTime       @default(now()) @map("created_at")
+  updatedAt              DateTime       @updatedAt @map("updated_at")
+  user                   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  region                 Region         @relation(fields: [regionId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, blockId])
-  @@index([blockId])
+  @@unique([userId, regionId])
+  @@index([regionId])
+  @@map("indicator_threshold")
 }
 
 model SensorReading {
-  id              String         @id @default(cuid())
-  blockId         String
-  sprayerId       String
-  moisturePercent Decimal        @db.Decimal(5, 2)
-  flowLmin        Decimal        @db.Decimal(8, 2)
-  moistureStatus  MoistureStatus
-  pumpStatus      String
-  recordedAt      DateTime
-  createdAt       DateTime       @default(now())
-  block           Block          @relation(fields: [blockId], references: [id], onDelete: Cascade)
-  sprayer         Sprayer        @relation(fields: [sprayerId], references: [id], onDelete: Cascade)
+  id               String         @id @default(cuid())
+  blockId          String         @map("block_id")
+  sprayerId        String         @map("sprayer_id")
+  moisturePercent  Decimal        @map("moisture_percent") @db.Decimal(5, 2)
+  flowLmin         Decimal        @map("flow_lmin") @db.Decimal(8, 2)
+  totalVolumeLiter Decimal?       @map("total_volume_liter") @db.Decimal(12, 2)
+  moistureStatus   MoistureStatus @map("moisture_status")
+  pumpStatus       String         @map("pump_status")
+  windDirection    String?        @map("wind_direction")
+  recordedAt       DateTime       @map("recorded_at")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  block            Block          @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  sprayer          Sprayer        @relation(fields: [sprayerId], references: [id], onDelete: Cascade)
 
   @@index([blockId, recordedAt])
   @@index([sprayerId, recordedAt])
+  @@map("sensor_reading")
 }
 
 model IrrigationEvent {
-  id        String         @id @default(cuid())
-  blockId   String
-  sprayerId String
-  actorId   String?
-  mode      IrrigationMode
-  relay     RelayState
-  reason    String?
-  startedAt DateTime
-  endedAt   DateTime?
-  createdAt DateTime       @default(now())
-  block     Block          @relation(fields: [blockId], references: [id], onDelete: Cascade)
-  sprayer   Sprayer        @relation(fields: [sprayerId], references: [id], onDelete: Cascade)
-  actor     User?          @relation("IrrigationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  id               String         @id @default(cuid())
+  blockId          String         @map("block_id")
+  sprayerId        String         @map("sprayer_id")
+  actorId          String?        @map("actor_id")
+  mode             IrrigationMode
+  relay            RelayState
+  reason           String?
+  durationSeconds  Int?           @map("duration_seconds")
+  totalVolumeLiter Decimal?       @map("total_volume_liter") @db.Decimal(12, 2)
+  firebaseEventId  String?        @unique @map("firebase_event_id")
+  firebaseDateKey  String?        @map("firebase_date_key")
+  startedAt        DateTime       @map("started_at")
+  endedAt          DateTime?      @map("ended_at")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  block            Block          @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  sprayer          Sprayer        @relation(fields: [sprayerId], references: [id], onDelete: Cascade)
+  actor            User?          @relation("IrrigationActor", fields: [actorId], references: [id], onDelete: SetNull)
 
   @@index([blockId, startedAt])
   @@index([sprayerId, startedAt])
   @@index([actorId])
+  @@index([firebaseDateKey])
+  @@index([firebaseEventId])
+  @@map("irrigation_event")
 }
 
 model MapLayer {
   id        String   @id @default(cuid())
-  regionId  String
+  regionId  String   @map("region_id")
   name      String
   geojson   Json
-  isDefault Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isDefault Boolean  @default(false) @map("is_default")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
   region    Region   @relation(fields: [regionId], references: [id], onDelete: Cascade)
 
   @@unique([regionId, name])
+  @@map("map_layer")
 }
 
 model ActivityLog {
   id         String         @id @default(cuid())
-  actorId    String?
-  regionId   String?
-  blockId    String?
+  actorId    String?        @map("actor_id")
+  regionId   String?        @map("region_id")
+  blockId    String?        @map("block_id")
   action     ActivityAction
-  entityType String
-  entityId   String?
+  entityType String         @map("entity_type")
+  entityId   String?        @map("entity_id")
   metadata   Json?
-  ipAddress  String?
-  userAgent  String?
-  createdAt  DateTime       @default(now())
+  ipAddress  String?        @map("ip_address")
+  userAgent  String?        @map("user_agent")
+  createdAt  DateTime       @default(now()) @map("created_at")
   actor      User?          @relation("ActorActivityLogs", fields: [actorId], references: [id], onDelete: SetNull)
   region     Region?        @relation(fields: [regionId], references: [id], onDelete: SetNull)
   block      Block?         @relation(fields: [blockId], references: [id], onDelete: SetNull)
@@ -323,20 +317,21 @@ model ActivityLog {
   @@index([actorId, createdAt])
   @@index([regionId, createdAt])
   @@index([action, createdAt])
+  @@map("activity_log")
 }
 
 model AlertNotification {
   id          String        @id @default(cuid())
-  recipientId String?
-  regionId    String?
-  blockId     String?
-  sprayerId   String?
+  recipientId String?       @map("recipient_id")
+  regionId    String?       @map("region_id")
+  blockId     String?       @map("block_id")
+  sprayerId   String?       @map("sprayer_id")
   severity    AlertSeverity
   title       String
   message     String
-  deliveredAt DateTime?
-  readAt      DateTime?
-  createdAt   DateTime      @default(now())
+  deliveredAt DateTime?     @map("delivered_at")
+  readAt      DateTime?     @map("read_at")
+  createdAt   DateTime      @default(now()) @map("created_at")
   recipient   User?         @relation("AlertRecipient", fields: [recipientId], references: [id], onDelete: SetNull)
   region      Region?       @relation(fields: [regionId], references: [id], onDelete: SetNull)
   block       Block?        @relation(fields: [blockId], references: [id], onDelete: SetNull)
@@ -344,48 +339,54 @@ model AlertNotification {
 
   @@index([recipientId, createdAt])
   @@index([severity, createdAt])
+  @@map("alert_notification")
 }
 
 model EmailDelivery {
   id          String    @id @default(cuid())
-  recipientId String?
-  toEmail     String
+  recipientId String?   @map("recipient_id")
+  toEmail     String    @map("to_email")
   subject     String
   provider    String
-  providerId  String?
-  sentAt      DateTime?
-  failedAt    DateTime?
+  providerId  String?   @map("provider_id")
+  sentAt      DateTime? @map("sent_at")
+  failedAt    DateTime? @map("failed_at")
   error       String?
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime  @default(now()) @map("created_at")
   recipient   User?     @relation("EmailRecipient", fields: [recipientId], references: [id], onDelete: SetNull)
 
   @@index([recipientId, createdAt])
   @@index([toEmail, createdAt])
+  @@map("email_delivery")
 }
 
 model SystemSetting {
   key       String   @id
   value     Json
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_setting")
 }
 
 model UserProfile {
-  userId         String    @id
+  userId         String    @id @map("user_id")
   whatsapp       String?
   nickname       String?
   gender         String?
-  birthDate      DateTime?
-  altPhone       String?
+  birthDate      DateTime? @map("birth_date")
+  altPhone       String?   @map("alt_phone")
   occupation     String?
   domicile       String?
   address        String?
   country        String?
   province       String?
   city           String?
-  postalCode     String?
-  internalNotes  String?   @db.Text
-  deviceUsername String?   @unique
-  apiKey         String?   @unique
-  updatedAt      DateTime  @updatedAt
+  postalCode     String?   @map("postal_code")
+  internalNotes  String?   @map("internal_notes") @db.Text
+  deviceUsername String?   @unique @map("device_username")
+  apiKey         String?   @unique @map("api_key")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
   user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_detail")
 }

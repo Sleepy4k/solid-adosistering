@@ -1,8 +1,8 @@
-import { getCookie, setCookie, deleteCookie } from "vinxi/http";
+import { deleteCookie, getCookie, setCookie } from "@solidjs/start/http";
 import { serverConfig } from "./config";
-import { prisma } from "./prisma";
+import { prisma } from "./db/prisma";
 import { hashToken, newOpaqueToken } from "./security";
-import type { Role } from "~/domain/irrigation";
+import type { Role } from "~/lib/shared/irrigation";
 
 export type SessionUser = {
   id: string;

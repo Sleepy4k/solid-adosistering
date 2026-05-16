@@ -1,3 +1,6 @@
+import { getPublicEnvStatus } from "./env";
+import { siteConfig } from "./site";
+
 export type PublicAppConfig = {
   appName: string;
   appConfigured: boolean;
@@ -17,14 +20,8 @@ function numberEnv(value: string | undefined, fallback: number) {
 }
 
 export const publicAppConfig: PublicAppConfig = {
-  appName: import.meta.env.VITE_APP_NAME ?? "Adosistering",
-  appConfigured: import.meta.env.VITE_APP_CONFIGURED === "true",
-  firebaseConfigured: Boolean(
-    import.meta.env.VITE_FIREBASE_API_KEY &&
-    import.meta.env.VITE_FIREBASE_DATABASE_URL &&
-    import.meta.env.VITE_FIREBASE_PROJECT_ID &&
-    import.meta.env.VITE_FIREBASE_APP_ID,
-  ),
+  appName: import.meta.env.VITE_APP_NAME ?? siteConfig.name,
+  ...getPublicEnvStatus(),
   defaultTelemetryTarget:
     import.meta.env.VITE_DEFAULT_REGION_NAME &&
     import.meta.env.VITE_DEFAULT_BLOCK_NAME &&

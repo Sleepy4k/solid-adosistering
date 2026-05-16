@@ -1,6 +1,6 @@
 import { cache, redirect } from "@solidjs/router";
 import { getSession } from "./session";
-import type { Role } from "~/domain/irrigation";
+import type { Role } from "~/lib/shared/irrigation";
 
 export type { SessionUser } from "./session";
 

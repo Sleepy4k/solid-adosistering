@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import argon2 from "argon2";
-import type { Role } from "~/domain/irrigation";
+import type { Role } from "~/lib/shared/irrigation";
 
 export type SessionUser = {
   id: string;

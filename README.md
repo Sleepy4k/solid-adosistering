@@ -56,8 +56,11 @@ Copy `.env.example` to `.env`, then fill the required values.
 
 ```env
 DATABASE_URL="mysql://root:password@localhost:3306/adosistering"
-APP_ORIGIN="http://localhost:3000"
+
 SESSION_COOKIE_NAME="adosistering_session"
+
+APP_ORIGIN="http://localhost:3000"
+VITE_APP_NAME="Adosistering"
 
 FIREBASE_PROJECT_ID=""
 FIREBASE_CLIENT_EMAIL=""
@@ -97,7 +100,6 @@ Default seed accounts:
 superadmin@test.com / Password123!
 admin@test.com / Password123!
 user@test.com / Password123!
-kawistamaos@adosistering.labgo.id / mernek123
 ```
 
 ## Development Commands

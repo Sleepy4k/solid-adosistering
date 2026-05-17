@@ -1,46 +1,13 @@
 import "dotenv/config";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { ActivityAction, IrrigationMode, MoistureStatus, RelayState, Role, SyncStatus } from "@prisma/client";
+import { ActivityAction, MoistureStatus, Role, SyncStatus } from "@prisma/client";
 import { prisma } from "../src/server/db/prisma";
 import { hashPassword } from "../src/server/security";
 
-type FirebaseHistoryEntry = {
-  duration?: number;
-  endtime?: number;
-  flow_Lmin?: number;
-  mode?: "AUTO" | "MANUAL";
-  moisture_percent?: number;
-  moisture_status?: string;
-  pump_status?: boolean;
-  starttime?: number;
-  timestamp?: number;
-  totalVolume?: number;
-};
-
-type FirebaseSprayer = {
-  control?: {
-    mode?: "AUTO" | "MANUAL";
-    pump_status?: boolean;
-  };
-  history?: Record<string, Record<string, FirebaseHistoryEntry>>;
-  live_data?: {
-    arah_angin?: string;
-    flow_Lmin?: number;
-    last_updated?: number;
-    moisture_percent?: number;
-    moisture_status?: string;
-    totalVolume?: number;
-  };
-};
-
-type FirebaseRegion = {
-  blocks?: Record<string, Record<string, FirebaseSprayer>>;
-  region_settings?: {
-    batas_basah?: number;
-    batas_kering?: number;
-    mode_otomatis?: boolean;
-  };
+const MAOS_REGION = {
+  name: "MAOS",
+  description: "Wilayah irigasi Maos, Cilacap",
+  latitude: "-7.6114790000000000",
+  longitude: "109.1773600000000000",
 };
 
 const MAOS_BLOCK_POLYGONS: Record<string, number[][][]> = {
@@ -132,6 +99,13 @@ const MAOS_BLOCK_POLYGONS: Record<string, number[][][]> = {
   ],
 };
 
+const MAOS_BLOCKS = Object.keys(MAOS_BLOCK_POLYGONS).map((name, index) => ({
+  name,
+  areaHectare: 1 + index * 0.5,
+  hardwareId: `Sprayer_${index + 1}`,
+  displayName: `Sprayer ${index + 1}`,
+}));
+
 const USERS = [
   { email: "superadmin@test.com", name: "Super Administrator", password: "Password123!", role: Role.SUPERADMIN },
   { email: "admin@test.com", name: "Admin MAOS", password: "Password123!", role: Role.ADMIN },
@@ -143,13 +117,6 @@ const USERS = [
     role: Role.USER,
   },
 ] as const;
-
-const LEGACY_SEED_EMAILS = [
-  "admin.maos@test.com",
-  "petani.satu@test.com",
-  "petani.dua@test.com",
-  "petani.tiga@test.com",
-];
 
 const PROFILES: Record<
   string,
@@ -203,36 +170,11 @@ const PROFILES: Record<
   },
 };
 
-function readFirebaseExample(): Record<string, FirebaseRegion> {
-  const url = new URL("../example-firebase.json", import.meta.url);
-  const path = fileURLToPath(url);
-  return JSON.parse(readFileSync(path, "utf8")) as Record<string, FirebaseRegion>;
-}
-
-function fromEpoch(seconds?: number) {
-  return new Date((seconds ?? Math.floor(Date.now() / 1000)) * 1000);
-}
-
-function moistureStatus(value?: string): MoistureStatus {
-  const normalized = value?.toLowerCase();
-  if (normalized === "basah") return MoistureStatus.BASAH;
-  if (normalized === "lembab") return MoistureStatus.LEMBAB;
-  return MoistureStatus.KERING;
-}
-
-function relayState(value?: boolean): RelayState {
-  return value ? RelayState.ON : RelayState.OFF;
-}
-
-function blockPolygon(regionName: string, blockName: string, blockIndex: number) {
-  if (!regionName.toLowerCase().includes("maos")) return undefined;
-  const coordinates = MAOS_BLOCK_POLYGONS[blockName] ?? Object.values(MAOS_BLOCK_POLYGONS)[blockIndex];
-  return coordinates ? { type: "Polygon", coordinates } : undefined;
+function polygonGeojson(blockName: string) {
+  return { type: "Polygon", coordinates: MAOS_BLOCK_POLYGONS[blockName] };
 }
 
 async function seedUsers() {
-  await prisma.user.deleteMany({ where: { email: { in: LEGACY_SEED_EMAILS } } });
-
   const userMap: Record<string, string> = {};
   for (const input of USERS) {
     const passwordHash = await hashPassword(input.password);
@@ -258,200 +200,118 @@ async function seedUsers() {
       });
     }
   }
+
   return userMap;
 }
 
 async function main() {
-  console.log("Seeding Adosistering database...");
+  console.warn("Seeding Adosistering core data...");
 
-  const firebaseExample = readFirebaseExample();
   const users = await seedUsers();
   const superadminId = users["superadmin@test.com"];
   const adminId = users["admin@test.com"];
   const farmerIds = ["user@test.com", "kawistamaos@adosistering.labgo.id"].map((email) => users[email]);
 
-  for (const [regionName, regionNode] of Object.entries(firebaseExample)) {
-    const settings = regionNode.region_settings ?? {};
-    const region = await prisma.region.upsert({
-      where: { name: regionName },
+  const region = await prisma.region.upsert({
+    where: { name: MAOS_REGION.name },
+    update: {
+      description: MAOS_REGION.description,
+      latitude: MAOS_REGION.latitude,
+      longitude: MAOS_REGION.longitude,
+      firebaseSyncStatus: SyncStatus.SYNCED,
+      firebaseSyncedAt: new Date(),
+    },
+    create: {
+      ...MAOS_REGION,
+      createdById: superadminId,
+      firebaseSyncStatus: SyncStatus.SYNCED,
+      firebaseSyncedAt: new Date(),
+    },
+  });
+
+  await prisma.adminRegionAssignment.upsert({
+    where: { adminId_regionId: { adminId, regionId: region.id } },
+    update: {},
+    create: { adminId, regionId: region.id, assignedById: superadminId },
+  });
+
+  for (const farmerId of farmerIds) {
+    await prisma.userRegionAssignment.upsert({
+      where: { userId_regionId: { userId: farmerId, regionId: region.id } },
+      update: {},
+      create: { userId: farmerId, regionId: region.id, assignedById: adminId },
+    });
+
+    await prisma.indicatorThreshold.upsert({
+      where: { userId_regionId: { userId: farmerId, regionId: region.id } },
       update: {
-        description: `Wilayah irigasi ${regionName}`,
-        latitude: "-7.6114790000000000",
-        longitude: "109.1773600000000000",
+        dryMaxPercent: 40,
+        wetMinPercent: 80,
+        displayDryMaxPercent: 40,
+        displayMoistMaxPercent: 70,
+        displayWetMinPercent: 80,
+        landPreference: MoistureStatus.LEMBAB,
+      },
+      create: {
+        userId: farmerId,
+        regionId: region.id,
+        dryMaxPercent: 40,
+        wetMinPercent: 80,
+        displayDryMaxPercent: 40,
+        displayMoistMaxPercent: 70,
+        displayWetMinPercent: 80,
+        landPreference: MoistureStatus.LEMBAB,
+      },
+    });
+  }
+
+  for (const blockInput of MAOS_BLOCKS) {
+    const block = await prisma.block.upsert({
+      where: { regionId_name: { regionId: region.id, name: blockInput.name } },
+      update: {
+        areaHectare: blockInput.areaHectare,
+        polygonGeojson: polygonGeojson(blockInput.name),
         firebaseSyncStatus: SyncStatus.SYNCED,
         firebaseSyncedAt: new Date(),
       },
       create: {
-        name: regionName,
-        description: `Wilayah irigasi ${regionName}`,
-        latitude: "-7.6114790000000000",
-        longitude: "109.1773600000000000",
-        createdById: superadminId,
+        regionId: region.id,
+        name: blockInput.name,
+        areaHectare: blockInput.areaHectare,
+        polygonGeojson: polygonGeojson(blockInput.name),
+        createdById: adminId,
         firebaseSyncStatus: SyncStatus.SYNCED,
         firebaseSyncedAt: new Date(),
       },
     });
 
-    await prisma.adminRegionAssignment.upsert({
-      where: { adminId_regionId: { adminId, regionId: region.id } },
-      update: {},
-      create: { adminId, regionId: region.id, assignedById: superadminId },
+    await prisma.sprayer.upsert({
+      where: { blockId_hardwareId: { blockId: block.id, hardwareId: blockInput.hardwareId } },
+      update: {
+        displayName: blockInput.displayName,
+        isActive: true,
+        firebaseSyncStatus: SyncStatus.SYNCED,
+        firebaseSyncedAt: new Date(),
+      },
+      create: {
+        blockId: block.id,
+        hardwareId: blockInput.hardwareId,
+        displayName: blockInput.displayName,
+        isActive: true,
+        firebaseSyncStatus: SyncStatus.SYNCED,
+        firebaseSyncedAt: new Date(),
+      },
     });
-
-    for (const farmerId of farmerIds) {
-      await prisma.userRegionAssignment.upsert({
-        where: { userId_regionId: { userId: farmerId, regionId: region.id } },
-        update: {},
-        create: { userId: farmerId, regionId: region.id, assignedById: adminId },
-      });
-
-      await prisma.indicatorThreshold.upsert({
-        where: { userId_regionId: { userId: farmerId, regionId: region.id } },
-        update: {
-          dryMaxPercent: settings.batas_kering ?? 40,
-          wetMinPercent: settings.batas_basah ?? 80,
-          displayDryMaxPercent: 40,
-          displayMoistMaxPercent: 70,
-          displayWetMinPercent: 80,
-          landPreference: MoistureStatus.LEMBAB,
-        },
-        create: {
-          userId: farmerId,
-          regionId: region.id,
-          dryMaxPercent: settings.batas_kering ?? 40,
-          wetMinPercent: settings.batas_basah ?? 80,
-          displayDryMaxPercent: 40,
-          displayMoistMaxPercent: 70,
-          displayWetMinPercent: 80,
-          landPreference: MoistureStatus.LEMBAB,
-        },
-      });
-    }
-
-    await prisma.systemSetting.upsert({
-      where: { key: `region_settings:${regionName}` },
-      update: { value: settings },
-      create: { key: `region_settings:${regionName}`, value: settings },
-    });
-
-    const blocks = Object.entries(regionNode.blocks ?? {});
-    for (const [blockIndex, [blockName, sprayers]] of blocks.entries()) {
-      const block = await prisma.block.upsert({
-        where: { regionId_name: { regionId: region.id, name: blockName } },
-        update: {
-          polygonGeojson: blockPolygon(regionName, blockName, blockIndex),
-          firebaseSyncStatus: SyncStatus.SYNCED,
-          firebaseSyncedAt: new Date(),
-        },
-        create: {
-          regionId: region.id,
-          name: blockName,
-          areaHectare: 1 + blockIndex * 0.5,
-          polygonGeojson: blockPolygon(regionName, blockName, blockIndex),
-          createdById: adminId,
-          firebaseSyncStatus: SyncStatus.SYNCED,
-          firebaseSyncedAt: new Date(),
-        },
-      });
-
-      for (const [sprayerName, sprayerNode] of Object.entries(sprayers)) {
-        const sprayer = await prisma.sprayer.upsert({
-          where: { blockId_hardwareId: { blockId: block.id, hardwareId: sprayerName } },
-          update: {
-            displayName: sprayerName.replace(/_/g, " "),
-            isActive: true,
-            firebaseSyncStatus: SyncStatus.SYNCED,
-            firebaseSyncedAt: new Date(),
-          },
-          create: {
-            blockId: block.id,
-            hardwareId: sprayerName,
-            displayName: sprayerName.replace(/_/g, " "),
-            isActive: true,
-            firebaseSyncStatus: SyncStatus.SYNCED,
-            firebaseSyncedAt: new Date(),
-          },
-        });
-
-        const live = sprayerNode.live_data;
-        if (live) {
-          const recordedAt = fromEpoch(live.last_updated);
-          const exists = await prisma.sensorReading.findFirst({
-            where: { blockId: block.id, sprayerId: sprayer.id, recordedAt },
-            select: { id: true },
-          });
-          if (!exists) {
-            await prisma.sensorReading.create({
-              data: {
-                blockId: block.id,
-                sprayerId: sprayer.id,
-                moisturePercent: live.moisture_percent ?? 0,
-                flowLmin: live.flow_Lmin ?? 0,
-                totalVolumeLiter: live.totalVolume ?? null,
-                moistureStatus: moistureStatus(live.moisture_status),
-                pumpStatus: sprayerNode.control?.pump_status ? "ON" : "OFF",
-                windDirection: live.arah_angin ?? null,
-                recordedAt,
-              },
-            });
-          }
-        }
-
-        for (const [dateKey, entries] of Object.entries(sprayerNode.history ?? {})) {
-          for (const [eventId, entry] of Object.entries(entries)) {
-            await prisma.irrigationEvent.upsert({
-              where: { firebaseEventId: eventId },
-              update: {
-                blockId: block.id,
-                sprayerId: sprayer.id,
-                mode: entry.mode === "AUTO" ? IrrigationMode.AUTO : IrrigationMode.MANUAL,
-                relay: relayState(entry.pump_status),
-                durationSeconds: entry.duration ?? null,
-                totalVolumeLiter: entry.totalVolume ?? null,
-                firebaseDateKey: dateKey,
-                startedAt: fromEpoch(entry.starttime ?? entry.timestamp),
-                endedAt: entry.endtime ? fromEpoch(entry.endtime) : null,
-              },
-              create: {
-                blockId: block.id,
-                sprayerId: sprayer.id,
-                actorId: null,
-                mode: entry.mode === "AUTO" ? IrrigationMode.AUTO : IrrigationMode.MANUAL,
-                relay: relayState(entry.pump_status),
-                reason: "Imported from Firebase RTDB snapshot",
-                durationSeconds: entry.duration ?? null,
-                totalVolumeLiter: entry.totalVolume ?? null,
-                firebaseEventId: eventId,
-                firebaseDateKey: dateKey,
-                startedAt: fromEpoch(entry.starttime ?? entry.timestamp),
-                endedAt: entry.endtime ? fromEpoch(entry.endtime) : null,
-              },
-            });
-
-            const recordedAt = fromEpoch(entry.timestamp ?? entry.endtime ?? entry.starttime);
-            const exists = await prisma.sensorReading.findFirst({
-              where: { blockId: block.id, sprayerId: sprayer.id, recordedAt },
-              select: { id: true },
-            });
-            if (!exists) {
-              await prisma.sensorReading.create({
-                data: {
-                  blockId: block.id,
-                  sprayerId: sprayer.id,
-                  moisturePercent: entry.moisture_percent ?? 0,
-                  flowLmin: entry.flow_Lmin ?? 0,
-                  totalVolumeLiter: entry.totalVolume ?? null,
-                  moistureStatus: moistureStatus(entry.moisture_status),
-                  pumpStatus: entry.pump_status ? "ON" : "OFF",
-                  recordedAt,
-                },
-              });
-            }
-          }
-        }
-      }
-    }
   }
+
+  await prisma.systemSetting.upsert({
+    where: { key: `region_settings:${MAOS_REGION.name}` },
+    update: { value: { batas_basah: 80, batas_kering: 40, mode_otomatis: false } },
+    create: {
+      key: `region_settings:${MAOS_REGION.name}`,
+      value: { batas_basah: 80, batas_kering: 40, mode_otomatis: false },
+    },
+  });
 
   await prisma.systemSetting.upsert({
     where: { key: "safetyTimeout" },
@@ -467,27 +327,25 @@ async function main() {
 
   await prisma.systemSetting.upsert({
     where: { key: "seed.version" },
-    update: { value: { version: 5, source: "example-firebase.json", seededAt: new Date().toISOString() } },
-    create: {
-      key: "seed.version",
-      value: { version: 5, source: "example-firebase.json", seededAt: new Date().toISOString() },
-    },
+    update: { value: { version: 6, source: "core-seed", seededAt: new Date().toISOString() } },
+    create: { key: "seed.version", value: { version: 6, source: "core-seed", seededAt: new Date().toISOString() } },
   });
 
   await prisma.activityLog.create({
     data: {
       actorId: superadminId,
+      regionId: region.id,
       action: ActivityAction.CREATE,
       entityType: "Seed",
-      metadata: { source: "example-firebase.json", version: 5 },
+      metadata: { source: "core-seed", version: 6 },
     },
   });
 
-  console.log("Seed complete.");
-  console.log("superadmin@test.com / Password123!");
-  console.log("admin@test.com / Password123!");
-  console.log("user@test.com / Password123!");
-  console.log("kawistamaos@adosistering.labgo.id / mernek123");
+  console.warn("Seed complete.");
+  console.warn("superadmin@test.com / Password123!");
+  console.warn("admin@test.com / Password123!");
+  console.warn("user@test.com / Password123!");
+  console.warn("kawistamaos@adosistering.labgo.id / mernek123");
 }
 
 main()

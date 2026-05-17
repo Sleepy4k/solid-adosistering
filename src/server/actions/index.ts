@@ -4,14 +4,17 @@ import { randomBytes } from "node:crypto";
 import type { Role } from "@prisma/client";
 import { ActivityAction, IrrigationMode, MoistureStatus, Prisma, RelayState, SyncStatus } from "@prisma/client";
 import { redirect } from "@solidjs/router";
+import { firebaseSegment } from "~/lib/shared/irrigation";
 import { prisma } from "../db/prisma";
 import { sendPasswordResetEmail } from "../email";
+import { firebaseAdminDb } from "../services/firebaseAdmin";
 import {
   provisionBlockNode,
   provisionRegionNode,
   provisionSprayerNode,
   renameBlockNode,
   renameRegionNode,
+  syncFirebaseSnapshotToDatabase,
   updateRegionSettings,
   updateSprayerControl,
 } from "../services/firebaseSync";
@@ -49,6 +52,14 @@ async function logActivity(input: {
       metadata: input.metadata,
     },
   });
+}
+
+async function refreshFirebaseCache() {
+  try {
+    await syncFirebaseSnapshotToDatabase();
+  } catch {
+    // Firebase is an external live-data source. Pages keep serving cached SQL data if sync is unavailable.
+  }
 }
 
 type CoordinateInput = string | number | null | undefined;
@@ -299,6 +310,7 @@ export async function getMyDashboard(): Promise<
 > {
   const session = await getSession();
   if (!session) throw redirect("/login");
+  await refreshFirebaseCache();
 
   if (session.role === "SUPERADMIN") {
     const [totalRegions, totalBlocks, totalAdmins, totalUsers, regions] = await Promise.all([
@@ -568,6 +580,7 @@ export type HistoryFilters = {
 export async function getIrrigationHistory(filters: HistoryFilters) {
   const session = await getSession();
   if (!session) throw redirect("/login");
+  await refreshFirebaseCache();
 
   const where: Prisma.IrrigationEventWhereInput = {};
 
@@ -667,6 +680,7 @@ export async function getMyBlocks() {
 export async function getStatistics(input: { blockId?: string; range: "today" | "7d" | "30d" }) {
   const session = await getSession();
   if (!session) throw redirect("/login");
+  await refreshFirebaseCache();
 
   const now = new Date();
   let since: Date;
@@ -1161,9 +1175,19 @@ export async function createRegion(input: {
       entityId: region.id,
     });
     return synced;
-  } catch (error) {
-    await prisma.region.update({ where: { id: region.id }, data: { firebaseSyncStatus: SyncStatus.FAILED } });
-    throw error;
+  } catch {
+    const failed = await prisma.region.update({
+      where: { id: region.id },
+      data: { firebaseSyncStatus: SyncStatus.FAILED },
+    });
+    await logActivity({
+      actorId: actor.id,
+      regionId: region.id,
+      action: ActivityAction.CREATE,
+      entityType: "Region",
+      entityId: region.id,
+    }).catch(() => undefined);
+    return failed;
   }
 }
 
@@ -1202,9 +1226,19 @@ export async function updateRegion(input: {
       where: { id: updated.id },
       data: { firebaseSyncStatus: SyncStatus.SYNCED, firebaseSyncedAt: new Date() },
     });
-  } catch (error) {
-    await prisma.region.update({ where: { id: updated.id }, data: { firebaseSyncStatus: SyncStatus.FAILED } });
-    throw error;
+  } catch {
+    const failed = await prisma.region.update({
+      where: { id: updated.id },
+      data: { firebaseSyncStatus: SyncStatus.FAILED },
+    });
+    await logActivity({
+      actorId: actor.id,
+      regionId: updated.id,
+      action: ActivityAction.UPDATE,
+      entityType: "Region",
+      entityId: updated.id,
+    }).catch(() => undefined);
+    return failed;
   }
 }
 
@@ -1240,9 +1274,17 @@ export async function createBlock(input: {
       where: { id: block.id },
       data: { firebaseSyncStatus: SyncStatus.SYNCED, firebaseSyncedAt: new Date() },
     });
-  } catch (error) {
+  } catch {
     await prisma.block.update({ where: { id: block.id }, data: { firebaseSyncStatus: SyncStatus.FAILED } });
-    throw error;
+    await logActivity({
+      actorId: actor.id,
+      regionId: region.id,
+      blockId: block.id,
+      action: ActivityAction.CREATE,
+      entityType: "Block",
+      entityId: block.id,
+    }).catch(() => undefined);
+    return prisma.block.findUniqueOrThrow({ where: { id: block.id } });
   }
 }
 
@@ -1272,9 +1314,17 @@ export async function updateBlock(input: { actor: SessionUser; id: string; name:
       where: { id: updated.id },
       data: { firebaseSyncStatus: SyncStatus.SYNCED, firebaseSyncedAt: new Date() },
     });
-  } catch (error) {
+  } catch {
     await prisma.block.update({ where: { id: updated.id }, data: { firebaseSyncStatus: SyncStatus.FAILED } });
-    throw error;
+    await logActivity({
+      actorId: actor.id,
+      regionId: existing.regionId,
+      blockId: updated.id,
+      action: ActivityAction.UPDATE,
+      entityType: "Block",
+      entityId: updated.id,
+    }).catch(() => undefined);
+    return prisma.block.findUniqueOrThrow({ where: { id: updated.id } });
   }
 }
 
@@ -1316,9 +1366,17 @@ export async function createSprayer(input: {
       where: { id: sprayer.id },
       data: { firebaseSyncStatus: SyncStatus.SYNCED, firebaseSyncedAt: new Date() },
     });
-  } catch (error) {
+  } catch {
     await prisma.sprayer.update({ where: { id: sprayer.id }, data: { firebaseSyncStatus: SyncStatus.FAILED } });
-    throw error;
+    await logActivity({
+      actorId: actor.id,
+      regionId: block.regionId,
+      blockId: block.id,
+      action: ActivityAction.CREATE,
+      entityType: "Sprayer",
+      entityId: sprayer.id,
+    }).catch(() => undefined);
+    return prisma.sprayer.findUniqueOrThrow({ where: { id: sprayer.id } });
   }
 }
 
@@ -1486,8 +1544,6 @@ export async function deleteRegion(input: { id: string }) {
   await logActivity({ actorId: session.id, action: ActivityAction.DELETE, entityType: "Region", entityId: input.id });
 
   try {
-    const { firebaseAdminDb } = await import("../services/firebaseAdmin");
-    const { firebaseSegment } = await import("~/lib/shared/irrigation");
     await firebaseAdminDb().ref(firebaseSegment(region.name)).remove();
   } catch {
     // Firebase not configured — ignore

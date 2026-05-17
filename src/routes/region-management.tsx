@@ -1,5 +1,6 @@
 import { cache, createAsync } from "@solidjs/router";
 import { createEffect, createMemo, createSignal, For, Show, Suspense } from "solid-js";
+import { Plus } from "lucide-solid";
 import { PageMeta } from "~/components/shared/PageMeta";
 import { ModalFrame } from "~/components/shared/ModalFrame";
 import { PageSizeSelect, TablePagination } from "~/components/ui/TablePagination";
@@ -313,9 +314,7 @@ export default function ManajemenRegion() {
               onClick={() => setShowCreate(true)}
               class="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
             >
-              <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                <path stroke-linecap="round" d="M12 4v16m8-8H4" />
-              </svg>
+              <Plus size={16} />
               Tambah Region
             </button>
           </div>

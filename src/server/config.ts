@@ -11,8 +11,8 @@ function hasEnv(name: string) {
 }
 
 export const serverConfig = {
-  appOrigin: process.env.APP_ORIGIN ?? "http://localhost:3000",
-  sessionCookieName: process.env.SESSION_COOKIE_NAME ?? "adosistering_session",
+  appOrigin: process.env.APP_ORIGIN || "http://localhost:3000",
+  sessionCookieName: process.env.SESSION_COOKIE_NAME || "adosistering_session",
   databaseUrl: process.env.DATABASE_URL,
   firebase: {
     projectId: process.env.FIREBASE_PROJECT_ID,

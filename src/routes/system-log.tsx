@@ -1,5 +1,6 @@
 import { cache, createAsync } from "@solidjs/router";
 import { createSignal, For, Show, Suspense } from "solid-js";
+import resetIcon from "~/assets/icons/reset.svg?url";
 import { PageMeta } from "~/components/shared/PageMeta";
 import { PageSizeSelect, TablePagination } from "~/components/ui/TablePagination";
 import { getActivityLogs, type ActivityLogItem } from "~/server/actions/index";
@@ -104,12 +105,7 @@ export default function LogSistem() {
             onClick={reset}
             class="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
           >
-            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 0 0 4.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 0 1-15.357-2m15.357 2H15"
-              />
-            </svg>
+            <img src={resetIcon} alt="" class="h-4 w-4" aria-hidden="true" />
             Reset
           </button>
           <Suspense>

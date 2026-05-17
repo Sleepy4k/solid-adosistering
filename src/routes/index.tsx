@@ -1,11 +1,10 @@
 import { A, cache, createAsync } from "@solidjs/router";
 import { PageMeta } from "~/components/shared/PageMeta";
 import { Plus, Search } from "lucide-solid";
-import { createEffect, For, onMount, Show, Suspense } from "solid-js";
+import { For, Show, Suspense } from "solid-js";
 import { Card } from "~/components/ui/Card";
 import { PageHeader } from "~/components/ui/PageHeader";
 import { SkCard } from "~/components/shared/Skeleton";
-import { finishProgress, startProgress } from "~/lib/client/progress";
 import {
   getMyDashboard,
   type AdminUserCard,
@@ -91,14 +90,6 @@ function AdminDashboard(props: { users: AdminUserCard[] }) {
 
 export default function Beranda() {
   const dashboard = createAsync(() => loadDashboard());
-
-  onMount(() => {
-    void startProgress({ immediate: true });
-  });
-
-  createEffect(() => {
-    if (dashboard()) void finishProgress();
-  });
 
   return (
     <>

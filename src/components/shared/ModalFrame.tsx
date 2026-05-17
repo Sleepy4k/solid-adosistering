@@ -11,7 +11,7 @@ export function ModalFrame(props: ModalFrameProps) {
   return (
     <Portal>
       <div
-        class="fixed inset-0 z-[100] flex min-h-dvh items-center justify-center overflow-y-auto bg-slate-950/50 p-4 backdrop-blur-sm"
+        class="fixed inset-0 z-[100] flex min-h-dvh items-start justify-center overflow-y-auto bg-slate-950/50 px-4 py-6 backdrop-blur-sm sm:items-center"
         onMouseDown={(event) => event.target === event.currentTarget && props.onClose()}
       >
         <section

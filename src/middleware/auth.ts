@@ -1,5 +1,6 @@
 import { createMiddleware } from "@solidjs/start/middleware";
 import { PUBLIC_ROUTES, ROUTES } from "~/constants/routes";
+import { prisma } from "~/server/db/prisma";
 import { hashToken } from "~/server/security";
 
 function parseCookieHeader(header: string, name: string): string | null {
@@ -29,7 +30,6 @@ export default createMiddleware({
       }
 
       try {
-        const { prisma } = await import("~/server/db/prisma");
         const tokenHash = hashToken(token);
         const session = await prisma.session.findUnique({
           where: { tokenHash },

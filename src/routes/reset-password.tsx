@@ -2,6 +2,8 @@ import { A, useSearchParams, useNavigate } from "@solidjs/router";
 import { createSignal, Show } from "solid-js";
 import { PageMeta } from "~/components/shared/PageMeta";
 import { completePasswordReset } from "~/server/actions/index";
+import eyeOnIcon from "~/assets/icons/eye_on.svg?url";
+import eyeOffIcon from "~/assets/icons/eye_off.svg?url";
 
 export default function ResetPassword() {
   const [params] = useSearchParams();
@@ -89,23 +91,11 @@ export default function ResetPassword() {
                         class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
                         onClick={() => setShowPw((v) => !v)}
                       >
-                        <svg class="h-5 w-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-                          <Show
-                            when={!showPw()}
-                            fallback={
-                              <path
-                                stroke-linecap="round"
-                                d="M13.875 18.825A10.05 10.05 0 0 1 12 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 0 1 4.16-5.595M6.228 6.228A10.015 10.015 0 0 1 12 5c4.478 0 8.268 2.943 9.542 7a10.024 10.024 0 0 1-4.132 5.411M3 3l18 18"
-                              />
-                            }
-                          >
-                            <path stroke-linecap="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z" />
-                            <path
-                              stroke-linecap="round"
-                              d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                            />
-                          </Show>
-                        </svg>
+                        <img
+                          src={showPw() ? eyeOffIcon : eyeOnIcon}
+                          alt={showPw() ? "Sembunyikan password" : "Tampilkan password"}
+                          class="h-5 w-5"
+                        />
                       </button>
                     </div>
                   </div>

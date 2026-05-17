@@ -1,9 +1,11 @@
 import { cache, createAsync } from "@solidjs/router";
 import { createSignal, Show, Suspense } from "solid-js";
 import { PageMeta } from "~/components/shared/PageMeta";
+import { ModalFrame } from "~/components/shared/ModalFrame";
 import { getMyProfile, updateMyProfile, changeMyPassword, type MyProfile } from "~/server/actions/index";
 import { SkCard } from "~/components/shared/Skeleton";
 import { useToast } from "~/components/shared/ToastProvider";
+import editIcon from "~/assets/icons/edit.svg?url";
 
 const loadProfile = cache(() => getMyProfile(), "my-profile");
 export const route = { preload: () => loadProfile() };
@@ -28,12 +30,7 @@ function SectionCard(props: { title: string; onEdit?: () => void; children: unkn
             class="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
             onClick={props.onEdit}
           >
-            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                d="M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5m-1.414-9.414a2 2 0 1 1 2.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-              />
-            </svg>
+            <img src={editIcon} alt="" class="h-4 w-4" aria-hidden="true" />
             Edit
           </button>
         </Show>
@@ -80,11 +77,8 @@ function EditProfileModal(props: { profile: MyProfile; onClose: () => void }) {
   };
 
   return (
-    <div
-      class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
-      onClick={(e) => e.target === e.currentTarget && props.onClose()}
-    >
-      <div class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl" style={{ animation: "modal-in 200ms ease" }}>
+    <ModalFrame onClose={props.onClose} panelClass="max-h-[calc(100dvh-2rem)] max-w-lg overflow-y-auto p-6">
+      <>
         <h2 class="mb-4 text-lg font-semibold text-slate-900">Edit Profil</h2>
         <form onSubmit={save} class="grid gap-4 sm:grid-cols-2">
           <div class="sm:col-span-2">
@@ -136,8 +130,8 @@ function EditProfileModal(props: { profile: MyProfile; onClose: () => void }) {
             </button>
           </div>
         </form>
-      </div>
-    </div>
+      </>
+    </ModalFrame>
   );
 }
 
@@ -174,11 +168,8 @@ function ChangePasswordModal(props: { onClose: () => void }) {
   };
 
   return (
-    <div
-      class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
-      onClick={(e) => e.target === e.currentTarget && props.onClose()}
-    >
-      <div class="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl" style={{ animation: "modal-in 200ms ease" }}>
+    <ModalFrame onClose={props.onClose} panelClass="max-w-sm p-6">
+      <>
         <h2 class="mb-4 text-lg font-semibold text-slate-900">Ubah Kata Sandi</h2>
         <Show when={error()}>
           <div class="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">{error()}</div>
@@ -223,8 +214,8 @@ function ChangePasswordModal(props: { onClose: () => void }) {
             </button>
           </div>
         </form>
-      </div>
-    </div>
+      </>
+    </ModalFrame>
   );
 }
 

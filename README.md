@@ -50,25 +50,6 @@ src/
   types/                 Global/shared TypeScript declarations
 ```
 
-## Main Routes
-
-```text
-/                         Dashboard
-/login                    Login
-/forgot-password          Request password reset
-/reset-password           Complete password reset
-/irrigation-history       Irrigation history
-/statistics               Charts and statistics
-/settings                 User region settings
-/profile                  User profile
-/help-center              Help center
-/user-management          Admin/Superadmin user management
-/user-management/create   Create user
-/region-management        Superadmin region management
-/map-configuration        Superadmin block map configuration
-/system-log               Superadmin activity log
-```
-
 ## Environment
 
 Copy `.env.example` to `.env`, then fill the required values.
@@ -100,6 +81,8 @@ EMAIL_FROM="Adosistering <no-reply@example.com>"
 
 ## Setup
 
+Requirements: Bun and Node.js 22 or newer. Bun is used for dependency and development commands; the production Nitro server runs on Node.
+
 ```bash
 bun install
 bunx prisma generate
@@ -107,8 +90,6 @@ bun run db:migrate
 bun run db:seed
 bun run dev -- --host 127.0.0.1 --port 3000
 ```
-
-The seeder imports `example-firebase.json` directly as the Firebase RTDB snapshot source. Keep that file available before running `bun run db:seed` so SQL data stays aligned with the live Firebase structure.
 
 Default seed accounts:
 
@@ -124,14 +105,8 @@ kawistamaos@adosistering.labgo.id / mernek123
 ```bash
 bun run dev          Start development server
 bun run build        Production build
+bun run start        Start the built Nitro Node server from .output
 bunx tsc --noEmit    Type-check only
 bunx prisma validate Validate Prisma schema
 bun run db:seed      Seed demo data
 ```
-
-## Notes
-
-- Use English URL routes only. Keep old Indonesian route names out of new navigation.
-- Keep Firebase control and telemetry logic aligned with `src/lib/shared/irrigation.ts`.
-- Store secrets in `.env`; only `VITE_*` variables are exposed to the browser.
-- Prefer small files, feature grouping, reusable UI components, and server-only business logic under `src/server`.

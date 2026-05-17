@@ -1,7 +1,9 @@
 import { solidStart } from "@solidjs/start/config";
-import { nitroV2Plugin } from "@solidjs/vite-plugin-nitro-2";
 import tailwindcss from "@tailwindcss/vite";
+import process from "node:process";
 import { defineConfig, loadEnv } from "vite";
+
+process.noDeprecation = true;
 
 const serverEnvKeys = [
   "APP_ORIGIN",
@@ -27,14 +29,34 @@ export default defineConfig(({ mode }) => {
   );
 
   return {
+    build: {
+      rollupOptions: {
+        onwarn(warning, defaultHandler) {
+          const message = warning.message ?? "";
+          if (
+            warning.code === "MODULE_LEVEL_DIRECTIVE" &&
+            message.includes('"use server"') &&
+            message.includes("src/server/actions/index.ts")
+          ) {
+            return;
+          }
+          if (
+            warning.code === "SOURCEMAP_ERROR" &&
+            message.includes("Can't resolve original location of error") &&
+            message.includes("src/server/actions/index.ts")
+          ) {
+            return;
+          }
+          defaultHandler(warning);
+        },
+      },
+    },
     plugins: [
       solidStart({
         middleware: "./src/middleware/auth.ts",
+        ssr: true,
       }),
       tailwindcss(),
-      nitroV2Plugin({
-        preset: env.SERVER_PRESET || process.env.SERVER_PRESET || "bun",
-      }),
     ],
     optimizeDeps: { exclude: ["leaflet"] },
     environments: {

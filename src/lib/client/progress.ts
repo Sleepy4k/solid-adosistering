@@ -7,7 +7,7 @@ let startTimer: ReturnType<typeof setTimeout> | null = null;
 let visibleSince = 0;
 
 const START_DELAY_MS = 50;
-const MIN_VISIBLE_MS = 180;
+const MIN_VISIBLE_MS = 200;
 
 function resolveProgress(module: unknown): ProgressApi {
   const candidate = (module as { default?: unknown }).default ?? module;
@@ -18,23 +18,32 @@ async function loadProgress() {
   if (typeof document === "undefined") return null;
   progressPromise ??= import("nprogress").then((module) => {
     const progress = resolveProgress(module);
-    progress.configure({ showSpinner: false, speed: 250, minimum: 0.12 });
+    progress.configure({ showSpinner: false, speed: 300, minimum: 0.08 });
     return progress;
   });
   return progressPromise;
 }
 
 export async function startProgress(options?: { immediate?: boolean }) {
-  if (typeof document === "undefined" || startTimer) return;
+  if (typeof document === "undefined") return;
+
   if (options?.immediate) {
+    if (startTimer) {
+      clearTimeout(startTimer);
+      startTimer = null;
+    }
+    if (visibleSince) return;
     const progress = await loadProgress();
     visibleSince = Date.now();
     progress?.start();
     return;
   }
 
+  if (startTimer || visibleSince) return;
+
   startTimer = setTimeout(async () => {
     startTimer = null;
+    if (visibleSince) return;
     const progress = await loadProgress();
     visibleSince = Date.now();
     progress?.start();
@@ -46,14 +55,13 @@ export async function finishProgress() {
     clearTimeout(startTimer);
     startTimer = null;
   }
-  if (!progressPromise) return;
+  const since = visibleSince;
+  if (!since) return;
+  visibleSince = 0;
   const progress = await loadProgress();
-  const elapsed = visibleSince ? Date.now() - visibleSince : MIN_VISIBLE_MS;
+  const elapsed = Date.now() - since;
   const delay = Math.max(0, MIN_VISIBLE_MS - elapsed);
-  window.setTimeout(() => {
-    visibleSince = 0;
-    progress?.done();
-  }, delay);
+  window.setTimeout(() => progress?.done(), delay);
 }
 
 export function installNavigationProgress() {
@@ -75,7 +83,7 @@ export function installNavigationProgress() {
 
     const url = new URL(anchor.href, window.location.href);
     if (url.origin !== window.location.origin) return;
-    if (url.pathname === window.location.pathname && url.search === window.location.search && url.hash) return;
+    if (url.pathname === window.location.pathname && url.search === window.location.search) return;
 
     void startProgress();
   };

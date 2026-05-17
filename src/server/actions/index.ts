@@ -224,10 +224,16 @@ export async function login(input: { email: string; password: string }) {
     select: { id: true, email: true, name: true, role: true, isActive: true, passwordHash: true },
   });
 
-  if (!user || !user.isActive) throw new Response("Kredensial tidak valid", { status: 401 });
+  if (!user) throw new Response("Kredensial tidak valid.", { status: 401 });
 
   const valid = await verifyPassword(input.password, user.passwordHash);
-  if (!valid) throw new Response("Kredensial tidak valid", { status: 401 });
+  if (!valid) throw new Response("Kredensial tidak valid.", { status: 401 });
+
+  if (!user.isActive) {
+    throw new Response("Akun Anda telah dinonaktifkan. Hubungi administrator untuk informasi lebih lanjut.", {
+      status: 403,
+    });
+  }
 
   await createSession(user.id);
   await logActivity({

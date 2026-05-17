@@ -146,11 +146,37 @@ function average(values: number[]) {
   return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 }
 
+function median(values: number[]) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
 function smooth(values: number[]) {
-  return values.map((_, index) => {
-    const from = Math.max(0, index - 1);
-    const to = Math.min(values.length, index + 2);
-    return average(values.slice(from, to));
+  const n = values.length;
+  if (n < 2) return [...values];
+
+  // Pass 1: 5-point median filter removes isolated spikes
+  const medFiltered = values.map((_, i) => {
+    const lo = Math.max(0, i - 2);
+    const hi = Math.min(n, i + 3);
+    return median(values.slice(lo, hi));
+  });
+
+  // Pass 2: Gaussian-weighted 5-point average for smooth curve transitions
+  const weights = [0.05, 0.25, 0.4, 0.25, 0.05];
+  return medFiltered.map((_, i) => {
+    let sum = 0;
+    let wsum = 0;
+    for (let k = -2; k <= 2; k++) {
+      const idx = i + k;
+      if (idx < 0 || idx >= n) continue;
+      const w = weights[k + 2];
+      sum += medFiltered[idx] * w;
+      wsum += w;
+    }
+    return wsum > 0 ? sum / wsum : medFiltered[i];
   });
 }
 

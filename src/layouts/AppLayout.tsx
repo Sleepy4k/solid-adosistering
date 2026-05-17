@@ -9,31 +9,41 @@ import Sidebar from "~/components/shared/Sidebar";
 
 function RouterProgress() {
   const location = useLocation();
-  useBeforeLeave(() => void startProgress());
+
+  useBeforeLeave(() => void startProgress({ immediate: true }));
+
   onMount(() => {
     const cleanup = installNavigationProgress();
     void finishProgress();
     onCleanup(cleanup);
   });
+
   createEffect(() => {
     void location.pathname;
+    void location.search;
     void finishProgress();
   });
+
   return null;
 }
 
 export default function AppShell(props: { children: JSX.Element }) {
   const user = createAsync(() => getUser());
   const [menuOpen, setMenuOpen] = createSignal(false);
+  const [collapsed, setCollapsed] = createSignal(false);
 
   return (
     <div class="min-h-screen bg-gray-50">
+      <RouterProgress />
+
       <Suspense>
         <Show when={user()}>
           {(u) => (
             <>
-              <div class="fixed inset-y-0 left-0 z-40 hidden lg:block">
-                <Sidebar user={u()} />
+              <div
+                class={`fixed inset-y-0 left-0 z-40 hidden transition-[width] duration-300 lg:block ${collapsed() ? "w-20" : "w-64"}`}
+              >
+                <Sidebar user={u()} collapsed={collapsed()} onCollapse={() => setCollapsed((v) => !v)} />
               </div>
 
               <Show when={menuOpen()}>
@@ -44,18 +54,20 @@ export default function AppShell(props: { children: JSX.Element }) {
                     aria-label="Tutup menu"
                     onClick={() => setMenuOpen(false)}
                   />
-                  <div class="absolute inset-y-0 left-0 w-72 max-w-[85vw] bg-white shadow-xl">
-                    <div class="flex h-16 items-center justify-end border-b border-gray-200 px-4">
+                  <div class="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col bg-white shadow-xl">
+                    <div class="flex h-14 shrink-0 items-center justify-end border-b border-gray-200 px-4">
                       <button
                         type="button"
-                        class="grid h-10 w-10 place-items-center rounded-xl border border-gray-200 text-[#4F4F4F]"
+                        class="grid h-9 w-9 place-items-center rounded-xl border border-gray-200 text-[#4F4F4F]"
                         onClick={() => setMenuOpen(false)}
                         aria-label="Tutup menu"
                       >
-                        <X size={20} />
+                        <X size={18} />
                       </button>
                     </div>
-                    <Sidebar user={u()} mobile onNavigate={() => setMenuOpen(false)} />
+                    <div class="min-h-0 flex-1">
+                      <Sidebar user={u()} mobile onNavigate={() => setMenuOpen(false)} />
+                    </div>
                   </div>
                 </div>
               </Show>
@@ -73,10 +85,9 @@ export default function AppShell(props: { children: JSX.Element }) {
         <Menu size={20} />
       </button>
 
-      <div class="lg:pl-64">
-        <main class="px-4 pb-6 pt-20 sm:px-6 lg:px-10 lg:pt-8">
+      <div class={`transition-[padding] duration-300 ${collapsed() ? "lg:pl-20" : "lg:pl-64"}`}>
+        <main class="px-4 pb-8 pt-20 sm:px-6 lg:px-8 lg:pt-8">
           <Suspense fallback={<PageSkeleton />}>
-            <RouterProgress />
             <div class="page-enter mx-auto max-w-7xl">{props.children}</div>
           </Suspense>
         </main>

@@ -6,7 +6,7 @@ import { AuthLayout } from "~/layouts/AuthLayout";
 import { Button } from "~/components/ui/Button";
 import { Field, TextInput } from "~/components/form/Form";
 import { login } from "~/server/actions/index";
-import logoUrl from "~/assets/logo.svg";
+import logoUrl from "~/assets/logo.svg?url";
 
 export default function Login() {
   const [email, setEmail] = createSignal("");

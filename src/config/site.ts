@@ -5,5 +5,5 @@ export const siteConfig = {
     "IoT drip irrigation management system for dryland farming with Firebase RTDB telemetry and SQL-backed administration.",
   locale: "id_ID",
   themeColor: "#67B744",
-  socialImage: "/auth-field-pattern.svg",
+  socialImage: "/logo.svg",
 } as const;

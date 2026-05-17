@@ -5,7 +5,7 @@ import { AuthLayout } from "~/layouts/AuthLayout";
 import { Field, TextInput } from "~/components/form/Form";
 import { Button } from "~/components/ui/Button";
 import { requestPasswordReset } from "~/server/actions/index";
-import logoUrl from "~/assets/logo.svg";
+import logoUrl from "~/assets/logo.svg?url";
 
 export default function ForgotPassword() {
   const [email, setEmail] = createSignal("");

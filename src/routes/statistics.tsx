@@ -157,14 +157,12 @@ function smooth(values: number[]) {
   const n = values.length;
   if (n < 2) return [...values];
 
-  // Pass 1: 5-point median filter removes isolated spikes
   const medFiltered = values.map((_, i) => {
     const lo = Math.max(0, i - 2);
     const hi = Math.min(n, i + 3);
     return median(values.slice(lo, hi));
   });
 
-  // Pass 2: Gaussian-weighted 5-point average for smooth curve transitions
   const weights = [0.05, 0.25, 0.4, 0.25, 0.05];
   return medFiltered.map((_, i) => {
     let sum = 0;

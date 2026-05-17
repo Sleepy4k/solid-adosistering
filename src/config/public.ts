@@ -1,4 +1,3 @@
-import { getPublicEnvStatus } from "./env";
 import { siteConfig } from "./site";
 
 export type PublicAppConfig = {
@@ -14,6 +13,10 @@ export type PublicAppConfig = {
   } | null;
 };
 
+function hasPublicEnv(name: string) {
+  return Boolean(import.meta.env[name]?.trim());
+}
+
 function numberEnv(value: string | undefined, fallback: number) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -21,7 +24,12 @@ function numberEnv(value: string | undefined, fallback: number) {
 
 export const publicAppConfig: PublicAppConfig = {
   appName: import.meta.env.VITE_APP_NAME ?? siteConfig.name,
-  ...getPublicEnvStatus(),
+  appConfigured: import.meta.env.VITE_APP_CONFIGURED === "true",
+  firebaseConfigured:
+    hasPublicEnv("VITE_FIREBASE_API_KEY") &&
+    hasPublicEnv("VITE_FIREBASE_DATABASE_URL") &&
+    hasPublicEnv("VITE_FIREBASE_PROJECT_ID") &&
+    hasPublicEnv("VITE_FIREBASE_APP_ID"),
   defaultTelemetryTarget:
     import.meta.env.VITE_DEFAULT_REGION_NAME &&
     import.meta.env.VITE_DEFAULT_BLOCK_NAME &&

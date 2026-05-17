@@ -1,4 +1,4 @@
-import { createAsync, useBeforeLeave, useLocation } from "@solidjs/router";
+import { createAsync, useIsRouting } from "@solidjs/router";
 import { Menu, X } from "lucide-solid";
 import type { JSX } from "solid-js";
 import { createEffect, createSignal, onCleanup, onMount, Show, Suspense } from "solid-js";
@@ -8,20 +8,19 @@ import { PageSkeleton } from "~/components/shared/PageSkeleton";
 import Sidebar from "~/components/shared/Sidebar";
 
 function RouterProgress() {
-  const location = useLocation();
-
-  useBeforeLeave(() => void startProgress({ immediate: true }));
+  const isRouting = useIsRouting();
 
   onMount(() => {
     const cleanup = installNavigationProgress();
-    void finishProgress();
     onCleanup(cleanup);
   });
 
   createEffect(() => {
-    void location.pathname;
-    void location.search;
-    void finishProgress();
+    if (isRouting()) {
+      void startProgress({ immediate: true });
+    } else {
+      void finishProgress();
+    }
   });
 
   return null;

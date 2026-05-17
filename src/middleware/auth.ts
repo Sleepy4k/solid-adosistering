@@ -44,7 +44,6 @@ export default createMiddleware({
           });
         }
       } catch {
-        // DB not ready - let route loader handle the error.
       }
     },
   ],

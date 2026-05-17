@@ -1,5 +1,3 @@
-// Skeleton primitive components
-
 export function SkBox(props: { h?: string; w?: string; class?: string }) {
   return <div class={`skeleton ${props.h ?? "h-4"} ${props.w ?? "w-full"} ${props.class ?? ""}`} />;
 }

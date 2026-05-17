@@ -30,8 +30,6 @@ import {
 } from "../security";
 import { createSession, destroySession, getSession } from "../session";
 
-// ── helpers ──────────────────────────────────────────────────────────────────
-
 async function logActivity(input: {
   actorId?: string;
   regionId?: string;
@@ -58,7 +56,6 @@ async function refreshFirebaseCache() {
   try {
     await syncFirebaseSnapshotToDatabase();
   } catch {
-    // Firebase is an external live-data source. Pages keep serving cached SQL data if sync is unavailable.
   }
 }
 
@@ -216,8 +213,6 @@ async function getRegionThresholdMap(userId: string, regionIds: string[]) {
   }
 }
 
-// ── auth ─────────────────────────────────────────────────────────────────────
-
 export async function login(input: { email: string; password: string }) {
   const user = await prisma.user.findUnique({
     where: { email: input.email.trim().toLowerCase() },
@@ -258,8 +253,6 @@ export async function logout() {
   await destroySession();
   return { ok: true };
 }
-
-// ── dashboard data ────────────────────────────────────────────────────────────
 
 export type DashboardRegion = {
   id: string;
@@ -469,8 +462,6 @@ export async function getMyDashboard(): Promise<
   };
 }
 
-// ── profile ───────────────────────────────────────────────────────────────────
-
 export type MyProfile = {
   id: string;
   name: string;
@@ -573,8 +564,6 @@ export async function changeMyPassword(input: { currentPassword: string; newPass
   await prisma.user.update({ where: { id: session.id }, data: { passwordHash: newHash } });
   return { ok: true };
 }
-
-// ── irrigation history ────────────────────────────────────────────────────────
 
 export type HistoryFilters = {
   blockId?: string;
@@ -681,8 +670,6 @@ export async function getMyBlocks() {
   });
 }
 
-// ── statistics ────────────────────────────────────────────────────────────────
-
 export async function getStatistics(input: { blockId?: string; range: "today" | "7d" | "30d" }) {
   const session = await getSession();
   if (!session) throw redirect("/login");
@@ -743,8 +730,6 @@ export async function getStatistics(input: { blockId?: string; range: "today" | 
     since: since.toISOString(),
   };
 }
-
-// ── settings ──────────────────────────────────────────────────────────────────
 
 export async function getMySettings() {
   const session = await getSession();
@@ -829,7 +814,6 @@ export async function saveThreshold(input: {
       wetMinPercent: input.wetMinPercent,
     });
   } catch {
-    // Land preference remains SQL-only; Firebase threshold sync is best-effort.
   }
 
   return { ok: true };
@@ -849,8 +833,6 @@ export async function saveSafetyTimeout(input: { min: number; max: number }) {
   });
   return { ok: true };
 }
-
-// ── user management (admin+) ──────────────────────────────────────────────────
 
 export type UserListItem = {
   id: string;
@@ -1146,8 +1128,6 @@ export async function updateUserById(input: {
   return { ok: true };
 }
 
-// ── region / block management ─────────────────────────────────────────────────
-
 export async function createRegion(input: {
   actor?: SessionUser;
   name: string;
@@ -1386,8 +1366,6 @@ export async function createSprayer(input: {
   }
 }
 
-// ── pump control ──────────────────────────────────────────────────────────────
-
 export async function overridePump(input: { sprayerId: string; mode: "AUTO" | "MANUAL"; relay: "OFF" | "ON" }) {
   const session = await getSession();
   if (!session) throw redirect("/login");
@@ -1433,8 +1411,6 @@ export async function overridePump(input: { sprayerId: string; mode: "AUTO" | "M
   return event;
 }
 
-// ── password reset ────────────────────────────────────────────────────────────
-
 export async function requestPasswordReset(input: { email: string }) {
   const user = await prisma.user.findUnique({ where: { email: input.email.trim().toLowerCase() } });
   if (!user) return { ok: true };
@@ -1479,8 +1455,6 @@ export async function completePasswordReset(input: { token: string; newPassword:
   return { ok: true };
 }
 
-// ── user creation (original) ──────────────────────────────────────────────────
-
 export async function createUser(input: {
   actor: SessionUser;
   email: string;
@@ -1500,8 +1474,6 @@ export async function createUser(input: {
   await logActivity({ actorId: actor.id, action: ActivityAction.CREATE, entityType: "User", entityId: user.id });
   return user;
 }
-
-// ── superadmin: region management ────────────────────────────────────────────
 
 export async function getRegions() {
   const session = await getSession();
@@ -1552,7 +1524,6 @@ export async function deleteRegion(input: { id: string }) {
   try {
     await firebaseAdminDb().ref(firebaseSegment(region.name)).remove();
   } catch {
-    // Firebase not configured — ignore
   }
 
   return { ok: true };
@@ -1608,8 +1579,6 @@ export async function removeAdminFromRegion(input: { adminId: string; regionId: 
   return { ok: true };
 }
 
-// ── superadmin: system logs ───────────────────────────────────────────────────
-
 export type ActivityLogItem = {
   id: string;
   action: ActivityAction;
@@ -1647,8 +1616,6 @@ export async function getActivityLogs(input?: { action?: string; limit?: number;
 
   return { logs: logs as ActivityLogItem[], total };
 }
-
-// ── superadmin: map configuration ────────────────────────────────────────────
 
 export type MapConfig = { lat: number; lng: number; zoom: number };
 export type MapPoint = { lat: number; lng: number };

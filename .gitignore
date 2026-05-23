@@ -21,7 +21,6 @@ app.config.timestamp_*.js
 *.launch
 .settings/
 .vscode/
-.claude/
 
 # Temp
 gitignore

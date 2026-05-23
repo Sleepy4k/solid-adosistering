@@ -1,5 +1,16 @@
-import { ContactSubmissionsPage, preloadContactSubmissions } from "~/features/superadmin/ContactSubmissionsPage";
+import { PageMeta } from "~/components/shared/PageMeta";
+import {
+	ContactSubmissionsView,
+	preloadContactSubmissions,
+} from "~/features/superadmin/ContactSubmissionsPage";
 
 export const route = { preload: preloadContactSubmissions };
 
-export default ContactSubmissionsPage;
+export default function ContactSubmissionsRoute() {
+	return (
+		<>
+			<PageMeta page="contactSubmissions" />
+			<ContactSubmissionsView />
+		</>
+	);
+}

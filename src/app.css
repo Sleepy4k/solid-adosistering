@@ -137,6 +137,18 @@ html.landing-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #1f2937;
 }
 
+.landing-page {
+  font-family:
+    "Outfit",
+    system-ui,
+    -apple-system,
+    sans-serif;
+  color: #1f2937;
+  background: #ffffff;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 .landing-page [class~="text-emerald-700"],
 .landing-page [class~="text-emerald-600"],
 .landing-page [class~="text-[#67b744]"] {

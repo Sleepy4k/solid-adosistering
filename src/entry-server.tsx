@@ -12,6 +12,13 @@ export default createHandler(() => (
           {assets}
         </head>
         <body>
+          <noscript>
+            <div
+              style="background:#1a2e1a;color:#ffffff;padding:12px 16px;text-align:center;font-size:14px;font-weight:600;letter-spacing:0.01em"
+            >
+              JavaScript diperlukan untuk menjalankan aplikasi ADOSISTERING. Silakan aktifkan JavaScript di browser Anda.
+            </div>
+          </noscript>
           <div id="app">{children}</div>
           {scripts}
         </body>

@@ -1,7 +1,13 @@
-import { ActivityLogPage, preloadActivityLogs } from "~/features/logs/ActivityLogPage";
+import { PageMeta } from "~/components/shared/PageMeta";
+import { ActivityLogView, preloadActivityLogs } from "~/features/logs/ActivityLogPage";
 
 export const route = { preload: () => preloadActivityLogs("auth") };
 
 export default function LogAutentikasi() {
-  return <ActivityLogPage category="auth" title="Log Autentikasi" meta="authLog" />;
+  return (
+    <>
+      <PageMeta page="authLog" />
+      <ActivityLogView category="auth" title="Log Autentikasi" />
+    </>
+  );
 }

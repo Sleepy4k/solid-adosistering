@@ -1,4 +1,5 @@
 import { createMemo, For, Show } from "solid-js";
+import { SelectSearch } from "./SelectSearch";
 
 export const TABLE_PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 
@@ -37,13 +38,11 @@ export function PageSizeSelect(props: PageSizeSelectProps) {
   return (
     <div class="flex flex-col gap-1.5">
       <label class="text-xs font-medium text-slate-600">Tampilkan</label>
-      <select
-        value={props.value}
-        onChange={(event) => props.onChange(Number(event.currentTarget.value))}
-        class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-      >
-        <For each={TABLE_PAGE_SIZE_OPTIONS}>{(option) => <option value={option}>{option} data</option>}</For>
-      </select>
+      <SelectSearch
+        value={String(props.value)}
+        options={TABLE_PAGE_SIZE_OPTIONS.map((option) => ({ value: String(option), label: `${option} data` }))}
+        onChange={(value) => props.onChange(Number(value))}
+      />
     </div>
   );
 }

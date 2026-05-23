@@ -20,6 +20,9 @@ function SprayerCard(props: {
   data: LiveSprayerData;
   meta?: SprayerMeta;
   threshold: Threshold;
+  showWindDirection: boolean;
+  showAutoIrrigation: boolean;
+  readOnly?: boolean;
   onRelay: (data: LiveSprayerData) => void;
   onMode: (data: LiveSprayerData) => void;
 }) {
@@ -49,12 +52,14 @@ function SprayerCard(props: {
           </span>
           <span class="font-semibold text-[#186D3C]">{props.data.flowLmin.toFixed(2)} L / Menit</span>
         </div>
-        <div class="flex items-center justify-between gap-3">
-          <span class="inline-flex items-center gap-2 text-[#4F4F4F]">
-            <Wind size={16} /> Arah Angin
-          </span>
-          <span class="font-semibold text-[#186D3C]">{props.data.windDirection ?? "-"}</span>
-        </div>
+        <Show when={props.showWindDirection}>
+          <div class="flex items-center justify-between gap-3">
+            <span class="inline-flex items-center gap-2 text-[#4F4F4F]">
+              <Wind size={16} /> Arah Angin
+            </span>
+            <span class="font-semibold text-[#186D3C]">{props.data.windDirection ?? "-"}</span>
+          </div>
+        </Show>
         <div class="flex items-center justify-between gap-3">
           <span class="inline-flex items-center gap-2 text-[#4F4F4F]">
             <Power size={16} /> Pompa
@@ -71,16 +76,18 @@ function SprayerCard(props: {
         <Toggle
           checked={props.data.relay === 1}
           label={props.data.relay === 1 ? "ON" : "OFF"}
-          disabled={!props.meta || props.data.mode === 0}
+          disabled={props.readOnly || !props.meta || props.data.mode === 0}
           onChange={() => props.onRelay(props.data)}
         />
-        <Toggle
-          checked={props.data.mode === 0}
-          label="Irigasi Otomatis"
-          size="sm"
-          disabled={!props.meta}
-          onChange={() => props.onMode(props.data)}
-        />
+        <Show when={props.showAutoIrrigation}>
+          <Toggle
+            checked={props.data.mode === 0}
+            label="Irigasi Otomatis"
+            size="sm"
+            disabled={props.readOnly || !props.meta}
+            onChange={() => props.onMode(props.data)}
+          />
+        </Show>
       </div>
 
       <Show when={props.data.mode === 0}>
@@ -97,6 +104,10 @@ export function BlockCard(props: {
   regionName: string;
   sprayers: SprayerMeta[];
   threshold?: (Threshold & { landPreference: MoistureStatus }) | null;
+  showWindDirection?: boolean;
+  showAutoIrrigation?: boolean;
+  volumeDivider?: number;
+  readOnly?: boolean;
 }) {
   const [liveData, setLiveData] = createSignal<LiveSprayerData[]>([]);
   const [connected, setConnected] = createSignal(false);
@@ -109,15 +120,20 @@ export function BlockCard(props: {
   const sprayerMeta = (hardwareId: string) => props.sprayers.find((sprayer) => sprayer.hardwareId === hardwareId);
   const aggregate = () => aggregateLive(liveData());
   const threshold = () =>
-    props.threshold ?? {
-      dryMaxPercent: 40,
-      wetMinPercent: 80,
-      displayDryMaxPercent: 40,
-      displayMoistMaxPercent: 70,
-      displayWetMinPercent: 80,
-      landPreference: "LEMBAB" as MoistureStatus,
-    };
+    props.threshold
+      ? { ...props.threshold, volumeDivider: props.volumeDivider ?? 1 }
+      : {
+          dryMaxPercent: 40,
+          wetMinPercent: 80,
+          displayDryMaxPercent: 40,
+          displayMoistMaxPercent: 70,
+          displayWetMinPercent: 80,
+          landPreference: "LEMBAB" as MoistureStatus,
+          volumeDivider: props.volumeDivider ?? 1,
+        };
   const moisture = () => moistureTone(aggregate().avgMoisture, threshold());
+  const showWind = () => props.showWindDirection ?? true;
+  const showAutoIrrig = () => props.showAutoIrrigation ?? true;
 
   onMount(() => {
     if (!isFirebaseConfigured()) {
@@ -195,12 +211,14 @@ export function BlockCard(props: {
         actions={
           <div class="flex flex-wrap items-center gap-2">
             <Badge tone={connected() ? "success" : "warning"}>{connected() ? "Realtime" : "Menunggu Data"}</Badge>
-            <Button tone="primary" onClick={() => bulkControl("ON")}>
-              Nyalakan Semua
-            </Button>
-            <Button tone="danger" onClick={() => bulkControl("OFF")}>
-              Matikan Semua
-            </Button>
+            <Show when={!props.readOnly}>
+              <Button tone="primary" onClick={() => bulkControl("ON")}>
+                Nyalakan Semua
+              </Button>
+              <Button tone="danger" onClick={() => bulkControl("OFF")}>
+                Matikan Semua
+              </Button>
+            </Show>
             <button
               type="button"
               class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-[#4F4F4F] transition hover:bg-gray-50"
@@ -264,6 +282,9 @@ export function BlockCard(props: {
                     data={sprayer}
                     meta={sprayerMeta(sprayer.sprayerId)}
                     threshold={threshold()}
+                    showWindDirection={showWind()}
+                    showAutoIrrigation={showAutoIrrig()}
+                    readOnly={props.readOnly}
                     onRelay={toggleRelay}
                     onMode={toggleMode}
                   />

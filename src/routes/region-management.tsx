@@ -16,6 +16,7 @@ import {
 import { SkTableRow } from "~/components/shared/Skeleton";
 import { useToast } from "~/components/shared/ToastProvider";
 import { useConfirm } from "~/components/shared/ConfirmProvider";
+import { SelectSearch } from "~/components/ui/SelectSearch";
 
 type RegionRow = Awaited<ReturnType<typeof getRegions>>[number];
 
@@ -209,20 +210,18 @@ function AdminAssignModal(props: { region: RegionRow; onClose: () => void; onSav
         {/* Assign new admin */}
         <div class="flex gap-2">
           <Suspense>
-            <select
+            <SelectSearch
+              class="flex-1"
               value={selectedAdmin()}
-              onChange={(e) => setSelectedAdmin(e.currentTarget.value)}
-              class="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-            >
-              <option value="">Pilih admin baru…</option>
-              <For each={(admins() ?? []).filter((a) => !assignedIds.has(a.id))}>
-                {(a) => (
-                  <option value={a.id}>
-                    {a.name} ({a.email})
-                  </option>
-                )}
-              </For>
-            </select>
+              placeholder="Pilih admin baru..."
+              options={[
+                { value: "", label: "Pilih admin baru..." },
+                ...(admins() ?? [])
+                  .filter((a) => !assignedIds.has(a.id))
+                  .map((a) => ({ value: a.id, label: `${a.name} (${a.email})` })),
+              ]}
+              onChange={setSelectedAdmin}
+            />
           </Suspense>
           <button
             type="button"

@@ -1,8 +1,10 @@
 export const ROUTES = {
-  home: "/",
+  landing: "/",
   login: "/login",
   forgotPassword: "/forgot-password",
   resetPassword: "/reset-password",
+  home: "/dashboard",
+  dashboard: "/dashboard",
   irrigationHistory: "/irrigation-history",
   statistics: "/statistics",
   userManagement: "/user-management",
@@ -10,9 +12,13 @@ export const ROUTES = {
   regionManagement: "/region-management",
   mapConfiguration: "/map-configuration",
   systemLog: "/system-log",
+  authLog: "/auth-log",
+  contactSubmissions: "/contact-submissions",
   settings: "/settings",
   profile: "/profile",
   helpCenter: "/help-center",
+  superadmin: "/superadmin",
+  adminView: "/admin-view",
 } as const;
 
-export const PUBLIC_ROUTES = [ROUTES.login, ROUTES.forgotPassword, ROUTES.resetPassword] as const;
+export const PUBLIC_ROUTES = [ROUTES.landing, ROUTES.login, ROUTES.forgotPassword, ROUTES.resetPassword] as const;

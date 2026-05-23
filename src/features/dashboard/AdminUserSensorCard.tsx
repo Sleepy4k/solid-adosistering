@@ -4,20 +4,21 @@ import { createSignal, onCleanup, onMount, Show } from "solid-js";
 import { Badge } from "~/components/ui/Badge";
 import { Card } from "~/components/ui/Card";
 import { InlineError } from "~/components/shared/AppErrorBoundary";
-import type { LiveSprayerData } from "~/lib/shared/irrigation";
-import { isFirebaseConfigured, subscribeToSprayer } from "~/lib/client/firebaseClient";
+import type { LiveSprayerData, Threshold } from "~/lib/shared/irrigation";
+import { isFirebaseConfigured, subscribeToBlock } from "~/lib/client/firebaseClient";
 import type { AdminUserCard } from "./DashboardTypes";
-import { formatLastUpdated, pumpBadgeTone } from "./helpers";
+import { formatLastUpdated } from "./helpers";
+import { ROUTES } from "~/constants/routes";
 
 export function AdminUserSensorCard(props: { user: AdminUserCard }) {
-  const [live, setLive] = createSignal<LiveSprayerData | null>(null);
-  const [lastSeen, setLastSeen] = createSignal<Date | null>(null);
-  const [loading, setLoading] = createSignal(Boolean(props.user.primarySprayer));
+  const [allLive, setAllLive] = createSignal<Map<string, LiveSprayerData[]>>(new Map());
+  const [loading, setLoading] = createSignal(props.user.sprayersByBlock.length > 0);
   const [error, setError] = createSignal("");
   const [menuOpen, setMenuOpen] = createSignal(false);
+  const [lastSeen, setLastSeen] = createSignal<Date | null>(null);
 
   onMount(() => {
-    if (!props.user.primarySprayer) {
+    if (props.user.sprayersByBlock.length === 0) {
       setLoading(false);
       return;
     }
@@ -26,30 +27,71 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
       setError("Konfigurasi Firebase belum lengkap.");
       return;
     }
-    const sprayer = props.user.primarySprayer;
-    const unsubscribe = subscribeToSprayer(
-      {
-        regionName: sprayer.regionName,
-        blockName: sprayer.blockName,
-        sprayerId: sprayer.hardwareId,
-        threshold: { dryMaxPercent: 40, wetMinPercent: 80 },
-      },
-      (data) => {
-        setLive(data);
-        setLastSeen(new Date());
-        setLoading(false);
-        setError("");
-      },
-      (err) => {
-        setLoading(false);
-        setError(err.message);
-      },
-    );
-    onCleanup(unsubscribe);
+
+    const blockMap = new Map<string, { regionName: string; blockName: string; threshold: Threshold }>();
+    for (const s of props.user.sprayersByBlock) {
+      const key = `${s.regionName}::${s.blockName}`;
+      if (!blockMap.has(key)) {
+        blockMap.set(key, {
+          regionName: s.regionName,
+          blockName: s.blockName,
+          threshold: s.threshold
+            ? {
+                dryMaxPercent: s.threshold.dryMaxPercent,
+                wetMinPercent: s.threshold.wetMinPercent,
+                displayDryMaxPercent: s.threshold.displayDryMaxPercent,
+                displayMoistMaxPercent: s.threshold.displayMoistMaxPercent,
+                displayWetMinPercent: s.threshold.displayWetMinPercent,
+                volumeDivider: s.volumeDivider,
+              }
+            : { dryMaxPercent: 40, wetMinPercent: 80, volumeDivider: s.volumeDivider },
+        });
+      }
+    }
+
+    let loaded = 0;
+    const total = blockMap.size;
+    const unsubscribers: (() => void)[] = [];
+
+    for (const [key, block] of blockMap) {
+      const unsub = subscribeToBlock(
+        { regionName: block.regionName, blockName: block.blockName, threshold: block.threshold },
+        (sprayers) => {
+          setAllLive((prev) => {
+            const next = new Map(prev);
+            next.set(key, sprayers);
+            return next;
+          });
+          setLastSeen(new Date());
+          if (loaded < total) {
+            loaded++;
+            if (loaded === total) setLoading(false);
+          }
+          setError("");
+        },
+        (err) => {
+          if (loaded < total) {
+            loaded++;
+            if (loaded === total) setLoading(false);
+          }
+          setError(err.message);
+        },
+      );
+      unsubscribers.push(unsub);
+    }
+
+    onCleanup(() => unsubscribers.forEach((u) => u()));
   });
 
-  const data = () => live();
-  const connected = () => Boolean(data());
+  const allSprayers = () => [...allLive().values()].flat();
+  const avgMoisture = () => {
+    const items = allSprayers();
+    if (!items.length) return 0;
+    return items.reduce((sum, s) => sum + s.moisturePercent, 0) / items.length;
+  };
+  const totalVolume = () => allSprayers().reduce((sum, s) => sum + s.totalVolumeLiter, 0);
+  const activePumps = () => allSprayers().filter((s) => s.pumpOn).length;
+  const connected = () => allSprayers().length > 0;
 
   return (
     <Card class="p-5">
@@ -62,6 +104,7 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
           <p class="truncate text-sm text-[#808080]">
             {[props.user.domicile, props.user.city].filter(Boolean).join(", ") || "-"}
           </p>
+          <p class="mt-0.5 text-xs text-slate-400">{props.user.regions.map((r) => r.name).join(", ")}</p>
         </div>
         <div class="relative">
           <button
@@ -74,6 +117,13 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
           </button>
           <Show when={menuOpen()}>
             <div class="absolute right-0 top-8 z-20 w-44 rounded-xl border border-gray-200 bg-white py-2 text-sm shadow-lg">
+              <A
+                href={`${ROUTES.adminView}/${props.user.id}`}
+                class="block px-4 py-2 text-[#4F4F4F] hover:bg-gray-50"
+                onClick={() => setMenuOpen(false)}
+              >
+                Lihat Detail
+              </A>
               <A
                 href={`/user-management?search=${encodeURIComponent(props.user.email)}`}
                 class="block px-4 py-2 text-[#4F4F4F] hover:bg-gray-50"
@@ -93,7 +143,7 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
       </div>
 
       <div class="mb-3 flex items-center justify-between">
-        <p class="font-semibold text-[#4F4F4F]">Sensor Data</p>
+        <p class="font-semibold text-[#4F4F4F]">Sensor Data (Agregat)</p>
         <Badge tone={connected() ? "success" : "danger"}>{connected() ? "Terhubung" : "Terputus"}</Badge>
       </div>
 
@@ -110,20 +160,18 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
           }
         >
           <div class="flex justify-between gap-3">
-            <span class="text-[#4F4F4F]">Kelembaban Tanah</span>
-            <span class="font-semibold text-[#4F8936]">{(data()?.moisturePercent ?? 0).toFixed(2)}%</span>
-          </div>
-          <div class="flex justify-between gap-3">
-            <span class="text-[#4F4F4F]">Debit Air Rata-Rata</span>
-            <span class="font-semibold text-[#4F8936]">{(data()?.flowLmin ?? 0).toFixed(2)} L / Menit</span>
+            <span class="text-[#4F4F4F]">Kelembaban Rata-Rata</span>
+            <span class="font-semibold text-[#4F8936]">{avgMoisture().toFixed(2)}%</span>
           </div>
           <div class="flex justify-between gap-3">
             <span class="text-[#4F4F4F]">Total Volume Air</span>
-            <span class="font-semibold text-[#4F8936]">{(data()?.totalVolumeLiter ?? 0).toFixed(2)} Liter</span>
+            <span class="font-semibold text-[#4F8936]">{totalVolume().toFixed(2)} L</span>
           </div>
           <div class="flex justify-between gap-3">
-            <span class="text-[#4F4F4F]">Pompa</span>
-            <Badge tone={pumpBadgeTone(data()?.pumpStatus ?? "OFF")}>{data()?.pumpOn ? "Aktif" : "Mati"}</Badge>
+            <span class="text-[#4F4F4F]">Pompa Aktif</span>
+            <span class="font-semibold text-[#4F8936]">
+              {activePumps()} / {allSprayers().length}
+            </span>
           </div>
         </Show>
       </div>

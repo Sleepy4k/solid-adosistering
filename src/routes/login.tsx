@@ -1,14 +1,26 @@
-import { A, useNavigate, useSearchParams } from "@solidjs/router";
+import { A, cache, createAsync, redirect, useNavigate, useSearchParams } from "@solidjs/router";
 import { Eye, EyeOff } from "lucide-solid";
-import { createSignal, Show } from "solid-js";
+import { createSignal, Show, Suspense } from "solid-js";
 import { PageMeta } from "~/components/shared/PageMeta";
 import { AuthLayout } from "~/layouts/AuthLayout";
 import { Button } from "~/components/ui/Button";
 import { Field, TextInput } from "~/components/form/Form";
 import { login } from "~/server/actions/index";
+import { getSession } from "~/server/session";
 import logoUrl from "~/assets/logo.svg?url";
 
+const checkLoginSession = cache(async () => {
+  "use server";
+  const session = await getSession();
+  if (session) throw redirect("/dashboard");
+  return null;
+}, "login-session");
+
+export const route = { preload: () => checkLoginSession() };
+
 export default function Login() {
+  createAsync(() => checkLoginSession());
+
   const [email, setEmail] = createSignal("");
   const [password, setPassword] = createSignal("");
   const [showPw, setShowPw] = createSignal(false);
@@ -28,7 +40,7 @@ export default function Login() {
     setLoading(true);
     try {
       await login({ email: email(), password: password() });
-      navigate("/");
+      navigate("/dashboard");
     } catch (err) {
       setError(err instanceof Response ? await err.text() : "Terjadi kesalahan. Coba lagi.");
     } finally {
@@ -98,9 +110,12 @@ export default function Login() {
             </Button>
           </form>
 
-          <div class="mt-5 text-center text-sm text-[#4F4F4F]">
+          <div class="mt-5 flex flex-col items-center gap-3 text-sm text-[#4F4F4F]">
             <A href="/forgot-password" class="font-medium text-[#186D3C] hover:underline">
               Lupa password?
+            </A>
+            <A href="/" class="text-slate-500 hover:text-slate-700 hover:underline">
+              ← Kembali ke Beranda
             </A>
           </div>
         </section>

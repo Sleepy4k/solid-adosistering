@@ -1,9 +1,10 @@
 import { A } from "@solidjs/router";
-import { Blocks, MapPin, ShieldCheck, Users } from "lucide-solid";
+import { Blocks, Map, MapPin, ShieldCheck, Users } from "lucide-solid";
 import { For, Show } from "solid-js";
 import { Badge } from "~/components/ui/Badge";
 import { Card, CardHeader } from "~/components/ui/Card";
 import { MetricCard } from "~/components/ui/MetricCard";
+import { LeafletMap, type LeafletRegionMarker } from "~/components/shared/LeafletMap";
 import type { SuperadminSummary } from "./DashboardTypes";
 
 function syncTone(status: string): "success" | "warning" | "danger" {
@@ -20,6 +21,12 @@ function syncLabel(status: string) {
 
 export function SuperadminDashboard(props: { summary: SuperadminSummary }) {
   const summary = () => props.summary;
+
+  const regionMarkers = (): LeafletRegionMarker[] =>
+    summary()
+      .regions.filter((r) => r.latitude !== null && r.longitude !== null)
+      .map((r) => ({ id: r.id, name: r.name, lat: r.latitude!, lng: r.longitude! }));
+
   return (
     <div class="space-y-5">
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -28,6 +35,20 @@ export function SuperadminDashboard(props: { summary: SuperadminSummary }) {
         <MetricCard label="Admin Aktif" value={summary().totalAdmins} icon={<ShieldCheck size={22} />} />
         <MetricCard label="Petani Aktif" value={summary().totalUsers} icon={<Users size={22} />} />
       </div>
+
+      <Show when={regionMarkers().length > 0}>
+        <Card class="overflow-hidden">
+          <CardHeader
+            title={
+              <span class="inline-flex items-center gap-2">
+                <Map size={20} />
+                Peta Titik Wilayah
+              </span>
+            }
+          />
+          <LeafletMap markers={regionMarkers()} polygons={[]} class="h-80" />
+        </Card>
+      </Show>
 
       <Card class="overflow-hidden">
         <CardHeader

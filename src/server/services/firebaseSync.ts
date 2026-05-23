@@ -289,7 +289,10 @@ export async function syncFirebaseSnapshotToDatabase(input: { staleMs?: number }
                 sprayerId: sprayer.id,
                 mode: entry.mode === "AUTO" ? IrrigationMode.AUTO : IrrigationMode.MANUAL,
                 relay: relayState(entry.pump_status),
-                durationSeconds: entry.duration ?? null,
+                durationSeconds:
+                  entry.endtime != null && entry.starttime != null
+                    ? entry.endtime - entry.starttime
+                    : (entry.duration ?? null),
                 totalVolumeLiter: entry.totalVolume === undefined ? null : numberOrZero(entry.totalVolume),
                 firebaseDateKey: dateKey,
                 startedAt: fromEpoch(entry.starttime ?? entry.timestamp),
@@ -302,7 +305,10 @@ export async function syncFirebaseSnapshotToDatabase(input: { staleMs?: number }
                 mode: entry.mode === "AUTO" ? IrrigationMode.AUTO : IrrigationMode.MANUAL,
                 relay: relayState(entry.pump_status),
                 reason: "Imported from Firebase RTDB snapshot",
-                durationSeconds: entry.duration ?? null,
+                durationSeconds:
+                  entry.endtime != null && entry.starttime != null
+                    ? entry.endtime - entry.starttime
+                    : (entry.duration ?? null),
                 totalVolumeLiter: entry.totalVolume === undefined ? null : numberOrZero(entry.totalVolume),
                 firebaseEventId,
                 firebaseDateKey: dateKey,

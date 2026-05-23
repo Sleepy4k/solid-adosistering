@@ -96,6 +96,18 @@ export const PAGE_META = {
     path: ROUTES.systemLog,
     keywords: "log sistem, audit log, aktivitas admin, keamanan sistem",
   },
+  authLog: {
+    title: "Log Autentikasi",
+    description: "Lihat riwayat login, logout, dan reset password akun Adosistering.",
+    path: ROUTES.authLog,
+    keywords: "log autentikasi, login, logout, reset password, keamanan akun",
+  },
+  contactSubmissions: {
+    title: "Pesan Masuk",
+    description: "Kelola pesan masuk dari formulir kontak landing page Adosistering.",
+    path: ROUTES.contactSubmissions,
+    keywords: "pesan masuk, contact us, landing page, adosistering",
+  },
   notFound: {
     title: "404",
     description: "Halaman yang diminta tidak tersedia atau sudah dipindahkan di aplikasi Adosistering.",

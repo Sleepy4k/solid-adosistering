@@ -1,18 +1,23 @@
 import { cache, createAsync } from "@solidjs/router";
-import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, Suspense } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, Suspense } from "solid-js";
 import { BarChart2, Activity } from "lucide-solid";
 import { PageMeta } from "~/components/shared/PageMeta";
-import { getStatistics } from "~/server/actions/index";
+import { getMyRegions, getStatistics } from "~/server/actions/index";
 import { finishProgress, startProgress } from "~/lib/client/progress";
 import { SkCard } from "~/components/shared/Skeleton";
+import { SelectSearch } from "~/components/ui/SelectSearch";
 import type { Chart as ChartType } from "chart.js";
 
 type Range = "today" | "7d" | "30d";
 type DataMode = "raw" | "smooth";
 type Reading = Awaited<ReturnType<typeof getStatistics>>["readings"][number];
 
-const loadStats = cache((range: Range) => getStatistics({ range }), "statistics");
-export const route = { preload: () => loadStats("today") };
+const loadStats = cache(
+  (range: Range, regionId: string) => getStatistics({ range, regionId: regionId || undefined }),
+  "statistics",
+);
+const loadRegions = cache(() => getMyRegions(), "my-regions");
+export const route = { preload: () => loadStats("today", "") };
 
 function StatBadge(props: { label: string; value: string; sub?: string; accent?: boolean }) {
   return (
@@ -146,35 +151,46 @@ function average(values: number[]) {
   return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 }
 
-function median(values: number[]) {
-  if (!values.length) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+function interpolateZeros(values: number[]): number[] {
+  const result = [...values];
+  let i = 0;
+  while (i < result.length) {
+    if (result[i] !== 0) {
+      i++;
+      continue;
+    }
+    let prevIdx = i - 1;
+    while (prevIdx >= 0 && result[prevIdx] === 0) prevIdx--;
+    let nextIdx = i + 1;
+    while (nextIdx < result.length && result[nextIdx] === 0) nextIdx++;
+    const prevVal = prevIdx >= 0 ? result[prevIdx] : nextIdx < result.length ? result[nextIdx] : 0;
+    const nextVal = nextIdx < result.length ? result[nextIdx] : prevVal;
+    const span = nextIdx - (prevIdx >= 0 ? prevIdx : 0);
+    for (let j = (prevIdx >= 0 ? prevIdx : 0) + 1; j < nextIdx; j++) {
+      const t = span > 0 ? (j - (prevIdx >= 0 ? prevIdx : 0)) / span : 0;
+      result[j] = prevVal + t * (nextVal - prevVal);
+    }
+    i = nextIdx;
+  }
+  return result;
 }
 
 function smooth(values: number[]) {
   const n = values.length;
   if (n < 2) return [...values];
-
-  const medFiltered = values.map((_, i) => {
-    const lo = Math.max(0, i - 2);
-    const hi = Math.min(n, i + 3);
-    return median(values.slice(lo, hi));
-  });
-
+  const filled = interpolateZeros(values);
   const weights = [0.05, 0.25, 0.4, 0.25, 0.05];
-  return medFiltered.map((_, i) => {
+  return filled.map((_, i) => {
     let sum = 0;
     let wsum = 0;
     for (let k = -2; k <= 2; k++) {
       const idx = i + k;
       if (idx < 0 || idx >= n) continue;
       const w = weights[k + 2];
-      sum += medFiltered[idx] * w;
+      sum += filled[idx] * w;
       wsum += w;
     }
-    return wsum > 0 ? sum / wsum : medFiltered[i];
+    return wsum > 0 ? sum / wsum : filled[i];
   });
 }
 
@@ -189,13 +205,16 @@ function toMessage(error: unknown) {
 export default function Statistik() {
   const [range, setRange] = createSignal<Range>("today");
   const [dataMode, setDataMode] = createSignal<DataMode>("raw");
+  const [regionId, setRegionId] = createSignal("");
   const [loadError, setLoadError] = createSignal("");
+
+  const regions = createAsync(() => loadRegions());
 
   const stats = createAsync(async () => {
     setLoadError("");
     void startProgress();
     try {
-      return await loadStats(range());
+      return await loadStats(range(), regionId());
     } catch (error) {
       setLoadError(toMessage(error));
       return { readings: [], events: [], since: new Date().toISOString() } as Awaited<ReturnType<typeof getStatistics>>;
@@ -249,16 +268,29 @@ export default function Statistik() {
         </Show>
 
         <div class="animate-in-soft flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4">
-          <div class="flex flex-wrap gap-1">
-            {(["today", "7d", "30d"] as Range[]).map((item) => (
-              <button
-                type="button"
-                class={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${range() === item ? "text-emerald-700 underline underline-offset-4" : "text-slate-500 hover:text-slate-800"}`}
-                onClick={() => setRange(item)}
-              >
-                {rangeLabel[item]}
-              </button>
-            ))}
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="flex flex-wrap gap-1">
+              {(["today", "7d", "30d"] as Range[]).map((item) => (
+                <button
+                  type="button"
+                  class={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${range() === item ? "text-emerald-700 underline underline-offset-4" : "text-slate-500 hover:text-slate-800"}`}
+                  onClick={() => setRange(item)}
+                >
+                  {rangeLabel[item]}
+                </button>
+              ))}
+            </div>
+            <Show when={(regions()?.length ?? 0) > 1}>
+              <SelectSearch
+                value={regionId()}
+                placeholder="Semua Region"
+                options={[
+                  { value: "", label: "Semua Region" },
+                  ...((regions() ?? []).map((r) => ({ value: r.id, label: r.name }))),
+                ]}
+                onChange={setRegionId}
+              />
+            </Show>
           </div>
           <div class="flex gap-1 rounded-lg border border-slate-200 p-0.5">
             <button

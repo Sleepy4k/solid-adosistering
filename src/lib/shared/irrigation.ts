@@ -8,6 +8,7 @@ export type Threshold = {
   displayDryMaxPercent?: number;
   displayMoistMaxPercent?: number;
   displayWetMinPercent?: number;
+  volumeDivider?: number;
 };
 
 export type LiveSprayerData = {

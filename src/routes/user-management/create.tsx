@@ -4,6 +4,7 @@ import { PageMeta } from "~/components/shared/PageMeta";
 import { createUserWithProfile, getUserFormOptions } from "~/server/actions/index";
 import { useToast } from "~/components/shared/ToastProvider";
 import { SkCard } from "~/components/shared/Skeleton";
+import { SelectSearch } from "~/components/ui/SelectSearch";
 import type { Role } from "@prisma/client";
 import chevronLeftIcon from "~/assets/icons/chevron-left.svg?url";
 import eyeOnIcon from "~/assets/icons/eye_on.svg?url";
@@ -184,11 +185,15 @@ export default function TambahUser() {
                   }
                 >
                   <Field label="Role" required>
-                    <select value={role()} onChange={(e) => setRole(e.currentTarget.value as Role)} class={baseInput}>
-                      <option value="USER">User</option>
-                      <option value="ADMIN">Admin</option>
-                      <option value="SUPERADMIN">Superadmin</option>
-                    </select>
+                    <SelectSearch
+                      value={role()}
+                      options={[
+                        { value: "USER", label: "User" },
+                        { value: "ADMIN", label: "Admin" },
+                        { value: "SUPERADMIN", label: "Superadmin" },
+                      ]}
+                      onChange={(value) => setRole(value as Role)}
+                    />
                   </Field>
                 </Show>
                 <Field label="Nomor WhatsApp">
@@ -214,17 +219,15 @@ export default function TambahUser() {
                 <Show
                   when={targetRole() === "ADMIN"}
                   fallback={
-                    <select
+                    <SelectSearch
                       value={selectedRegion()}
-                      onChange={(e) => setSingleRegion(e.currentTarget.value)}
-                      class={baseInput}
-                      required
-                    >
-                      <option value="">Pilih region...</option>
-                      <For each={formOptions()?.regions ?? []}>
-                        {(region) => <option value={region.id}>{region.name}</option>}
-                      </For>
-                    </select>
+                      placeholder="Pilih region..."
+                      options={[
+                        { value: "", label: "Pilih region..." },
+                        ...((formOptions()?.regions ?? []).map((region) => ({ value: region.id, label: region.name }))),
+                      ]}
+                      onChange={setSingleRegion}
+                    />
                   }
                 >
                   <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -252,11 +255,16 @@ export default function TambahUser() {
                   <input value={nickname()} onInput={(e) => setNickname(e.currentTarget.value)} class={baseInput} />
                 </Field>
                 <Field label="Jenis Kelamin">
-                  <select value={gender()} onChange={(e) => setGender(e.currentTarget.value)} class={baseInput}>
-                    <option value="">Pilih</option>
-                    <option value="Laki-laki">Laki-laki</option>
-                    <option value="Perempuan">Perempuan</option>
-                  </select>
+                  <SelectSearch
+                    value={gender()}
+                    placeholder="Pilih"
+                    options={[
+                      { value: "", label: "Pilih" },
+                      { value: "Laki-laki", label: "Laki-laki" },
+                      { value: "Perempuan", label: "Perempuan" },
+                    ]}
+                    onChange={setGender}
+                  />
                 </Field>
                 <Field label="Tanggal Lahir">
                   <input

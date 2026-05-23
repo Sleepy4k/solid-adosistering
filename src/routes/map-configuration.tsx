@@ -1,5 +1,5 @@
 import { cache, createAsync } from "@solidjs/router";
-import { createEffect, createMemo, createSignal, For, Show, Suspense } from "solid-js";
+import { createEffect, createMemo, createSignal, Show, Suspense } from "solid-js";
 import { PageMeta } from "~/components/shared/PageMeta";
 import {
   getMapWorkspace,
@@ -11,6 +11,7 @@ import {
 import { SkCard } from "~/components/shared/Skeleton";
 import { useToast } from "~/components/shared/ToastProvider";
 import { LeafletMap, type LeafletPolygon, type LeafletRegionMarker } from "~/components/shared/LeafletMap";
+import { SelectSearch } from "~/components/ui/SelectSearch";
 
 const loadMapWorkspace = cache((key: number) => {
   void key;
@@ -216,26 +217,20 @@ function MapConfigForm(props: { initial: MapWorkspace; onSaved: () => void }) {
         <div class="mt-5 flex flex-col gap-4">
           <div>
             <label class="mb-1.5 block text-xs font-medium text-slate-600">Region</label>
-            <select
+            <SelectSearch
               value={selectedRegionId()}
-              onChange={(e) => setSelectedRegionId(e.currentTarget.value)}
-              class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-            >
-              <For each={props.initial.regions}>{(region) => <option value={region.id}>{region.name}</option>}</For>
-            </select>
+              options={props.initial.regions.map((region) => ({ value: region.id, label: region.name }))}
+              onChange={setSelectedRegionId}
+            />
           </div>
 
           <div>
             <label class="mb-1.5 block text-xs font-medium text-slate-600">Block</label>
-            <select
+            <SelectSearch
               value={selectedBlockId()}
-              onChange={(e) => setSelectedBlockId(e.currentTarget.value)}
-              class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-            >
-              <For each={selectedRegion()?.blocks ?? []}>
-                {(block) => <option value={block.id}>{block.name}</option>}
-              </For>
-            </select>
+              options={(selectedRegion()?.blocks ?? []).map((block) => ({ value: block.id, label: block.name }))}
+              onChange={setSelectedBlockId}
+            />
           </div>
 
           <div>

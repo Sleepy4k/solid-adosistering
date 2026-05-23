@@ -16,6 +16,7 @@ import {
 import { SkTableRow } from "~/components/shared/Skeleton";
 import { useToast } from "~/components/shared/ToastProvider";
 import { useConfirm } from "~/components/shared/ConfirmProvider";
+import { SelectSearch } from "~/components/ui/SelectSearch";
 import type { Role } from "@prisma/client";
 
 type UserFormOptions = Awaited<ReturnType<typeof getUserFormOptions>>;
@@ -138,15 +139,15 @@ function EditUserModal(props: {
           >
             <div class="sm:col-span-2">
               <label class="mb-1 block text-xs font-medium text-slate-600">Role</label>
-              <select
+              <SelectSearch
                 value={role()}
-                onChange={(e) => setRole(e.currentTarget.value as Role)}
-                class="input-field w-full"
-              >
-                <option value="USER">User</option>
-                <option value="ADMIN">Admin</option>
-                <option value="SUPERADMIN">Superadmin</option>
-              </select>
+                options={[
+                  { value: "USER", label: "User" },
+                  { value: "ADMIN", label: "Admin" },
+                  { value: "SUPERADMIN", label: "Superadmin" },
+                ]}
+                onChange={(value) => setRole(value as Role)}
+              />
             </div>
           </Show>
 
@@ -158,17 +159,15 @@ function EditUserModal(props: {
               <Show
                 when={targetRole() === "ADMIN"}
                 fallback={
-                  <select
+                  <SelectSearch
                     value={selectedRegion()}
-                    onChange={(e) => setSingleRegion(e.currentTarget.value)}
-                    class="input-field w-full"
-                    required
-                  >
-                    <option value="">Pilih region…</option>
-                    <For each={props.options.regions}>
-                      {(region) => <option value={region.id}>{region.name}</option>}
-                    </For>
-                  </select>
+                    placeholder="Pilih region..."
+                    options={[
+                      { value: "", label: "Pilih region..." },
+                      ...props.options.regions.map((region) => ({ value: region.id, label: region.name })),
+                    ]}
+                    onChange={setSingleRegion}
+                  />
                 }
               >
                 <div class="grid gap-2 rounded-xl border border-slate-200 p-3 sm:grid-cols-2">
@@ -329,19 +328,20 @@ export default function ManajemenUser() {
           <Show when={formOptions()?.actorRole === "SUPERADMIN"}>
             <div class="flex flex-col gap-1.5">
               <label class="text-xs font-medium text-slate-600">Role</label>
-              <select
+              <SelectSearch
                 value={roleFilter()}
-                onChange={(e) => {
-                  setRoleFilter(e.currentTarget.value);
+                placeholder="Semua Role"
+                options={[
+                  { value: "", label: "Semua Role" },
+                  { value: "USER", label: "User" },
+                  { value: "ADMIN", label: "Admin" },
+                  { value: "SUPERADMIN", label: "Superadmin" },
+                ]}
+                onChange={(value) => {
+                  setRoleFilter(value);
                   setPage(0);
                 }}
-                class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-              >
-                <option value="">Semua Role</option>
-                <option value="USER">User</option>
-                <option value="ADMIN">Admin</option>
-                <option value="SUPERADMIN">Superadmin</option>
-              </select>
+              />
             </div>
           </Show>
 

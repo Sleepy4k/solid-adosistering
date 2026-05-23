@@ -47,6 +47,12 @@ function toError(error: unknown) {
   return error instanceof Error ? error : new Error("Firebase realtime database gagal diakses.");
 }
 
+function isSprayerNode(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  return "live_data" in v || "control" in v || "history" in v || "data" in v;
+}
+
 function mapSprayerNode(
   sprayerId: string,
   value: Record<string, unknown>,
@@ -58,7 +64,8 @@ function mapSprayerNode(
   const control = (value?.control ?? {}) as Record<string, unknown>;
   const moisturePercent = Number(liveData.moisture_percent ?? liveData.moisture ?? 0);
   const flowLmin = Number(liveData.flow_Lmin ?? liveData.flowRate ?? 0);
-  const totalVolumeLiter = Number(liveData.totalVolume ?? liveData.totalVolume_L ?? 0);
+  const rawVolume = Number(liveData.totalVolume ?? liveData.totalVolume_L ?? 0);
+  const totalVolumeLiter = rawVolume / (threshold.volumeDivider ?? 1);
   const pumpOn =
     control.pump_status === true || control.pump_status === 1 || control.relay === 1 || control.relay === "1";
   const autoMode = control.mode === "AUTO" || control.mode === 1 || control.mode === "1";
@@ -130,7 +137,7 @@ export function subscribeToBlock(
           return;
         }
         const sprayers: LiveSprayerData[] = Object.entries(block as Record<string, unknown>)
-          .filter(([k]) => !k.startsWith("_"))
+          .filter(([k, v]) => !k.startsWith("_") && isSprayerNode(v))
           .map(([id, v]) =>
             mapSprayerNode(id, v as Record<string, unknown>, input.regionName, input.blockName, input.threshold),
           );
@@ -168,7 +175,7 @@ export function subscribeToRegion(
         for (const [blockName, block] of Object.entries(blocks as Record<string, unknown>)) {
           if (blockName.startsWith("_")) continue;
           result[blockName] = Object.entries((block as Record<string, unknown>) ?? {})
-            .filter(([k]) => !k.startsWith("_"))
+            .filter(([k, v]) => !k.startsWith("_") && isSprayerNode(v))
             .map(([id, v]) =>
               mapSprayerNode(id, v as Record<string, unknown>, input.regionName, blockName, input.threshold),
             );

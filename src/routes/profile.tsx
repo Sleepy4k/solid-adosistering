@@ -1,10 +1,11 @@
-import { cache, createAsync } from "@solidjs/router";
+import { cache, createAsync, revalidate } from "@solidjs/router";
 import { createSignal, Show, Suspense } from "solid-js";
 import { PageMeta } from "~/components/shared/PageMeta";
 import { ModalFrame } from "~/components/shared/ModalFrame";
 import { getMyProfile, updateMyProfile, changeMyPassword, type MyProfile } from "~/server/actions/index";
 import { SkCard } from "~/components/shared/Skeleton";
 import { useToast } from "~/components/shared/ToastProvider";
+import { SelectSearch } from "~/components/ui/SelectSearch";
 import editIcon from "~/assets/icons/edit.svg?url";
 
 const loadProfile = cache(() => getMyProfile(), "my-profile");
@@ -14,7 +15,7 @@ function InfoRow(props: { label: string; value: string | null | undefined }) {
   return (
     <div>
       <p class="text-xs text-slate-500">{props.label}</p>
-      <p class="mt-0.5 font-medium text-slate-900">{props.value || "—"}</p>
+      <p class="mt-0.5 font-medium text-slate-900">{props.value || "-"}</p>
     </div>
   );
 }
@@ -67,6 +68,7 @@ function EditProfileModal(props: { profile: MyProfile; onClose: () => void }) {
         city: city(),
         postalCode: postalCode(),
       });
+      await revalidate("my-profile");
       notify({ kind: "success", title: "Profil berhasil diperbarui" });
       props.onClose();
     } catch {
@@ -91,11 +93,16 @@ function EditProfileModal(props: { profile: MyProfile; onClose: () => void }) {
           </div>
           <div>
             <label class="mb-1 block text-xs font-medium text-slate-600">Jenis Kelamin</label>
-            <select value={gender()} onChange={(e) => setGender(e.currentTarget.value)} class="input-base w-full">
-              <option value="">Pilih</option>
-              <option value="Laki-laki">Laki-laki</option>
-              <option value="Perempuan">Perempuan</option>
-            </select>
+            <SelectSearch
+              value={gender()}
+              placeholder="Pilih"
+              options={[
+                { value: "", label: "Pilih" },
+                { value: "Laki-laki", label: "Laki-laki" },
+                { value: "Perempuan", label: "Perempuan" },
+              ]}
+              onChange={setGender}
+            />
           </div>
           <div class="sm:col-span-2">
             <label class="mb-1 block text-xs font-medium text-slate-600">Alamat</label>
@@ -252,8 +259,8 @@ export default function Profil() {
                     </div>
                     <div>
                       <p class="font-bold text-emerald-700">{p().name}</p>
-                      <p class="text-sm text-slate-500">{p().profile?.address || "—"}</p>
-                      <p class="text-sm text-slate-500">{p().profile?.whatsapp || "—"}</p>
+                      <p class="text-sm text-slate-500">{p().profile?.address || "-"}</p>
+                      <p class="text-sm text-slate-500">{p().profile?.whatsapp || "-"}</p>
                     </div>
                   </div>
                 </div>

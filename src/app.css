@@ -121,6 +121,37 @@
   scrollbar-color: #67b744 transparent;
 }
 
+html.landing-scrollbar {
+  scrollbar-color: #111827 #0a0a0a;
+}
+
+html.landing-scrollbar::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+
+html.landing-scrollbar::-webkit-scrollbar-thumb {
+  background: #111827;
+}
+
+html.landing-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #1f2937;
+}
+
+.landing-page [class~="text-emerald-700"],
+.landing-page [class~="text-emerald-600"],
+.landing-page [class~="text-[#67b744]"] {
+  color: var(--landing-primary) !important;
+}
+
+.landing-page [class~="bg-emerald-600"],
+.landing-page [class~="bg-[#67b744]"] {
+  background-color: var(--landing-primary) !important;
+}
+
+.landing-page [class~="focus:border-emerald-500"]:focus {
+  border-color: var(--landing-primary) !important;
+}
+
 /* ─── Base transitions ─────────────────────────────────── */
 button,
 a,

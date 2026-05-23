@@ -2,7 +2,7 @@ import { For } from "solid-js";
 import type { DashboardRegion } from "./DashboardTypes";
 import { BlockCard } from "./BlockCard";
 
-export function RegionSection(props: { region: DashboardRegion }) {
+export function RegionSection(props: { region: DashboardRegion; readOnly?: boolean }) {
   return (
     <section class="space-y-4">
       <div class="px-1">
@@ -17,6 +17,10 @@ export function RegionSection(props: { region: DashboardRegion }) {
               regionName={props.region.name}
               sprayers={block.sprayers}
               threshold={props.region.threshold}
+              volumeDivider={props.region.volumeDivider}
+              showWindDirection={props.region.showWindDirection}
+              showAutoIrrigation={props.region.showAutoIrrigation}
+              readOnly={props.readOnly}
             />
           )}
         </For>

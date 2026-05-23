@@ -1,9 +1,13 @@
 import { Map } from "lucide-solid";
 import { createEffect, createSignal, onCleanup } from "solid-js";
+import { cache, createAsync } from "@solidjs/router";
 import { Card, CardHeader } from "~/components/ui/Card";
 import { LeafletMap, type LeafletPolygon, type LeafletRegionMarker } from "~/components/shared/LeafletMap";
 import { subscribeToBlock } from "~/lib/client/firebaseClient";
+import { getMapDisplayConfig } from "~/server/actions/index";
 import type { DashboardRegion } from "./DashboardTypes";
+
+const loadMapDisplayConfig = cache(() => getMapDisplayConfig(), "map-display-config");
 
 function pointsFromGeojson(value: unknown): [number, number][] {
   if (!value || typeof value !== "object") return [];
@@ -29,15 +33,20 @@ function colorForIndex(index: number) {
   return ["#3b82f6", "#67B744", "#f59e0b", "#ef4444", "#8b5cf6"][index % 5] ?? "#3b82f6";
 }
 
-function colorForStatus(status?: string) {
-  if (status === "Kering") return "#ef4444";
-  if (status === "Basah") return "#3b82f6";
-  if (status === "Lembab") return "#67B744";
+function colorForStatus(
+  status: string | undefined,
+  colors: { basahColor: string; keringColor: string; lembabColor: string },
+) {
+  if (status === "Kering") return colors.keringColor;
+  if (status === "Basah") return colors.basahColor;
+  if (status === "Lembab") return colors.lembabColor;
   return null;
 }
 
 export function MapCard(props: { regions?: DashboardRegion[] }) {
   const [blockStatuses, setBlockStatuses] = createSignal<Record<string, string>>({});
+  const colors = createAsync(() => loadMapDisplayConfig());
+  const mapColors = () => colors() ?? { basahColor: "#3b82f6", keringColor: "#ef4444", lembabColor: "#facc15" };
 
   createEffect(() => {
     const unsubscribers: (() => void)[] = [];
@@ -79,7 +88,7 @@ export function MapCard(props: { regions?: DashboardRegion[] }) {
         id: block.id,
         name: block.name.replace(/_/g, " "),
         points: pointsFromGeojson(block.polygonGeojson),
-        color: colorForStatus(blockStatuses()[block.id]) ?? colorForIndex(regionIndex + blockIndex),
+        color: colorForStatus(blockStatuses()[block.id], mapColors()) ?? colorForIndex(regionIndex + blockIndex),
       })),
     );
 

@@ -18,7 +18,3 @@ export function Field(props: { label: string; for?: string; error?: string; chil
 export function TextInput(props: JSX.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} class={`form-input ${props.class ?? ""}`} />;
 }
-
-export function SelectInput(props: JSX.SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select {...props} class={`form-input form-select ${props.class ?? ""}`} />;
-}

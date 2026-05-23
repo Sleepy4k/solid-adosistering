@@ -5,6 +5,7 @@ import { Edit3 } from "lucide-solid";
 import { getMySettings, saveSafetyTimeout, saveThreshold } from "~/server/actions/index";
 import { SkCard } from "~/components/shared/Skeleton";
 import { useToast } from "~/components/shared/ToastProvider";
+import { SelectSearch } from "~/components/ui/SelectSearch";
 
 const loadSettings = cache(() => getMySettings(), "my-settings");
 export const route = { preload: () => loadSettings() };
@@ -144,13 +145,11 @@ function RegionSelector(props: {
     <Show when={props.regions.length > 1}>
       <div class="rounded-2xl border border-[#C2C2C2] bg-white p-5">
         <label class="mb-2 block text-sm font-medium text-[#4F4F4F]">Region</label>
-        <select
+        <SelectSearch
           value={props.selectedId}
-          onChange={(event) => props.onChange(event.currentTarget.value)}
-          class="h-11 w-full rounded-xl border border-[#C2C2C2] bg-white px-4 text-sm text-[#4F4F4F] outline-none focus:border-primary"
-        >
-          <For each={props.regions}>{(region) => <option value={region.id}>{region.name}</option>}</For>
-        </select>
+          options={props.regions.map((region) => ({ value: region.id, label: region.name }))}
+          onChange={props.onChange}
+        />
       </div>
     </Show>
   );

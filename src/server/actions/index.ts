@@ -55,8 +55,7 @@ async function logActivity(input: {
 async function refreshFirebaseCache() {
   try {
     await syncFirebaseSnapshotToDatabase();
-  } catch {
-  }
+  } catch {}
 }
 
 type CoordinateInput = string | number | null | undefined;
@@ -260,6 +259,9 @@ export type DashboardRegion = {
   description: string | null;
   latitude: number | null;
   longitude: number | null;
+  volumeDivider: number;
+  showWindDirection: boolean;
+  showAutoIrrigation: boolean;
   threshold: {
     dryMaxPercent: number;
     wetMinPercent: number;
@@ -284,7 +286,20 @@ export type AdminUserCard = {
   city: string | null;
   domicile: string | null;
   regions: { id: string; name: string }[];
-  primarySprayer: { regionName: string; blockName: string; hardwareId: string } | null;
+  sprayersByBlock: {
+    regionName: string;
+    blockName: string;
+    hardwareId: string;
+    sprayerId: string;
+    volumeDivider: number;
+    threshold: {
+      dryMaxPercent: number;
+      wetMinPercent: number;
+      displayDryMaxPercent: number;
+      displayMoistMaxPercent: number;
+      displayWetMinPercent: number;
+    } | null;
+  }[];
 };
 
 export type SuperadminSummary = {
@@ -296,6 +311,8 @@ export type SuperadminSummary = {
     id: string;
     name: string;
     description: string | null;
+    latitude: number | null;
+    longitude: number | null;
     blockCount: number;
     adminCount: number;
     syncStatus: string;
@@ -305,7 +322,7 @@ export type SuperadminSummary = {
 export async function getMyDashboard(): Promise<
   | { type: "superadmin"; summary: SuperadminSummary }
   | { type: "user"; regions: DashboardRegion[] }
-  | { type: "admin"; users: AdminUserCard[] }
+  | { type: "admin"; users: AdminUserCard[]; regions: DashboardRegion[] }
 > {
   const session = await getSession();
   if (!session) throw redirect("/login");
@@ -323,6 +340,8 @@ export async function getMyDashboard(): Promise<
           id: true,
           name: true,
           description: true,
+          latitude: true,
+          longitude: true,
           firebaseSyncStatus: true,
           _count: { select: { blocks: true, adminAssignments: true } },
         },
@@ -339,6 +358,8 @@ export async function getMyDashboard(): Promise<
           id: r.id,
           name: r.name,
           description: r.description,
+          latitude: r.latitude ? Number(r.latitude) : null,
+          longitude: r.longitude ? Number(r.longitude) : null,
           blockCount: r._count.blocks,
           adminCount: r._count.adminAssignments,
           syncStatus: r.firebaseSyncStatus,
@@ -379,6 +400,9 @@ export async function getMyDashboard(): Promise<
           description: region.description,
           latitude: region.latitude ? Number(region.latitude) : null,
           longitude: region.longitude ? Number(region.longitude) : null,
+          volumeDivider: Number(region.volumeDivider ?? 1),
+          showWindDirection: region.showWindDirection,
+          showAutoIrrigation: region.showAutoIrrigation,
           threshold: threshold
             ? {
                 dryMaxPercent: threshold.dryMaxPercent,
@@ -405,7 +429,18 @@ export async function getMyDashboard(): Promise<
   }
 
   const adminRegionIds = session.role === "ADMIN" ? await getScopedRegionIds(session) : null;
-  if (adminRegionIds && adminRegionIds.length === 0) return { type: "admin", users: [] };
+  if (adminRegionIds && adminRegionIds.length === 0) return { type: "admin", users: [], regions: [] };
+
+  const adminRegions = await prisma.region.findMany({
+    where: adminRegionIds ? { id: { in: adminRegionIds } } : undefined,
+    orderBy: { name: "asc" },
+    include: {
+      blocks: {
+        orderBy: { name: "asc" },
+        include: { sprayers: { where: { isActive: true }, orderBy: { createdAt: "asc" } } },
+      },
+    },
+  });
 
   const users = await prisma.user.findMany({
     where: {
@@ -422,11 +457,13 @@ export async function getMyDashboard(): Promise<
       assignedRegions: {
         include: {
           region: {
-            include: {
+            select: {
+              id: true,
+              name: true,
+              volumeDivider: true,
               blocks: {
-                take: 1,
                 orderBy: { name: "asc" },
-                include: { sprayers: { take: 1, where: { isActive: true }, orderBy: { createdAt: "asc" } } },
+                include: { sprayers: { where: { isActive: true }, orderBy: { createdAt: "asc" } } },
               },
             },
           },
@@ -435,30 +472,65 @@ export async function getMyDashboard(): Promise<
     },
   });
 
+  const userIds = users.map((u) => u.id);
+  const assignedRegionIds = [...new Set(users.flatMap((u) => u.assignedRegions.map((a) => a.regionId)))];
+  const allThresholds =
+    userIds.length > 0
+      ? await prisma.indicatorThreshold.findMany({
+          where: { userId: { in: userIds }, regionId: { in: assignedRegionIds } },
+          select: {
+            userId: true,
+            regionId: true,
+            dryMaxPercent: true,
+            wetMinPercent: true,
+            displayDryMaxPercent: true,
+            displayMoistMaxPercent: true,
+            displayWetMinPercent: true,
+          },
+        })
+      : [];
+  const thresholdMap = new Map(allThresholds.map((t) => [`${t.userId}:${t.regionId}`, t]));
+
   return {
     type: "admin",
-    users: users.map((u) => {
-      const assignedRegion = u.assignedRegions[0]?.region;
-      const primaryBlock = assignedRegion?.blocks[0];
-      const primarySprayer = primaryBlock?.sprayers[0];
-      return {
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        isActive: u.isActive,
-        city: u.profile?.city ?? null,
-        domicile: u.profile?.domicile ?? null,
-        regions: u.assignedRegions.map((assignment) => ({ id: assignment.region.id, name: assignment.region.name })),
-        primarySprayer:
-          assignedRegion && primaryBlock && primarySprayer
-            ? {
-                regionName: assignedRegion.name,
-                blockName: primaryBlock.name,
-                hardwareId: primarySprayer.hardwareId,
-              }
-            : null,
-      };
-    }),
+    regions: adminRegions.map((r) => ({
+      id: r.id,
+      name: r.name,
+      description: r.description,
+      latitude: r.latitude ? Number(r.latitude) : null,
+      longitude: r.longitude ? Number(r.longitude) : null,
+      volumeDivider: Number(r.volumeDivider ?? 1),
+      showWindDirection: r.showWindDirection,
+      showAutoIrrigation: r.showAutoIrrigation,
+      threshold: null,
+      blocks: r.blocks.map((block) => ({
+        id: block.id,
+        name: block.name,
+        polygonGeojson: block.polygonGeojson,
+        sprayers: block.sprayers.map((s) => ({ id: s.id, hardwareId: s.hardwareId, displayName: s.displayName })),
+      })),
+    })),
+    users: users.map((u) => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      isActive: u.isActive,
+      city: u.profile?.city ?? null,
+      domicile: u.profile?.domicile ?? null,
+      regions: u.assignedRegions.map((a) => ({ id: a.region.id, name: a.region.name })),
+      sprayersByBlock: u.assignedRegions.flatMap((a) =>
+        a.region.blocks.flatMap((block) =>
+          block.sprayers.map((sprayer) => ({
+            regionName: a.region.name,
+            blockName: block.name,
+            hardwareId: sprayer.hardwareId,
+            sprayerId: sprayer.id,
+            volumeDivider: Number(a.region.volumeDivider ?? 1),
+            threshold: thresholdMap.get(`${u.id}:${a.regionId}`) ?? null,
+          })),
+        ),
+      ),
+    })),
   };
 }
 
@@ -567,9 +639,11 @@ export async function changeMyPassword(input: { currentPassword: string; newPass
 
 export type HistoryFilters = {
   blockId?: string;
+  regionId?: string;
   status?: "ON" | "OFF";
   mode?: "AUTO" | "MANUAL";
-  date?: string;
+  dateFrom?: string;
+  dateTo?: string;
 };
 
 export async function getIrrigationHistory(filters: HistoryFilters) {
@@ -579,23 +653,50 @@ export async function getIrrigationHistory(filters: HistoryFilters) {
 
   const where: Prisma.IrrigationEventWhereInput = {};
 
-  if (session.role !== "SUPERADMIN" || filters.blockId) {
-    const blockIds = await getScopedBlockIds(session, filters.blockId);
-    where.blockId = { in: blockIds };
+  if (session.role !== "SUPERADMIN" || filters.blockId || filters.regionId) {
+    let scopedBlockIds: string[];
+    if (filters.regionId && !filters.blockId) {
+      const scopedRegionIds = await getScopedRegionIds(session);
+      const allowed = scopedRegionIds ? scopedRegionIds.includes(filters.regionId) : true;
+      if (!allowed) {
+        scopedBlockIds = [];
+      } else {
+        const blocks = await prisma.block.findMany({
+          where: { regionId: filters.regionId },
+          select: { id: true },
+        });
+        scopedBlockIds = blocks.map((b) => b.id);
+      }
+    } else {
+      scopedBlockIds = await getScopedBlockIds(session, filters.blockId);
+      if (filters.regionId) {
+        const regionBlocks = new Set(
+          (await prisma.block.findMany({ where: { regionId: filters.regionId }, select: { id: true } })).map(
+            (b) => b.id,
+          ),
+        );
+        scopedBlockIds = scopedBlockIds.filter((id) => regionBlocks.has(id));
+      }
+    }
+    where.blockId = { in: scopedBlockIds };
   }
+
   if (filters.status) where.relay = filters.status === "ON" ? RelayState.ON : RelayState.OFF;
   if (filters.mode) where.mode = filters.mode === "AUTO" ? IrrigationMode.AUTO : IrrigationMode.MANUAL;
-  if (filters.date) {
-    const d = new Date(filters.date);
-    const next = new Date(d);
-    next.setDate(next.getDate() + 1);
-    where.startedAt = { gte: d, lt: next };
+
+  const startedAtFilter: { gte?: Date; lt?: Date } = {};
+  if (filters.dateFrom) startedAtFilter.gte = new Date(filters.dateFrom);
+  if (filters.dateTo) {
+    const d = new Date(filters.dateTo);
+    d.setDate(d.getDate() + 1);
+    startedAtFilter.lt = d;
   }
+  if (startedAtFilter.gte || startedAtFilter.lt) where.startedAt = startedAtFilter;
 
   const events = await prisma.irrigationEvent.findMany({
     where,
     orderBy: { startedAt: "desc" },
-    take: 100,
+    take: 200,
     select: {
       id: true,
       mode: true,
@@ -604,7 +705,9 @@ export async function getIrrigationHistory(filters: HistoryFilters) {
       endedAt: true,
       durationSeconds: true,
       totalVolumeLiter: true,
-      block: { select: { id: true, name: true, region: { select: { id: true, name: true } } } },
+      block: {
+        select: { id: true, name: true, region: { select: { id: true, name: true, volumeDivider: true } } },
+      },
       sprayer: { select: { id: true, displayName: true, hardwareId: true } },
       actor: { select: { id: true, name: true } },
     },
@@ -636,16 +739,28 @@ export async function getIrrigationHistory(filters: HistoryFilters) {
     const reading = readings[index];
     const moisturePercent = reading ? Number(reading.moisturePercent) : null;
     const threshold = thresholdMap.get(event.block.region.id) ?? null;
+    const volumeDivider = Number(event.block.region.volumeDivider ?? 1);
+    const rawVolume =
+      event.totalVolumeLiter === null
+        ? reading?.totalVolumeLiter == null
+          ? null
+          : Number(reading.totalVolumeLiter)
+        : Number(event.totalVolumeLiter);
     return {
-      ...event,
+      id: event.id,
+      mode: event.mode,
+      relay: event.relay,
       startedAt: event.startedAt.toISOString(),
       endedAt: event.endedAt?.toISOString() ?? null,
-      totalVolumeLiter:
-        event.totalVolumeLiter === null
-          ? reading?.totalVolumeLiter === null || !reading
-            ? null
-            : Number(reading.totalVolumeLiter)
-          : Number(event.totalVolumeLiter),
+      durationSeconds: event.durationSeconds,
+      totalVolumeLiter: rawVolume === null ? null : rawVolume / volumeDivider,
+      block: {
+        id: event.block.id,
+        name: event.block.name,
+        region: { id: event.block.region.id, name: event.block.region.name },
+      },
+      sprayer: event.sprayer,
+      actor: event.actor,
       sensor: reading
         ? {
             moisturePercent,
@@ -670,7 +785,7 @@ export async function getMyBlocks() {
   });
 }
 
-export async function getStatistics(input: { blockId?: string; range: "today" | "7d" | "30d" }) {
+export async function getStatistics(input: { blockId?: string; regionId?: string; range: "today" | "7d" | "30d" }) {
   const session = await getSession();
   if (!session) throw redirect("/login");
   await refreshFirebaseCache();
@@ -686,8 +801,25 @@ export async function getStatistics(input: { blockId?: string; range: "today" | 
   }
 
   let scopedBlockIds: string[] | null = null;
-  if (input.blockId || session.role !== "SUPERADMIN") {
-    scopedBlockIds = await getScopedBlockIds(session, input.blockId);
+  if (input.blockId || input.regionId || session.role !== "SUPERADMIN") {
+    if (input.regionId && !input.blockId) {
+      const scopedRegionIds = await getScopedRegionIds(session);
+      const allowed = scopedRegionIds ? scopedRegionIds.includes(input.regionId) : true;
+      if (!allowed) {
+        scopedBlockIds = [];
+      } else {
+        const blocks = await prisma.block.findMany({ where: { regionId: input.regionId }, select: { id: true } });
+        scopedBlockIds = blocks.map((b) => b.id);
+      }
+    } else {
+      scopedBlockIds = await getScopedBlockIds(session, input.blockId);
+      if (input.regionId) {
+        const regionBlocks = new Set(
+          (await prisma.block.findMany({ where: { regionId: input.regionId }, select: { id: true } })).map((b) => b.id),
+        );
+        scopedBlockIds = scopedBlockIds.filter((id) => regionBlocks.has(id));
+      }
+    }
   }
 
   const blockFilter: Prisma.SensorReadingWhereInput = scopedBlockIds ? { blockId: { in: scopedBlockIds } } : {};
@@ -702,7 +834,7 @@ export async function getStatistics(input: { blockId?: string; range: "today" | 
       flowLmin: true,
       totalVolumeLiter: true,
       moistureStatus: true,
-      block: { select: { id: true, name: true, region: { select: { name: true } } } },
+      block: { select: { id: true, name: true, region: { select: { name: true, volumeDivider: true } } } },
     },
     take: 2000,
   });
@@ -714,14 +846,17 @@ export async function getStatistics(input: { blockId?: string; range: "today" | 
   });
 
   return {
-    readings: readings.map((reading) => ({
-      recordedAt: reading.recordedAt.toISOString(),
-      moisturePercent: Number(reading.moisturePercent),
-      flowLmin: Number(reading.flowLmin),
-      totalVolumeLiter: reading.totalVolumeLiter === null ? null : Number(reading.totalVolumeLiter),
-      moistureStatus: reading.moistureStatus,
-      block: reading.block,
-    })),
+    readings: readings.map((reading) => {
+      const volumeDivider = Number(reading.block.region.volumeDivider ?? 1);
+      return {
+        recordedAt: reading.recordedAt.toISOString(),
+        moisturePercent: Number(reading.moisturePercent),
+        flowLmin: Number(reading.flowLmin),
+        totalVolumeLiter: reading.totalVolumeLiter === null ? null : Number(reading.totalVolumeLiter) / volumeDivider,
+        moistureStatus: reading.moistureStatus,
+        block: { id: reading.block.id, name: reading.block.name, region: { name: reading.block.region.name } },
+      };
+    }),
     events: events.map((event) => ({
       ...event,
       startedAt: event.startedAt.toISOString(),
@@ -813,8 +948,7 @@ export async function saveThreshold(input: {
       dryMaxPercent: input.dryMaxPercent,
       wetMinPercent: input.wetMinPercent,
     });
-  } catch {
-  }
+  } catch {}
 
   return { ok: true };
 }
@@ -1369,6 +1503,9 @@ export async function createSprayer(input: {
 export async function overridePump(input: { sprayerId: string; mode: "AUTO" | "MANUAL"; relay: "OFF" | "ON" }) {
   const session = await getSession();
   if (!session) throw redirect("/login");
+  if (session.role === "ADMIN") {
+    throw new Response("Admin hanya dapat melihat data dan tidak dapat melakukan kontrol pompa.", { status: 403 });
+  }
 
   const sprayer = await prisma.sprayer.findUniqueOrThrow({
     where: { id: input.sprayerId },
@@ -1523,8 +1660,7 @@ export async function deleteRegion(input: { id: string }) {
 
   try {
     await firebaseAdminDb().ref(firebaseSegment(region.name)).remove();
-  } catch {
-  }
+  } catch {}
 
   return { ok: true };
 }
@@ -1589,13 +1725,32 @@ export type ActivityLogItem = {
   metadata: unknown;
 };
 
-export async function getActivityLogs(input?: { action?: string; limit?: number; offset?: number }) {
+export async function getActivityLogs(input?: {
+  action?: string;
+  category?: "auth" | "system";
+  limit?: number;
+  offset?: number;
+}) {
   const session = await getSession();
   if (!session) throw redirect("/login");
   assertSuperadmin(session);
 
+  const authActions = [
+    ActivityAction.AUTH_LOGIN,
+    ActivityAction.AUTH_LOGOUT,
+    ActivityAction.AUTH_PASSWORD_RESET_REQUEST,
+    ActivityAction.AUTH_PASSWORD_RESET_COMPLETE,
+  ];
+  const where: Prisma.ActivityLogWhereInput = input?.action
+    ? { action: input.action as ActivityAction }
+    : input?.category === "auth"
+      ? { action: { in: authActions } }
+      : input?.category === "system"
+        ? { action: { notIn: authActions } }
+        : {};
+
   const logs = await prisma.activityLog.findMany({
-    where: input?.action ? { action: input.action as ActivityAction } : undefined,
+    where,
     orderBy: { createdAt: "desc" },
     take: input?.limit ?? 50,
     skip: input?.offset ?? 0,
@@ -1611,13 +1766,14 @@ export async function getActivityLogs(input?: { action?: string; limit?: number;
   });
 
   const total = await prisma.activityLog.count({
-    where: input?.action ? { action: input.action as ActivityAction } : undefined,
+    where,
   });
 
   return { logs: logs as ActivityLogItem[], total };
 }
 
 export type MapConfig = { lat: number; lng: number; zoom: number };
+export type MapDisplayConfig = { basahColor: string; keringColor: string; lembabColor: string };
 export type MapPoint = { lat: number; lng: number };
 export type MapWorkspace = MapConfig & {
   regions: {
@@ -1690,6 +1846,35 @@ export async function saveMapConfig(input: MapConfig) {
   return { ok: true };
 }
 
+export async function getMapDisplayConfig(): Promise<MapDisplayConfig> {
+  const session = await getSession();
+  if (!session) throw redirect("/login");
+
+  const defaults: MapDisplayConfig = { basahColor: "#3b82f6", keringColor: "#ef4444", lembabColor: "#facc15" };
+  const setting = await prisma.systemSetting.findUnique({ where: { key: "mapDisplayConfig" } });
+  if (!setting?.value) return defaults;
+  return { ...defaults, ...(setting.value as Partial<MapDisplayConfig>) };
+}
+
+export async function saveMapDisplayConfig(input: MapDisplayConfig) {
+  const session = await getSession();
+  if (!session) throw redirect("/login");
+  assertSuperadmin(session);
+
+  await prisma.systemSetting.upsert({
+    where: { key: "mapDisplayConfig" },
+    create: { key: "mapDisplayConfig", value: input as unknown as Prisma.InputJsonValue },
+    update: { value: input as unknown as Prisma.InputJsonValue },
+  });
+  await logActivity({
+    actorId: session.id,
+    action: ActivityAction.UPDATE,
+    entityType: "SystemSetting",
+    entityId: "mapDisplayConfig",
+  });
+  return { ok: true };
+}
+
 export async function saveBlockMapGeometry(input: { blockId: string; points: MapPoint[] }) {
   const session = await getSession();
   if (!session) throw redirect("/login");
@@ -1712,4 +1897,239 @@ export async function saveBlockMapGeometry(input: { blockId: string; points: Map
     metadata: { pointCount: input.points.length },
   });
   return { ok: true };
+}
+
+export async function getMyRegions() {
+  const session = await getSession();
+  if (!session) throw redirect("/login");
+
+  const regionIds = await getScopedRegionIds(session);
+  const rows = await prisma.region.findMany({
+    where: regionIds ? { id: { in: regionIds } } : undefined,
+    select: { id: true, name: true, latitude: true, longitude: true },
+    orderBy: { name: "asc" },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    latitude: r.latitude ? Number(r.latitude) : null,
+    longitude: r.longitude ? Number(r.longitude) : null,
+  }));
+}
+
+export async function updateRegionConfig(input: {
+  id: string;
+  volumeDivider: number;
+  showWindDirection: boolean;
+  showAutoIrrigation: boolean;
+}) {
+  const session = await getSession();
+  if (!session) throw redirect("/login");
+  assertSuperadmin(session);
+
+  if (!Number.isFinite(input.volumeDivider) || input.volumeDivider <= 0) {
+    throw new Response("Volume divider harus berupa angka positif.", { status: 400 });
+  }
+
+  await prisma.region.update({
+    where: { id: input.id },
+    data: {
+      volumeDivider: input.volumeDivider,
+      showWindDirection: input.showWindDirection,
+      showAutoIrrigation: input.showAutoIrrigation,
+      updatedById: session.id,
+    },
+  });
+  await logActivity({
+    actorId: session.id,
+    regionId: input.id,
+    action: ActivityAction.UPDATE,
+    entityType: "RegionConfig",
+    entityId: input.id,
+    metadata: {
+      volumeDivider: input.volumeDivider,
+      showWindDirection: input.showWindDirection,
+      showAutoIrrigation: input.showAutoIrrigation,
+    },
+  });
+  return { ok: true };
+}
+
+export async function saveContactSubmission(input: {
+  name: string;
+  email: string;
+  phone?: string;
+  userType?: string;
+  message: string;
+}) {
+  const name = input.name.trim();
+  const email = input.email.trim().toLowerCase();
+  const message = input.message.trim();
+  if (!name || !email || !message) {
+    throw new Response("Nama, email, dan pesan wajib diisi.", { status: 400 });
+  }
+  await prisma.contactSubmission.create({
+    data: {
+      id: randomBytes(10).toString("hex"),
+      name,
+      email,
+      phone: input.phone?.trim() || null,
+      userType: input.userType?.trim() || null,
+      message,
+    },
+  });
+  return { ok: true };
+}
+
+export async function getContactSubmissions(input?: { unreadOnly?: boolean }) {
+  const session = await getSession();
+  if (!session) throw redirect("/login");
+  assertSuperadmin(session);
+
+  return prisma.contactSubmission.findMany({
+    where: input?.unreadOnly ? { isRead: false } : undefined,
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+}
+
+export async function markContactRead(input: { id: string; isRead: boolean }) {
+  const session = await getSession();
+  if (!session) throw redirect("/login");
+  assertSuperadmin(session);
+
+  await prisma.contactSubmission.update({ where: { id: input.id }, data: { isRead: input.isRead } });
+  return { ok: true };
+}
+
+export type WebConfig = {
+  projectName: string;
+  logoUrl: string | null;
+  primaryColor: string;
+  tagline: string | null;
+};
+
+export async function getWebConfig(): Promise<WebConfig> {
+  const setting = await prisma.systemSetting.findUnique({ where: { key: "webConfig" } });
+  const defaults: WebConfig = { projectName: "Adosistering", logoUrl: null, primaryColor: "#2d6a4f", tagline: null };
+  if (!setting?.value) return defaults;
+  const v = setting.value as Partial<WebConfig>;
+  return { ...defaults, ...v };
+}
+
+export async function saveWebConfig(input: WebConfig) {
+  const session = await getSession();
+  if (!session) throw redirect("/login");
+  assertSuperadmin(session);
+
+  await prisma.systemSetting.upsert({
+    where: { key: "webConfig" },
+    create: { key: "webConfig", value: input as unknown as Prisma.InputJsonValue },
+    update: { value: input as unknown as Prisma.InputJsonValue },
+  });
+  await logActivity({
+    actorId: session.id,
+    action: ActivityAction.UPDATE,
+    entityType: "SystemSetting",
+    entityId: "webConfig",
+  });
+  return { ok: true };
+}
+
+export async function getRegionsForConfig() {
+  const session = await getSession();
+  if (!session) throw redirect("/login");
+  assertSuperadmin(session);
+
+  const rows = await prisma.region.findMany({
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      volumeDivider: true,
+      showWindDirection: true,
+      showAutoIrrigation: true,
+    },
+  });
+  return rows.map((r) => ({ ...r, volumeDivider: Number(r.volumeDivider) }));
+}
+
+export async function getUserDashboardView(userId: string): Promise<{ regions: DashboardRegion[] }> {
+  const session = await getSession();
+  if (!session) throw redirect("/login");
+  assertAdminOrHigher(session);
+
+  if (!userId || userId.length > 128 || !/^[a-zA-Z0-9_-]+$/.test(userId)) {
+    throw new Response("User ID tidak valid.", { status: 400 });
+  }
+
+  let scopedRegionIds: string[] | null = null;
+  const target = await prisma.user.findUnique({
+    where: { id: userId, role: "USER" },
+    select: { id: true },
+  });
+  if (!target) throw new Response("User tidak ditemukan.", { status: 404 });
+
+  if (session.role === "ADMIN") {
+    scopedRegionIds = await getScopedRegionIds(session);
+    const userAssignment = await prisma.userRegionAssignment.findFirst({
+      where: { userId, ...(scopedRegionIds ? { regionId: { in: scopedRegionIds } } : {}) },
+    });
+    if (!userAssignment) throw new Response("User berada di luar hak akses admin.", { status: 403 });
+  }
+
+  const assignments = await prisma.userRegionAssignment.findMany({
+    where: { userId, ...(scopedRegionIds ? { regionId: { in: scopedRegionIds } } : {}) },
+    include: {
+      region: {
+        include: {
+          blocks: {
+            orderBy: { name: "asc" },
+            include: { sprayers: { where: { isActive: true }, orderBy: { createdAt: "asc" } } },
+          },
+        },
+      },
+    },
+  });
+  const thresholdMap = await getRegionThresholdMap(
+    userId,
+    assignments.map((a) => a.regionId),
+  );
+
+  return {
+    regions: assignments.map((a) => {
+      const region = a.region;
+      const threshold = thresholdMap.get(region.id) ?? null;
+      return {
+        id: region.id,
+        name: region.name,
+        description: region.description,
+        latitude: region.latitude ? Number(region.latitude) : null,
+        longitude: region.longitude ? Number(region.longitude) : null,
+        volumeDivider: Number(region.volumeDivider ?? 1),
+        showWindDirection: region.showWindDirection,
+        showAutoIrrigation: region.showAutoIrrigation,
+        threshold: threshold
+          ? {
+              dryMaxPercent: threshold.dryMaxPercent,
+              wetMinPercent: threshold.wetMinPercent,
+              displayDryMaxPercent: threshold.displayDryMaxPercent,
+              displayMoistMaxPercent: threshold.displayMoistMaxPercent,
+              displayWetMinPercent: threshold.displayWetMinPercent,
+              landPreference: threshold.landPreference,
+            }
+          : null,
+        blocks: region.blocks.map((block) => ({
+          id: block.id,
+          name: block.name,
+          polygonGeojson: block.polygonGeojson,
+          sprayers: block.sprayers.map((sprayer) => ({
+            id: sprayer.id,
+            hardwareId: sprayer.hardwareId,
+            displayName: sprayer.displayName,
+          })),
+        })),
+      };
+    }),
+  };
 }

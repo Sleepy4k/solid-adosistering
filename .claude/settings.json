@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-Command bun -ErrorAction SilentlyContinue; where.exe bun 2>&1; ls \"$env:USERPROFILE\\\\.bun\\\\bin\" 2>&1 | Select-Object -First 10)",
+      "Read(//c/Program Files/**)",
+      "PowerShell(node --version)",
+      "PowerShell(npm --version)",
+      "PowerShell(npx --version 2>&1)"
+    ]
+  }
+}

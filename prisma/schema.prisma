@@ -119,6 +119,9 @@ model Region {
   description        String?
   latitude           Decimal?                @db.Decimal(18, 16)
   longitude          Decimal?                @db.Decimal(19, 16)
+  volumeDivider      Decimal                 @default(1) @map("volume_divider") @db.Decimal(10, 4)
+  showWindDirection  Boolean                 @default(true) @map("show_wind_direction")
+  showAutoIrrigation Boolean                 @default(true) @map("show_auto_irrigation")
   createdById        String                  @map("created_by_id")
   updatedById        String?                 @map("updated_by_id")
   firebaseSyncStatus SyncStatus              @default(PENDING) @map("firebase_sync_status")
@@ -138,6 +141,21 @@ model Region {
   @@index([createdById])
   @@index([firebaseSyncStatus, createdAt])
   @@map("region")
+}
+
+model ContactSubmission {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  phone     String?
+  userType  String?  @map("user_type")
+  message   String   @db.Text
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([isRead])
+  @@map("contact_submission")
 }
 
 model Block {

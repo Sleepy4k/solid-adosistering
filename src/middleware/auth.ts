@@ -37,7 +37,7 @@ export default createMiddleware({
         const tokenHash = hashToken(token);
         const session = await prisma.session.findUnique({
           where: { tokenHash },
-          select: { expiresAt: true, user: { select: { isActive: true } } },
+          select: { expiresAt: true, user: { select: { isActive: true, role: true } } },
         });
 
         if (!session || session.expiresAt < new Date() || !session.user.isActive) {
@@ -46,6 +46,23 @@ export default createMiddleware({
             status: 302,
             headers: { Location: ROUTES.login, "Set-Cookie": clear },
           });
+        }
+
+        const matchesRoute = (route: string) => path === route || path.startsWith(route + "/");
+        const superadminRoutes = [
+          ROUTES.regionManagement,
+          ROUTES.mapConfiguration,
+          ROUTES.contactSubmissions,
+          ROUTES.superadmin,
+        ];
+        const adminRoutes = [ROUTES.userManagement, ROUTES.systemLog, ROUTES.authLog, ROUTES.adminView];
+
+        if (superadminRoutes.some(matchesRoute) && session.user.role !== "SUPERADMIN") {
+          return new Response(null, { status: 302, headers: { Location: ROUTES.dashboard } });
+        }
+
+        if (adminRoutes.some(matchesRoute) && session.user.role === "USER") {
+          return new Response(null, { status: 302, headers: { Location: ROUTES.dashboard } });
         }
       } catch {
         // DB unavailable — let the page handle the error gracefully

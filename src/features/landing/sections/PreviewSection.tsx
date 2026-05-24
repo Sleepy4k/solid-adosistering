@@ -31,6 +31,10 @@ export default function PreviewSection() {
             alt="Dashboard platform ADOSISTERING ditampilkan di layar laptop"
             class="relative z-10 h-auto w-full max-w-[680px] drop-shadow-2xl"
             loading="lazy"
+            decoding="async"
+            fetchpriority="low"
+            width={4552}
+            height={4552}
           />
         </div>
       </div>

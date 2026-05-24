@@ -144,6 +144,44 @@ function displayThresholdDefaults(input?: {
   };
 }
 
+const SAFETY_TIMEOUT_KEY = "safetyTimeout";
+
+function safetyTimeoutFromValue(value: unknown, fallback: { min: number; max: number }) {
+  const parsed = value as { min?: number; max?: number } | null;
+  const min = Number.isFinite(parsed?.min) ? Number(parsed?.min) : fallback.min;
+  const max = Number.isFinite(parsed?.max) ? Number(parsed?.max) : fallback.max;
+  if (min >= max) return fallback;
+  return { min, max };
+}
+
+function normalizeSafetyTimeout(input: { min: number; max: number }) {
+  const min = Math.min(10, Math.max(1, Math.round(input.min)));
+  const max = Math.min(10, Math.max(1, Math.round(input.max)));
+  if (min >= max) throw new Response("Durasi minimum harus lebih kecil dari maksimum.", { status: 400 });
+  return { min, max };
+}
+
+async function getSafetyTimeoutDefault() {
+  const timeout = await prisma.systemSetting.findUnique({ where: { key: SAFETY_TIMEOUT_KEY } });
+  return safetyTimeoutFromValue(timeout?.value, { min: 1, max: 3 });
+}
+
+async function getRegionSafetyTimeoutMap(regionIds: string[], fallback: { min: number; max: number }) {
+  if (regionIds.length === 0) return new Map<string, { min: number; max: number }>();
+  const keys = regionIds.map((regionId) => `${SAFETY_TIMEOUT_KEY}:${regionId}`);
+  const settings = await prisma.systemSetting.findMany({ where: { key: { in: keys } } });
+  const map = new Map<string, { min: number; max: number }>();
+  for (const setting of settings) {
+    const regionId = setting.key.slice(SAFETY_TIMEOUT_KEY.length + 1);
+    if (!regionId) continue;
+    map.set(regionId, safetyTimeoutFromValue(setting.value, fallback));
+  }
+  for (const regionId of regionIds) {
+    if (!map.has(regionId)) map.set(regionId, fallback);
+  }
+  return map;
+}
+
 function displayMoistureStatus(
   moisturePercent: number,
   threshold?: {
@@ -904,11 +942,37 @@ export async function getMySettings() {
   const session = await getSession();
   if (!session) throw redirect("/login");
 
-  const timeout = await prisma.systemSetting.findUnique({ where: { key: "safetyTimeout" } });
-  const safetyTimeout = (timeout?.value as { min: number; max: number } | null) ?? { min: 1, max: 3 };
+  const safetyTimeout = await getSafetyTimeoutDefault();
 
-  if (session.role !== "USER") {
-    return { role: session.role as "ADMIN" | "SUPERADMIN", regions: [], safetyTimeout };
+  if (session.role === "SUPERADMIN") {
+    return { role: session.role as "SUPERADMIN", regions: [], safetyTimeout };
+  }
+
+  if (session.role === "ADMIN") {
+    const assignments = await prisma.adminRegionAssignment.findMany({
+      where: { adminId: session.id },
+      include: {
+        region: {
+          include: {
+            _count: { select: { blocks: true } },
+          },
+        },
+      },
+    });
+    const regionIds = assignments.map((assignment) => assignment.regionId);
+    const thresholdMap = await getRegionThresholdMap(session.id, regionIds);
+    const safetyTimeoutMap = await getRegionSafetyTimeoutMap(regionIds, safetyTimeout);
+
+    return {
+      role: "ADMIN" as const,
+      regions: assignments.map((assignment) => ({
+        id: assignment.region.id,
+        name: assignment.region.name,
+        blockCount: assignment.region._count.blocks,
+        threshold: thresholdMap.get(assignment.region.id) ?? null,
+        safetyTimeout: safetyTimeoutMap.get(assignment.region.id) ?? safetyTimeout,
+      })),
+    };
   }
 
   const assignments = await prisma.userRegionAssignment.findMany({
@@ -949,13 +1013,26 @@ export async function saveThreshold(input: {
 }) {
   const session = await getSession();
   if (!session) throw redirect("/login");
-  if (session.role !== "USER") throw new Response("Pengaturan region hanya tersedia untuk User.", { status: 403 });
+  let regionName: string | null = null;
 
-  const assignment = await prisma.userRegionAssignment.findUnique({
-    where: { userId_regionId: { userId: session.id, regionId: input.regionId } },
-    include: { region: { select: { name: true } } },
-  });
-  if (!assignment) throw new Response("Region tidak berada di hak akses user.", { status: 403 });
+  if (session.role === "USER") {
+    const assignment = await prisma.userRegionAssignment.findUnique({
+      where: { userId_regionId: { userId: session.id, regionId: input.regionId } },
+      include: { region: { select: { name: true } } },
+    });
+    if (!assignment) throw new Response("Region tidak berada di hak akses user.", { status: 403 });
+    regionName = assignment.region.name;
+  } else if (session.role === "ADMIN") {
+    const assignment = await prisma.adminRegionAssignment.findUnique({
+      where: { adminId_regionId: { adminId: session.id, regionId: input.regionId } },
+      include: { region: { select: { name: true } } },
+    });
+    if (!assignment) throw new Response("Region tidak berada di hak akses admin.", { status: 403 });
+    regionName = assignment.region.name;
+  } else {
+    throw new Response("Pengaturan region hanya tersedia untuk Admin atau User.", { status: 403 });
+  }
+
   const displayThresholds = displayThresholdDefaults(input);
 
   await prisma.indicatorThreshold.upsert({
@@ -976,13 +1053,15 @@ export async function saveThreshold(input: {
     },
   });
 
-  try {
-    await updateRegionSettings({
-      regionName: assignment.region.name,
-      dryMaxPercent: input.dryMaxPercent,
-      wetMinPercent: input.wetMinPercent,
-    });
-  } catch {}
+  if (regionName) {
+    try {
+      await updateRegionSettings({
+        regionName,
+        dryMaxPercent: input.dryMaxPercent,
+        wetMinPercent: input.wetMinPercent,
+      });
+    } catch {}
+  }
 
   return { ok: true };
 }
@@ -990,15 +1069,37 @@ export async function saveThreshold(input: {
 export async function saveSafetyTimeout(input: { min: number; max: number }) {
   const session = await getSession();
   if (!session) throw redirect("/login");
-  const min = Math.min(10, Math.max(1, Math.round(input.min)));
-  const max = Math.min(10, Math.max(1, Math.round(input.max)));
-  if (min >= max) throw new Response("Durasi minimum harus lebih kecil dari maksimum.", { status: 400 });
+  const { min, max } = normalizeSafetyTimeout(input);
 
   await prisma.systemSetting.upsert({
-    where: { key: "safetyTimeout" },
-    create: { key: "safetyTimeout", value: { min, max } },
+    where: { key: SAFETY_TIMEOUT_KEY },
+    create: { key: SAFETY_TIMEOUT_KEY, value: { min, max } },
     update: { value: { min, max } },
   });
+  return { ok: true };
+}
+
+export async function saveRegionSafetyTimeout(input: { regionId: string; min: number; max: number }) {
+  const session = await getSession();
+  if (!session) throw redirect("/login");
+  if (session.role === "USER") throw new Response("Pengaturan region hanya tersedia untuk Admin.", { status: 403 });
+
+  if (session.role === "ADMIN") {
+    const assignment = await prisma.adminRegionAssignment.findUnique({
+      where: { adminId_regionId: { adminId: session.id, regionId: input.regionId } },
+    });
+    if (!assignment) throw new Response("Region tidak berada di hak akses admin.", { status: 403 });
+  }
+
+  const { min, max } = normalizeSafetyTimeout(input);
+  const key = `${SAFETY_TIMEOUT_KEY}:${input.regionId}`;
+
+  await prisma.systemSetting.upsert({
+    where: { key },
+    create: { key, value: { min, max } },
+    update: { value: { min, max } },
+  });
+
   return { ok: true };
 }
 
@@ -1767,7 +1868,7 @@ export async function getActivityLogs(input?: {
 }) {
   const session = await getSession();
   if (!session) throw redirect("/login");
-  assertSuperadmin(session);
+  if (session.role === "USER") return { logs: [], total: 0, forbidden: true };
 
   const authActions = [
     ActivityAction.AUTH_LOGIN,
@@ -1775,13 +1876,38 @@ export async function getActivityLogs(input?: {
     ActivityAction.AUTH_PASSWORD_RESET_REQUEST,
     ActivityAction.AUTH_PASSWORD_RESET_COMPLETE,
   ];
-  const where: Prisma.ActivityLogWhereInput = input?.action
+  const baseWhere: Prisma.ActivityLogWhereInput = input?.action
     ? { action: input.action as ActivityAction }
     : input?.category === "auth"
       ? { action: { in: authActions } }
       : input?.category === "system"
         ? { action: { notIn: authActions } }
         : {};
+
+  let where: Prisma.ActivityLogWhereInput = baseWhere;
+
+  if (session.role === "ADMIN") {
+    const regionIds = await getScopedRegionIds(session);
+    if (!regionIds || regionIds.length === 0) return { logs: [], total: 0 };
+
+    const users = await prisma.userRegionAssignment.findMany({
+      where: { regionId: { in: regionIds } },
+      select: { userId: true },
+    });
+    const allowedUserIds = [...new Set([session.id, ...users.map((row) => row.userId)])];
+
+    where = {
+      AND: [
+        baseWhere,
+        {
+          OR: [
+            { actorId: { in: allowedUserIds } },
+            { AND: [{ actorId: null }, { regionId: { in: regionIds } }] },
+          ],
+        },
+      ],
+    };
+  }
 
   const logs = await prisma.activityLog.findMany({
     where,

@@ -53,7 +53,13 @@ export default function ForgotPassword() {
       <AuthLayout>
         <section class="w-full max-w-[560px] rounded-3xl border-2 border-white bg-white/75 p-7 shadow-xl backdrop-blur-md sm:p-10">
           <div class="mb-6 text-center">
-            <img src={config().logoUrl || fallbackLogo} alt={config().projectName} class="mx-auto mb-4 h-16 w-auto" />
+            <img
+              src={config().logoUrl || fallbackLogo}
+              alt={config().projectName}
+              class="mx-auto mb-4 h-16 w-auto"
+              loading="lazy"
+              decoding="async"
+            />
             <h1 class="text-3xl font-normal leading-tight text-gray-800 sm:text-[40px]">Lupa Password</h1>
             <p class="mt-2 text-sm text-[#4F4F4F]">Masukkan email akun Anda untuk menerima tautan reset password.</p>
           </div>

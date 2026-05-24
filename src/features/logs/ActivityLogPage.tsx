@@ -15,6 +15,8 @@ const loadLogs = cache(
   "activity-logs",
 );
 
+type ActivityLogResult = Awaited<ReturnType<typeof getActivityLogs>>;
+
 export function preloadActivityLogs(category: "auth" | "system") {
   return loadLogs(category, "", 10, 0);
 }
@@ -34,7 +36,7 @@ export function ActivityLogView(props: { category: "auth" | "system"; title: str
   const [actionFilter, setActionFilter] = createSignal("");
   const [page, setPage] = createSignal(0);
   const [pageSize, setPageSize] = createSignal(10);
-  const data = createAsync(() => loadLogs(props.category, actionFilter(), pageSize(), page() * pageSize()));
+  const data = createAsync<ActivityLogResult>(() => loadLogs(props.category, actionFilter(), pageSize(), page() * pageSize()));
   const actionOptions = () => {
     const entries = Object.entries(ACTION_LABELS) as [ActivityAction, string][];
     const filtered =
@@ -91,6 +93,12 @@ export function ActivityLogView(props: { category: "auth" | "system"; title: str
           </Show>
         </Suspense>
       </div>
+
+      <Show when={data()?.forbidden}>
+        <div class="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
+          Anda tidak memiliki akses ke log ini.
+        </div>
+      </Show>
 
       <div class="rounded-xl border border-slate-200 bg-white">
         <Suspense

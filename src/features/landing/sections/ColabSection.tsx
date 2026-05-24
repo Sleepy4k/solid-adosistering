@@ -7,7 +7,16 @@ export default function ColabSection() {
       class="relative flex min-h-[540px] items-center justify-center overflow-hidden md:min-h-[600px] lg:min-h-[770px]"
       aria-labelledby="colab-heading"
     >
-      <img src="/landing/colab-bg.png" alt="" class="absolute inset-0 h-full w-full object-cover" loading="lazy" />
+      <img
+        src="/landing/colab-bg.png"
+        alt=""
+        class="absolute inset-0 h-full w-full object-cover"
+        loading="lazy"
+        decoding="async"
+        fetchpriority="low"
+        width={1440}
+        height={772}
+      />
       <div class="absolute inset-0 bg-black/55 backdrop-blur-[2px]" />
       <div class="relative z-10 container mx-auto max-w-screen-xl px-4 py-16 text-center sm:px-6 md:py-20 lg:px-12 lg:py-24 xl:px-16">
         <h2

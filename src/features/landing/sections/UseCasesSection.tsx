@@ -10,7 +10,16 @@ export default function UseCasesSection() {
         </h2>
         <div class="relative flex min-h-[600px] items-center pb-20 pt-4 md:min-h-[700px] md:pb-28 lg:min-h-[800px] lg:pb-36">
           <div class="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden="true">
-            <img src="/landing/map-background.png" alt="" class="object-cover" loading="lazy" />
+            <img
+              src="/landing/map-background.png"
+              alt=""
+              class="object-cover"
+              loading="lazy"
+              decoding="async"
+              fetchpriority="low"
+              width={5376}
+              height={2640}
+            />
           </div>
           <div class="relative z-10 mx-auto grid w-full max-w-6xl gap-6 md:grid-cols-3 lg:gap-8">
             {LOCATIONS.map((loc) => (
@@ -21,6 +30,10 @@ export default function UseCasesSection() {
                     alt={`Lokasi implementasi ADOSISTERING di ${loc.name}`}
                     class="h-auto w-full object-cover"
                     loading="lazy"
+                    decoding="async"
+                    fetchpriority="low"
+                    width={loc.width}
+                    height={loc.height}
                   />
                 </div>
                 <h3 class="mb-2 text-lg font-bold leading-snug text-neutral-900 sm:text-xl">{loc.name}</h3>

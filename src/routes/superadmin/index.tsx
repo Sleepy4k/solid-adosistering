@@ -277,7 +277,16 @@ function WebConfigSection() {
                     <label class="form-label text-xs">URL Ikon Web (Favicon)</label>
                     <div class="flex items-center gap-2">
                       <Show when={iconUrl().trim()}>
-                        <img src={iconUrl()} alt="" class="h-10 w-10 rounded-lg border border-slate-200 object-contain p-1" />
+                        <img
+                          src={iconUrl()}
+                          alt=""
+                          class="h-10 w-10 rounded-lg border border-slate-200 object-contain p-1"
+                          loading="lazy"
+                          decoding="async"
+                          fetchpriority="low"
+                          width={40}
+                          height={40}
+                        />
                       </Show>
                       <input
                         class={`${inp} flex-1`}

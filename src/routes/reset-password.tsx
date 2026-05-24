@@ -129,6 +129,8 @@ export default function ResetPassword() {
                           src={showPw() ? eyeOffIcon : eyeOnIcon}
                           alt={showPw() ? "Sembunyikan password" : "Tampilkan password"}
                           class="h-5 w-5"
+                          loading="lazy"
+                          decoding="async"
                         />
                       </button>
                     </div>

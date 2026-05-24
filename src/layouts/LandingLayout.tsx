@@ -66,6 +66,7 @@ export default function LandingLayout(props: LandingLayoutProps) {
       <Link rel="dns-prefetch" href="https://fonts.gstatic.com" />
       <Link rel="preconnect" href="https://fonts.googleapis.com" />
       <Link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+      <Link rel="preload" as="image" href="/landing/hero-background.jpg" fetchpriority="high" />
       <Link
         rel="preload"
         as="style"

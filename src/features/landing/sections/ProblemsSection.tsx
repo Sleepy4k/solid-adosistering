@@ -10,6 +10,10 @@ export default function ProblemsSection() {
             alt="Masalah Umum Irigasi"
             class="h-auto w-auto max-w-[280px] sm:max-w-[380px] md:max-w-[480px] lg:max-w-[560px]"
             loading="lazy"
+            decoding="async"
+            fetchpriority="low"
+            width={2976}
+            height={760}
           />
         </div>
         <div class="space-y-20 md:space-y-28 lg:space-y-36">
@@ -24,7 +28,16 @@ export default function ProblemsSection() {
                 <p class="text-base leading-relaxed text-slate-500 sm:text-lg">{problem.desc}</p>
               </div>
               <div class={index % 2 !== 0 ? "md:order-1" : ""}>
-                <img src={problem.img} alt={problem.alt} class="h-auto w-full" loading="lazy" />
+                <img
+                  src={problem.img}
+                  alt={problem.alt}
+                  class="h-auto w-full"
+                  loading="lazy"
+                  decoding="async"
+                  fetchpriority="low"
+                  width={problem.width}
+                  height={problem.height}
+                />
               </div>
             </div>
           ))}

@@ -17,6 +17,10 @@ export default function HeroSection(props: HeroSectionProps) {
         alt="Lahan pertanian irigasi pintar ADOSISTERING"
         class="absolute inset-0 h-full w-full object-cover"
         loading="eager"
+        decoding="async"
+        fetchpriority="high"
+        width={1440}
+        height={800}
       />
       <div class="absolute inset-0 bg-black/50" />
       <div class="absolute inset-0 z-10 flex items-center">

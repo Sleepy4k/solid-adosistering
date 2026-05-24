@@ -22,6 +22,7 @@ export default function LandingHeader(props: LandingHeaderProps) {
     };
 
     const onDocClick = (event: MouseEvent) => {
+      if (!mobileOpen()) return;
       const target = event.target as Node;
       if (!menuRef?.contains(target) && !buttonRef?.contains(target)) {
         setMobileOpen(false);
@@ -63,7 +64,13 @@ export default function LandingHeader(props: LandingHeaderProps) {
           }`}
         >
           <a href="#beranda" class="flex shrink-0 items-center gap-2.5" onClick={(e) => handleNavClick(e, "#beranda")}>
-            <img src={props.config.logoUrl ?? "/landing/logo.svg"} alt="" class="h-10 w-auto" loading="eager" />
+            <img
+              src={props.config.logoUrl ?? "/landing/logo.svg"}
+              alt=""
+              class="h-10 w-auto"
+              loading="eager"
+              decoding="async"
+            />
             <span
               class="text-white font-semibold uppercase tracking-wide leading-none"
               style="font-family:'Oswald',sans-serif;font-size:1.25rem;letter-spacing:0.05em"
@@ -86,6 +93,12 @@ export default function LandingHeader(props: LandingHeaderProps) {
                 </li>
               ))}
             </ul>
+            <A
+              href="/login"
+              class="hidden items-center rounded-full border border-white/70 px-6 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-white/10 lg:inline-flex"
+            >
+              Masuk
+            </A>
             <a
               href="#hubungi-kami"
               class="hidden items-center rounded-full bg-neutral-800/80 px-7 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-neutral-900 lg:inline-flex"
@@ -93,12 +106,6 @@ export default function LandingHeader(props: LandingHeaderProps) {
             >
               Hubungi Kami
             </a>
-            <A
-              href="/login"
-              class="hidden items-center rounded-full bg-[#67b744] px-6 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-[#5aa33b] lg:inline-flex"
-            >
-              Masuk
-            </A>
             <button
               type="button"
               class="flex h-10 w-10 items-center justify-center rounded-full text-white transition hover:bg-white/10 lg:hidden"
@@ -108,17 +115,32 @@ export default function LandingHeader(props: LandingHeaderProps) {
               }}
               aria-label="Toggle menu"
               aria-expanded={mobileOpen()}
-              ref={buttonRef}
+              aria-controls="landing-mobile-menu"
+              ref={(el) => {
+                buttonRef = el;
+              }}
             >
               <Show
                 when={mobileOpen()}
                 fallback={
-                  <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <svg
+                    class="h-6 w-6 pointer-events-none"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                  >
                     <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
                   </svg>
                 }
               >
-                <svg class="h-6 w-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <svg
+                  class="h-6 w-6 pointer-events-none"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                >
                   <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </Show>
@@ -128,7 +150,13 @@ export default function LandingHeader(props: LandingHeaderProps) {
       </div>
 
       <Show when={mobileOpen()}>
-        <div class="mx-4 mt-2 sm:mx-6" ref={menuRef}>
+        <div
+          id="landing-mobile-menu"
+          class="mx-4 mt-2 sm:mx-6"
+          ref={(el) => {
+            menuRef = el;
+          }}
+        >
           <div class="overflow-hidden rounded-2xl border border-white/10 bg-neutral-900/95 backdrop-blur-xl shadow-[0_8px_32px_rgba(0,0,0,0.3)]">
             <ul class="space-y-1 px-3 py-3">
               {NAV_LINKS.map((link) => (
@@ -142,10 +170,19 @@ export default function LandingHeader(props: LandingHeaderProps) {
                   </a>
                 </li>
               ))}
+              <li>
+                <a
+                  href="#hubungi-kami"
+                  class="flex items-center rounded-xl px-4 py-3 text-sm font-medium text-white/90 transition hover:bg-white/10 hover:text-white"
+                  onClick={(e) => handleNavClick(e, "#hubungi-kami")}
+                >
+                  Hubungi Kami
+                </a>
+              </li>
               <li class="px-1 pt-1 pb-1">
                 <A
                   href="/login"
-                  class="flex items-center justify-center rounded-xl bg-[#67b744] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#5aa33b]"
+                  class="flex items-center justify-center rounded-xl border border-white/70 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
                   onClick={() => setMobileOpen(false)}
                 >
                   Masuk

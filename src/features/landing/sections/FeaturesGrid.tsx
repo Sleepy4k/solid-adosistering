@@ -10,6 +10,10 @@ export default function FeaturesGrid() {
             alt="Fitur"
             class="h-auto w-full max-w-[260px] sm:max-w-[360px] md:max-w-[460px] lg:max-w-[560px]"
             loading="lazy"
+            decoding="async"
+            fetchpriority="low"
+            width={2164}
+            height={552}
           />
         </div>
         <div class="space-y-20 md:space-y-28 lg:space-y-36">
@@ -20,7 +24,16 @@ export default function FeaturesGrid() {
                 class={`grid items-start gap-10 md:gap-14 lg:gap-20 ${imageFirst ? "md:grid-cols-[5fr_6fr]" : "md:grid-cols-[6fr_5fr]"}`}
               >
                 <div class={`overflow-hidden rounded-2xl shadow-lg ${!imageFirst ? "md:order-2" : ""}`}>
-                  <img src={feature.img} alt={feature.alt} class="h-auto w-full" loading="lazy" />
+                  <img
+                    src={feature.img}
+                    alt={feature.alt}
+                    class="h-auto w-full"
+                    loading="lazy"
+                    decoding="async"
+                    fetchpriority="low"
+                    width={feature.width}
+                    height={feature.height}
+                  />
                 </div>
                 <div class={`flex flex-col justify-center ${!imageFirst ? "md:order-1" : ""}`}>
                   <h3 class="mb-6 text-3xl font-extrabold leading-tight text-emerald-700 sm:text-4xl lg:text-[2.75rem]">

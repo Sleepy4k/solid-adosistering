@@ -31,7 +31,7 @@ function SectionCard(props: { title: string; onEdit?: () => void; children: unkn
             class="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
             onClick={props.onEdit}
           >
-            <img src={editIcon} alt="" class="h-4 w-4" aria-hidden="true" />
+            <img src={editIcon} alt="" class="h-4 w-4" aria-hidden="true" decoding="async" loading="lazy" />
             Edit
           </button>
         </Show>

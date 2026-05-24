@@ -10,6 +10,10 @@ export default function SolutionSection() {
             alt="Solusi Irigasi Cerdas"
             class="h-auto w-auto max-w-[240px] sm:max-w-[340px] md:max-w-[420px] lg:max-w-[480px]"
             loading="lazy"
+            decoding="async"
+            fetchpriority="low"
+            width={2164}
+            height={552}
           />
         </div>
         <div class="grid items-end gap-12 lg:grid-cols-2 lg:gap-16">
@@ -28,6 +32,10 @@ export default function SolutionSection() {
               alt="Tampilan aplikasi ADOSISTERING"
               class="relative z-10 h-auto w-full max-w-[480px] lg:max-w-[600px]"
               loading="lazy"
+              decoding="async"
+              fetchpriority="low"
+              width={3212}
+              height={2739}
             />
           </div>
         </div>
@@ -39,7 +47,16 @@ export default function SolutionSection() {
               <div class="text-center">
                 <div class="mb-5 flex justify-center">
                   <div class="flex h-20 w-20 items-center justify-center rounded-full bg-white shadow-md sm:h-24 sm:w-24">
-                    <img src={item.icon} alt="" class="h-11 w-11 sm:h-12 sm:w-12" loading="lazy" />
+                    <img
+                      src={item.icon}
+                      alt=""
+                      class="h-11 w-11 sm:h-12 sm:w-12"
+                      loading="lazy"
+                      decoding="async"
+                      fetchpriority="low"
+                      width={48}
+                      height={48}
+                    />
                   </div>
                 </div>
                 <h3 class="mb-2 text-base font-bold text-white sm:text-lg">{item.title}</h3>

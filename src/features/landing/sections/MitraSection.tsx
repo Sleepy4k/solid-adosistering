@@ -10,6 +10,10 @@ export default function MitraSection() {
             alt="Mitra Kami"
             class="h-auto w-auto max-w-[220px] sm:max-w-[300px] md:max-w-[380px] lg:max-w-[440px]"
             loading="lazy"
+            decoding="async"
+            fetchpriority="low"
+            width={2164}
+            height={552}
           />
         </div>
         <div class="flex flex-col items-center justify-center gap-6 sm:flex-row md:gap-8 lg:gap-10">
@@ -20,6 +24,10 @@ export default function MitraSection() {
                 alt={partner.alt}
                 class="max-h-16 w-auto object-contain grayscale transition-all duration-500 group-hover:grayscale-0 md:max-h-20 lg:max-h-24"
                 loading="lazy"
+                decoding="async"
+                fetchpriority="low"
+                width={partner.width}
+                height={partner.height}
               />
             </div>
           ))}

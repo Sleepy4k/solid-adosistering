@@ -12,6 +12,10 @@ export default function DirectorViewSection() {
               alt="Foto Sudianto, S.Pd., M.Kom. - Direktur ADOSISTERING"
               class="h-auto w-[220px] object-contain object-bottom sm:w-[260px] md:w-[320px] lg:w-[380px] xl:w-[420px]"
               loading="lazy"
+              decoding="async"
+              fetchpriority="low"
+              width={DIRECTOR_PROFILE.width}
+              height={DIRECTOR_PROFILE.height}
             />
           </div>
           <div class="flex flex-col pl-6 md:pl-10 lg:pl-16">

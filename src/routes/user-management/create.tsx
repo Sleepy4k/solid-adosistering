@@ -149,7 +149,7 @@ export default function TambahUser() {
             onClick={() => navigate("/user-management")}
             class="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50"
           >
-            <img src={chevronLeftIcon} alt="" class="h-4 w-4" aria-hidden="true" />
+            <img src={chevronLeftIcon} alt="" class="h-4 w-4" aria-hidden="true" decoding="async" loading="lazy" />
           </button>
           <h1 class="text-2xl font-bold text-slate-900">Tambah Pengguna</h1>
         </div>
@@ -224,7 +224,7 @@ export default function TambahUser() {
                       placeholder="Pilih region..."
                       options={[
                         { value: "", label: "Pilih region..." },
-                        ...((formOptions()?.regions ?? []).map((region) => ({ value: region.id, label: region.name }))),
+                        ...(formOptions()?.regions ?? []).map((region) => ({ value: region.id, label: region.name })),
                       ]}
                       onChange={setSingleRegion}
                     />

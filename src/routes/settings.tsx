@@ -1,8 +1,8 @@
 import { cache, createAsync } from "@solidjs/router";
-import { createMemo, createSignal, For, Show, Suspense } from "solid-js";
+import { createEffect, createMemo, createSignal, For, on, Show, Suspense } from "solid-js";
 import { PageMeta } from "~/components/shared/PageMeta";
 import { Edit3 } from "lucide-solid";
-import { getMySettings, saveSafetyTimeout, saveThreshold } from "~/server/actions/index";
+import { getMySettings, saveRegionSafetyTimeout, saveSafetyTimeout, saveThreshold } from "~/server/actions/index";
 import { SkCard } from "~/components/shared/Skeleton";
 import { useToast } from "~/components/shared/ToastProvider";
 import { SelectSearch } from "~/components/ui/SelectSearch";
@@ -11,8 +11,12 @@ const loadSettings = cache(() => getMySettings(), "my-settings");
 export const route = { preload: () => loadSettings() };
 
 type Settings = Awaited<ReturnType<typeof getMySettings>>;
-type UserSettingsData = Settings & { role: "USER" };
+type UserSettingsData = Extract<Settings, { role: "USER" }>;
+type AdminSettingsData = Extract<Settings, { role: "ADMIN" }>;
 type Preference = "KERING" | "LEMBAB" | "BASAH";
+type RegionThreshold = NonNullable<UserSettingsData["regions"][number]["threshold"]>;
+type SettingsRegion = { id: string; name: string; threshold: RegionThreshold | null };
+type AdminRegionSettings = SettingsRegion & { safetyTimeout: { min: number; max: number } };
 
 const preferenceLabels: Record<Preference, string> = {
   KERING: "Kering",
@@ -137,25 +141,25 @@ function clampTimeout(value: number) {
 }
 
 function RegionSelector(props: {
-  regions: UserSettingsData["regions"];
+  regions: Array<{ id: string; name: string }>;
   selectedId: string;
   onChange: (id: string) => void;
 }) {
+  const disabled = () => props.regions.length <= 1;
   return (
-    <Show when={props.regions.length > 1}>
-      <div class="rounded-2xl border border-[#C2C2C2] bg-white p-5">
-        <label class="mb-2 block text-sm font-medium text-[#4F4F4F]">Region</label>
-        <SelectSearch
-          value={props.selectedId}
-          options={props.regions.map((region) => ({ value: region.id, label: region.name }))}
-          onChange={props.onChange}
-        />
-      </div>
-    </Show>
+    <div class="rounded-2xl border border-[#C2C2C2] bg-white p-5">
+      <label class="mb-2 block text-sm font-medium text-[#4F4F4F]">Region</label>
+      <SelectSearch
+        value={props.selectedId}
+        options={props.regions.map((region) => ({ value: region.id, label: region.name }))}
+        onChange={props.onChange}
+        disabled={disabled()}
+      />
+    </div>
   );
 }
 
-function IrrigationControl(props: { region: UserSettingsData["regions"][number] }) {
+function IrrigationControl(props: { region: SettingsRegion }) {
   const { notify } = useToast();
   const [editing, setEditing] = createSignal(false);
   const [dry, setDry] = createSignal(props.region.threshold?.dryMaxPercent ?? 40);
@@ -174,6 +178,16 @@ function IrrigationControl(props: { region: UserSettingsData["regions"][number] 
     setDisplayMoist(props.region.threshold?.displayMoistMaxPercent ?? 70);
     setDisplayWet(props.region.threshold?.displayWetMinPercent ?? 80);
   };
+
+  createEffect(
+    on(
+      () => props.region.id,
+      () => {
+        reset();
+        setEditing(false);
+      },
+    ),
+  );
 
   const save = async () => {
     if (dry() >= wet()) {
@@ -341,12 +355,22 @@ function IrrigationControl(props: { region: UserSettingsData["regions"][number] 
   );
 }
 
-function SafetyTimeoutPanel(props: { initialMin: number; initialMax: number }) {
+function SafetyTimeoutPanel(props: {
+  initialMin: number;
+  initialMax: number;
+  onSave: (min: number, max: number) => Promise<void>;
+  note?: string;
+}) {
   const { notify } = useToast();
   const [editing, setEditing] = createSignal(false);
   const [minVal, setMinVal] = createSignal(clampTimeout(props.initialMin));
   const [maxVal, setMaxVal] = createSignal(clampTimeout(props.initialMax));
   const [saving, setSaving] = createSignal(false);
+
+  createEffect(() => {
+    setMinVal(clampTimeout(props.initialMin));
+    setMaxVal(clampTimeout(props.initialMax));
+  });
 
   const reset = () => {
     setMinVal(clampTimeout(props.initialMin));
@@ -360,7 +384,7 @@ function SafetyTimeoutPanel(props: { initialMin: number; initialMax: number }) {
     }
     setSaving(true);
     try {
-      await saveSafetyTimeout({ min: minVal(), max: maxVal() });
+      await props.onSave(minVal(), maxVal());
       setEditing(false);
       notify({ kind: "success", title: "Safety timeout disimpan" });
     } catch {
@@ -393,7 +417,7 @@ function SafetyTimeoutPanel(props: { initialMin: number; initialMax: number }) {
             onMax={(value) => setMaxVal(clampTimeout(Math.max(value, minVal() + 1)))}
           />
           <p class="mb-6 mt-4 text-xs italic text-[#6B7280]">
-            Fitur ini memastikan irigasi aktif dapat dimatikan otomatis saat alat tidak mengirim data.
+            {props.note ?? "Fitur ini memastikan irigasi aktif dapat dimatikan otomatis saat alat tidak mengirim data."}
           </p>
           <div class="flex gap-3">
             <button
@@ -445,6 +469,7 @@ function UserSettings(props: { settings: UserSettingsData }) {
           <SafetyTimeoutPanel
             initialMin={props.settings.safetyTimeout.min}
             initialMax={props.settings.safetyTimeout.max}
+            onSave={(min, max) => saveSafetyTimeout({ min, max })}
           />
         </>
       )}
@@ -452,11 +477,45 @@ function UserSettings(props: { settings: UserSettingsData }) {
   );
 }
 
-function RestrictedSettings(props: { role: "ADMIN" | "SUPERADMIN" }) {
+function AdminSettings(props: { settings: AdminSettingsData }) {
+  const [selectedRegionId, setSelectedRegionId] = createSignal(props.settings.regions[0]?.id ?? "");
+  const selectedRegion = createMemo(
+    () => props.settings.regions.find((region) => region.id === selectedRegionId()) ?? props.settings.regions[0],
+  );
+
+  return (
+    <Show
+      when={selectedRegion()}
+      fallback={
+        <div class="rounded-2xl border border-[#C2C2C2] bg-white p-8 text-center text-sm text-[#6B7280]">
+          Belum ada region yang ditugaskan.
+        </div>
+      }
+    >
+      {(region) => (
+        <>
+          <RegionSelector
+            regions={props.settings.regions}
+            selectedId={selectedRegionId()}
+            onChange={setSelectedRegionId}
+          />
+          <IrrigationControl region={region()} />
+          <SafetyTimeoutPanel
+            initialMin={region().safetyTimeout.min}
+            initialMax={region().safetyTimeout.max}
+            onSave={(min, max) => saveRegionSafetyTimeout({ regionId: region().id, min, max })}
+            note={`Fitur ini memastikan irigasi aktif dapat dimatikan otomatis untuk region ${region().name}.`}
+          />
+        </>
+      )}
+    </Show>
+  );
+}
+
+function RestrictedSettings(props: { role: "SUPERADMIN" }) {
   return (
     <div class="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
-      Menu Pengaturan hanya tersedia untuk User. Role {props.role === "ADMIN" ? "Admin" : "Superadmin"} mengelola
-      konfigurasi dari menu khususnya.
+      Menu Pengaturan hanya tersedia untuk User dan Admin. Role Superadmin mengelola konfigurasi dari menu khususnya.
     </div>
   );
 }
@@ -486,10 +545,11 @@ export default function Pengaturan() {
         >
           <Show when={settings()}>
             {(data) => (
-              <Show
-                when={data().role === "USER"}
-                fallback={<RestrictedSettings role={data().role as "ADMIN" | "SUPERADMIN"} />}
-              >
+              <Show when={data().role === "USER"} fallback={
+                <Show when={data().role === "ADMIN"} fallback={<RestrictedSettings role="SUPERADMIN" />}>
+                  <AdminSettings settings={data() as AdminSettingsData} />
+                </Show>
+              }>
                 <UserSettings settings={data() as UserSettingsData} />
               </Show>
             )}

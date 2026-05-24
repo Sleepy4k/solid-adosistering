@@ -144,7 +144,16 @@ export default function ContactSection() {
           </div>
 
           <div class="flex items-start justify-center lg:justify-end">
-            <img src="/landing/contact-feature.png" alt="Tim ADOSISTERING" class="h-auto w-full max-w-lg" loading="lazy" />
+            <img
+              src="/landing/contact-feature.png"
+              alt="Tim ADOSISTERING"
+              class="h-auto w-full max-w-lg"
+              loading="lazy"
+              decoding="async"
+              fetchpriority="low"
+              width={2336}
+              height={2207}
+            />
           </div>
         </div>
 
@@ -152,7 +161,16 @@ export default function ContactSection() {
           {CONTACT_CARDS.map((card) => (
             <div class="text-center">
               <div class="mb-4 flex justify-center">
-                <img src={card.icon} alt="" class="h-14 w-14" loading="lazy" />
+                <img
+                  src={card.icon}
+                  alt=""
+                  class="h-14 w-14"
+                  loading="lazy"
+                  decoding="async"
+                  fetchpriority="low"
+                  width={56}
+                  height={56}
+                />
               </div>
               <h3 class="mb-2 text-lg font-bold text-slate-800">{card.title}</h3>
               {card.lines.map((line) => (

@@ -110,7 +110,13 @@ export default function Login() {
       <AuthLayout>
         <section class="w-full max-w-[640px] rounded-3xl border-2 border-white bg-white/75 p-7 shadow-xl backdrop-blur-md sm:p-12">
           <div class="mb-6 text-center">
-            <img src={config().logoUrl || fallbackLogo} alt={config().projectName} class="mx-auto mb-4 h-16 w-auto" />
+            <img
+              src={config().logoUrl || fallbackLogo}
+              alt={config().projectName}
+              class="mx-auto mb-4 h-16 w-auto"
+              loading="lazy"
+              decoding="async"
+            />
             <h1 class="text-4xl font-normal leading-tight text-gray-800 sm:text-[44px]">Login Akun</h1>
           </div>
 

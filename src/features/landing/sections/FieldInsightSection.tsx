@@ -24,6 +24,10 @@ export default function FieldInsightSection() {
                     alt={`Foto ${item.name}`}
                     class="h-[80px] w-[80px] shrink-0 object-contain sm:h-[100px] sm:w-[100px]"
                     loading="lazy"
+                    decoding="async"
+                    fetchpriority="low"
+                    width={item.width}
+                    height={item.height}
                   />
                   <div>
                     <h3 class="text-xl font-bold text-neutral-900 sm:text-2xl">{item.name}</h3>

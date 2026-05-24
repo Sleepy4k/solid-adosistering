@@ -32,6 +32,7 @@ type NavItem = {
   adminOnly?: boolean;
   superOnly?: boolean;
   userOnly?: boolean;
+  adminOrUser?: boolean;
 };
 
 type NavGroup = {
@@ -59,8 +60,8 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Audit",
     items: [
-      { href: ROUTES.systemLog, label: "Log Sistem", icon: FileClock, superOnly: true },
-      { href: ROUTES.authLog, label: "Log Autentikasi", icon: ShieldCheck, superOnly: true },
+      { href: ROUTES.systemLog, label: "Log Sistem", icon: FileClock, adminOnly: true },
+      { href: ROUTES.authLog, label: "Log Autentikasi", icon: ShieldCheck, adminOnly: true },
       { href: ROUTES.contactSubmissions, label: "Pesan Masuk", icon: Contact, superOnly: true },
     ],
   },
@@ -68,7 +69,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Akun",
     items: [
       { href: ROUTES.superadmin, label: "Pengaturan", icon: ClipboardList, superOnly: true },
-      { href: ROUTES.settings, label: "Pengaturan", icon: Settings, userOnly: true },
+      { href: ROUTES.settings, label: "Pengaturan", icon: Settings, adminOrUser: true },
       { href: ROUTES.profile, label: "Profil", icon: User },
     ],
   },
@@ -82,6 +83,8 @@ function Logo(props: { collapsed?: boolean }) {
         src={config().logoUrl || fallbackLogo}
         alt={config().projectName}
         class={`${props.collapsed ? "h-10" : "h-14"} w-auto shrink-0`}
+        loading="lazy"
+        decoding="async"
       />
     </div>
   );
@@ -111,6 +114,7 @@ export default function Sidebar(props: SidebarProps) {
         if (item.superOnly && props.user.role !== "SUPERADMIN") return false;
         if (item.adminOnly && props.user.role === "USER") return false;
         if (item.userOnly && props.user.role !== "USER") return false;
+        if (item.adminOrUser && props.user.role === "SUPERADMIN") return false;
         return true;
       }),
     })).filter((group) => group.items.length > 0);

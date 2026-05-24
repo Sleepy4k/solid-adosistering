@@ -16,6 +16,13 @@ export const getOptionalUser = cache(async () => {
   return await getSession();
 }, "optional-user");
 
+export const redirectIfLoggedIn = cache(async () => {
+  "use server";
+  const session = await getSession();
+  if (session) throw redirect("/dashboard");
+  return null;
+}, "redirect-if-logged-in");
+
 export function hasRole(role: Role, minimum: Role): boolean {
   const rank: Record<Role, number> = { USER: 1, ADMIN: 2, SUPERADMIN: 3 };
   return rank[role] >= rank[minimum];

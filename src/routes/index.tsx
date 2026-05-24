@@ -1,5 +1,3 @@
-import { cache, createAsync } from "@solidjs/router";
-import { DEFAULT_WEB_CONFIG } from "~/constants/landing";
 import {
 	ColabSection,
 	ContactSection,
@@ -15,15 +13,19 @@ import {
 	UseCasesSection,
 } from "~/features/landing/sections";
 import LandingLayout from "~/layouts/LandingLayout";
-import { getWebConfig } from "~/server/actions/index";
+import { redirectIfLoggedIn } from "~/server/auth";
+import { loadWebConfig, useWebConfig } from "~/lib/shared/webConfig";
 
-const loadLandingConfig = cache(() => getWebConfig(), "landing-web-config");
-
-export const route = { preload: () => loadLandingConfig(), prerender: true };
+export const route = {
+	preload: () => {
+		redirectIfLoggedIn();
+		return loadWebConfig();
+	},
+	prerender: false,
+};
 
 export default function LandingRoute() {
-	const config = createAsync(() => loadLandingConfig());
-	const webConfig = () => ({ ...DEFAULT_WEB_CONFIG, ...(config() ?? {}) });
+	const webConfig = useWebConfig();
 
 	return (
 		<LandingLayout config={webConfig()}>

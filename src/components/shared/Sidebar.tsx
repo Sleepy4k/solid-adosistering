@@ -18,10 +18,11 @@ import {
 } from "lucide-solid";
 import { For, Show } from "solid-js";
 import type { JSX } from "solid-js";
-import logoUrl from "~/assets/logo.svg?url";
+import fallbackLogo from "~/assets/logo.svg?url";
 import { ROUTES } from "~/constants/routes";
 import { logout } from "~/server/actions/index";
 import type { SessionUser } from "~/server/session";
+import { useWebConfig } from "~/lib/shared/webConfig";
 import { useConfirm } from "./ConfirmProvider";
 
 type NavItem = {
@@ -74,9 +75,14 @@ const NAV_GROUPS: NavGroup[] = [
 ];
 
 function Logo(props: { collapsed?: boolean }) {
+  const config = useWebConfig();
   return (
     <div class={`flex items-center justify-center ${props.collapsed ? "" : "px-2"}`}>
-      <img src={logoUrl} alt="Adosistering" class={`${props.collapsed ? "h-10" : "h-14"} w-auto shrink-0`} />
+      <img
+        src={config().logoUrl || fallbackLogo}
+        alt={config().projectName}
+        class={`${props.collapsed ? "h-10" : "h-14"} w-auto shrink-0`}
+      />
     </div>
   );
 }

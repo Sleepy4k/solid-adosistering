@@ -19,6 +19,7 @@ import {
   updateSprayerControl,
 } from "../services/firebaseSync";
 import { serverConfig } from "../config";
+import { checkLoginThrottle, clearLoginThrottle, registerLoginFailure } from "../loginRateLimit";
 import {
   assertAdminOrHigher,
   assertSuperadmin,
@@ -212,16 +213,49 @@ async function getRegionThresholdMap(userId: string, regionIds: string[]) {
   }
 }
 
+function formatCooldown(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  if (minutes > 0 && rest > 0) return `${minutes} menit ${rest} detik`;
+  if (minutes > 0) return `${minutes} menit`;
+  return `${rest} detik`;
+}
+
+function cooldownResponse(retryAfterSec: number) {
+  return new Response(`Terlalu banyak percobaan login. Coba lagi dalam ${formatCooldown(retryAfterSec)}.`, {
+    status: 429,
+    headers: { "Retry-After": String(retryAfterSec) },
+  });
+}
+
+function invalidCredentialsResponse(remaining: number) {
+  const suffix = remaining > 0 ? ` Sisa ${remaining} percobaan sebelum penguncian sementara.` : "";
+  return new Response(`Kredensial tidak valid.${suffix}`, { status: 401 });
+}
+
 export async function login(input: { email: string; password: string }) {
+  const email = input.email.trim().toLowerCase();
+
+  const throttle = checkLoginThrottle(email);
+  if (throttle.blocked) throw cooldownResponse(throttle.retryAfterSec);
+
   const user = await prisma.user.findUnique({
-    where: { email: input.email.trim().toLowerCase() },
+    where: { email },
     select: { id: true, email: true, name: true, role: true, isActive: true, passwordHash: true },
   });
 
-  if (!user) throw new Response("Kredensial tidak valid.", { status: 401 });
+  if (!user) {
+    const result = registerLoginFailure(email);
+    throw result.blocked ? cooldownResponse(result.retryAfterSec) : invalidCredentialsResponse(result.remaining);
+  }
 
   const valid = await verifyPassword(input.password, user.passwordHash);
-  if (!valid) throw new Response("Kredensial tidak valid.", { status: 401 });
+  if (!valid) {
+    const result = registerLoginFailure(email);
+    throw result.blocked ? cooldownResponse(result.retryAfterSec) : invalidCredentialsResponse(result.remaining);
+  }
+
+  clearLoginThrottle(email);
 
   if (!user.isActive) {
     throw new Response("Akun Anda telah dinonaktifkan. Hubungi administrator untuk informasi lebih lanjut.", {
@@ -2005,13 +2039,20 @@ export async function markContactRead(input: { id: string; isRead: boolean }) {
 export type WebConfig = {
   projectName: string;
   logoUrl: string | null;
+  iconUrl: string | null;
   primaryColor: string;
   tagline: string | null;
 };
 
 export async function getWebConfig(): Promise<WebConfig> {
   const setting = await prisma.systemSetting.findUnique({ where: { key: "webConfig" } });
-  const defaults: WebConfig = { projectName: "Adosistering", logoUrl: null, primaryColor: "#2d6a4f", tagline: null };
+  const defaults: WebConfig = {
+    projectName: "Adosistering",
+    logoUrl: null,
+    iconUrl: null,
+    primaryColor: "#67B744",
+    tagline: "Sistem Irigasi Cerdas Berbasis IoT untuk Mengoptimalkan Pengairan Lahan Kering",
+  };
   if (!setting?.value) return defaults;
   const v = setting.value as Partial<WebConfig>;
   return { ...defaults, ...v };

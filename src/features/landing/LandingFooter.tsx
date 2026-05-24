@@ -93,7 +93,7 @@ export default function LandingFooter(props: LandingFooterProps) {
             <div class="mb-6 inline-flex items-center gap-2.5 rounded-full bg-white px-5 py-2.5">
               <img src={props.config.logoUrl ?? "/landing/logo.svg"} alt="" class="h-9 w-auto" />
               <span
-                class="font-semibold leading-none text-neutral-900"
+                class="font-semibold uppercase leading-none text-neutral-900"
                 style="font-family:'Oswald',sans-serif;font-size:1.15rem;letter-spacing:0.05em"
               >
                 {props.config.projectName}

@@ -1,24 +1,39 @@
 import { A } from "@solidjs/router";
-import { createSignal, Show } from "solid-js";
+import { createSignal, onCleanup, Show } from "solid-js";
 import { PageMeta } from "~/components/shared/PageMeta";
 import { AuthLayout } from "~/layouts/AuthLayout";
 import { Field, TextInput } from "~/components/form/Form";
 import { Button } from "~/components/ui/Button";
 import { requestPasswordReset } from "~/server/actions/index";
-import logoUrl from "~/assets/logo.svg?url";
+import { debounce } from "~/lib/shared/debounce";
+import { validateEmail } from "~/lib/shared/validation";
+import { useWebConfig } from "~/lib/shared/webConfig";
+import fallbackLogo from "~/assets/logo.svg?url";
 
 export default function ForgotPassword() {
+  const config = useWebConfig();
   const [email, setEmail] = createSignal("");
   const [loading, setLoading] = createSignal(false);
   const [sent, setSent] = createSignal(false);
   const [error, setError] = createSignal("");
+  const [emailError, setEmailError] = createSignal("");
+
+  const validateEmailDebounced = debounce((value: string) => setEmailError(validateEmail(value)), 300);
+  onCleanup(() => validateEmailDebounced.cancel());
+
+  const onEmailInput = (value: string) => {
+    setEmail(value);
+    if (emailError()) setEmailError(validateEmail(value));
+    else validateEmailDebounced(value);
+  };
 
   const submit = async (event: SubmitEvent) => {
     event.preventDefault();
-    if (!email().trim()) {
-      setError("Email wajib diisi.");
-      return;
-    }
+    validateEmailDebounced.cancel();
+    const emailErr = validateEmail(email());
+    setEmailError(emailErr);
+    if (emailErr) return;
+
     setError("");
     setLoading(true);
     try {
@@ -38,7 +53,7 @@ export default function ForgotPassword() {
       <AuthLayout>
         <section class="w-full max-w-[560px] rounded-3xl border-2 border-white bg-white/75 p-7 shadow-xl backdrop-blur-md sm:p-10">
           <div class="mb-6 text-center">
-            <img src={logoUrl} alt="Adosistering" class="mx-auto mb-4 h-16 w-auto" />
+            <img src={config().logoUrl || fallbackLogo} alt={config().projectName} class="mx-auto mb-4 h-16 w-auto" />
             <h1 class="text-3xl font-normal leading-tight text-gray-800 sm:text-[40px]">Lupa Password</h1>
             <p class="mt-2 text-sm text-[#4F4F4F]">Masukkan email akun Anda untuk menerima tautan reset password.</p>
           </div>
@@ -60,14 +75,17 @@ export default function ForgotPassword() {
               </Show>
 
               <form onSubmit={submit} class="flex flex-col gap-6">
-                <Field label="Email" for="email">
+                <Field label="Email" for="email" error={emailError()}>
                   <TextInput
                     id="email"
                     type="email"
                     autocomplete="email"
                     value={email()}
-                    onInput={(event) => setEmail(event.currentTarget.value)}
+                    onInput={(event) => onEmailInput(event.currentTarget.value)}
+                    onBlur={() => setEmailError(validateEmail(email()))}
                     placeholder="Masukkan email"
+                    aria-invalid={emailError() ? "true" : undefined}
+                    class={emailError() ? "error" : ""}
                   />
                 </Field>
                 <Button tone="neutral" type="submit" disabled={loading()} class="h-[52px] w-full">

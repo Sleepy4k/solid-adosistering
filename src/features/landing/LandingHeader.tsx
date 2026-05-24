@@ -1,3 +1,4 @@
+import { A } from "@solidjs/router";
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
 import { NAV_LINKS } from "~/constants/landing";
 import type { WebConfig } from "~/server/actions/index";
@@ -64,7 +65,7 @@ export default function LandingHeader(props: LandingHeaderProps) {
           <a href="#beranda" class="flex shrink-0 items-center gap-2.5" onClick={(e) => handleNavClick(e, "#beranda")}>
             <img src={props.config.logoUrl ?? "/landing/logo.svg"} alt="" class="h-10 w-auto" loading="eager" />
             <span
-              class="text-white font-semibold tracking-wide leading-none"
+              class="text-white font-semibold uppercase tracking-wide leading-none"
               style="font-family:'Oswald',sans-serif;font-size:1.25rem;letter-spacing:0.05em"
             >
               {props.config.projectName}
@@ -92,10 +93,19 @@ export default function LandingHeader(props: LandingHeaderProps) {
             >
               Hubungi Kami
             </a>
+            <A
+              href="/login"
+              class="hidden items-center rounded-full bg-[#67b744] px-6 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-[#5aa33b] lg:inline-flex"
+            >
+              Masuk
+            </A>
             <button
               type="button"
               class="flex h-10 w-10 items-center justify-center rounded-full text-white transition hover:bg-white/10 lg:hidden"
-              onClick={() => setMobileOpen((v) => !v)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setMobileOpen((v) => !v);
+              }}
               aria-label="Toggle menu"
               aria-expanded={mobileOpen()}
               ref={buttonRef}
@@ -132,6 +142,15 @@ export default function LandingHeader(props: LandingHeaderProps) {
                   </a>
                 </li>
               ))}
+              <li class="px-1 pt-1 pb-1">
+                <A
+                  href="/login"
+                  class="flex items-center justify-center rounded-xl bg-[#67b744] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#5aa33b]"
+                  onClick={() => setMobileOpen(false)}
+                >
+                  Masuk
+                </A>
+              </li>
             </ul>
           </div>
         </div>

@@ -1,7 +1,9 @@
 import { A, useSearchParams, useNavigate } from "@solidjs/router";
-import { createSignal, Show } from "solid-js";
+import { createSignal, onCleanup, Show } from "solid-js";
 import { PageMeta } from "~/components/shared/PageMeta";
 import { completePasswordReset } from "~/server/actions/index";
+import { debounce } from "~/lib/shared/debounce";
+import { validateNewPassword, validatePasswordConfirm } from "~/lib/shared/validation";
 import eyeOnIcon from "~/assets/icons/eye_on.svg?url";
 import eyeOffIcon from "~/assets/icons/eye_off.svg?url";
 
@@ -13,17 +15,43 @@ export default function ResetPassword() {
   const [showPw, setShowPw] = createSignal(false);
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal("");
+  const [passwordError, setPasswordError] = createSignal("");
+  const [confirmError, setConfirmError] = createSignal("");
+
+  const validatePasswordDebounced = debounce((value: string) => setPasswordError(validateNewPassword(value)), 300);
+  const validateConfirmDebounced = debounce(
+    (pw: string, cf: string) => setConfirmError(validatePasswordConfirm(pw, cf)),
+    300,
+  );
+  onCleanup(() => {
+    validatePasswordDebounced.cancel();
+    validateConfirmDebounced.cancel();
+  });
+
+  const onPasswordInput = (value: string) => {
+    setPassword(value);
+    if (passwordError()) setPasswordError(validateNewPassword(value));
+    else validatePasswordDebounced(value);
+    if (confirm() || confirmError()) setConfirmError(validatePasswordConfirm(value, confirm()));
+  };
+
+  const onConfirmInput = (value: string) => {
+    setConfirm(value);
+    if (confirmError()) setConfirmError(validatePasswordConfirm(password(), value));
+    else validateConfirmDebounced(password(), value);
+  };
 
   const submit = async (e: SubmitEvent) => {
     e.preventDefault();
-    if (password().length < 8) {
-      setError("Password minimal 8 karakter.");
-      return;
-    }
-    if (password() !== confirm()) {
-      setError("Password tidak cocok.");
-      return;
-    }
+    validatePasswordDebounced.cancel();
+    validateConfirmDebounced.cancel();
+
+    const pwErr = validateNewPassword(password());
+    const cfErr = validatePasswordConfirm(password(), confirm());
+    setPasswordError(pwErr);
+    setConfirmError(cfErr);
+    if (pwErr || cfErr) return;
+
     if (!params.token) {
       setError("Token tidak valid.");
       return;
@@ -82,9 +110,15 @@ export default function ResetPassword() {
                         id="pw"
                         type={showPw() ? "text" : "password"}
                         value={password()}
-                        onInput={(e) => setPassword(e.currentTarget.value)}
+                        onInput={(e) => onPasswordInput(e.currentTarget.value)}
+                        onBlur={() => setPasswordError(validateNewPassword(password()))}
                         placeholder="Min. 8 karakter"
-                        class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 pr-11 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                        aria-invalid={passwordError() ? "true" : undefined}
+                        class={`w-full rounded-xl border bg-white px-4 py-3 pr-11 text-sm outline-none transition focus:ring-2 ${
+                          passwordError()
+                            ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20"
+                            : "border-slate-200 focus:border-emerald-500 focus:ring-emerald-500/20"
+                        }`}
                       />
                       <button
                         type="button"
@@ -98,6 +132,9 @@ export default function ResetPassword() {
                         />
                       </button>
                     </div>
+                    <Show when={passwordError()}>
+                      <span class="mt-1.5 block text-xs text-rose-600">{passwordError()}</span>
+                    </Show>
                   </div>
                   <div>
                     <label class="mb-1.5 block text-sm font-medium text-slate-700" for="pw2">
@@ -107,10 +144,19 @@ export default function ResetPassword() {
                       id="pw2"
                       type="password"
                       value={confirm()}
-                      onInput={(e) => setConfirm(e.currentTarget.value)}
+                      onInput={(e) => onConfirmInput(e.currentTarget.value)}
+                      onBlur={() => setConfirmError(validatePasswordConfirm(password(), confirm()))}
                       placeholder="Ulangi password baru"
-                      class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+                      aria-invalid={confirmError() ? "true" : undefined}
+                      class={`w-full rounded-xl border bg-white px-4 py-3 text-sm outline-none transition focus:ring-2 ${
+                        confirmError()
+                          ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20"
+                          : "border-slate-200 focus:border-emerald-500 focus:ring-emerald-500/20"
+                      }`}
                     />
+                    <Show when={confirmError()}>
+                      <span class="mt-1.5 block text-xs text-rose-600">{confirmError()}</span>
+                    </Show>
                   </div>
                   <button
                     type="submit"

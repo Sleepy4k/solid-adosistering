@@ -22,7 +22,7 @@ export default function HeroSection(props: HeroSectionProps) {
       <div class="absolute inset-0 z-10 flex items-center">
         <div class="container mx-auto max-w-screen-xl px-4 sm:px-6 lg:px-12 xl:px-16">
           <div class="max-w-2xl">
-            <h1 class="text-left text-4xl font-extrabold leading-tight tracking-widest text-white sm:text-5xl md:text-6xl">
+            <h1 class="text-left text-4xl font-extrabold uppercase leading-tight tracking-widest text-white sm:text-5xl md:text-6xl">
               {props.config.projectName}
             </h1>
             <p class="mt-5 max-w-xl text-left text-lg leading-relaxed text-white/80 sm:text-2xl md:text-3xl">

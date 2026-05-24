@@ -9,16 +9,15 @@ import { useToast } from "~/components/shared/ToastProvider";
 import {
   getMapDisplayConfig,
   getRegionsForConfig,
-  getWebConfig,
   saveMapDisplayConfig,
   saveWebConfig,
   updateRegionConfig,
   type MapDisplayConfig,
   type WebConfig,
 } from "~/server/actions/index";
+import { loadWebConfig, WEB_CONFIG_KEY } from "~/lib/shared/webConfig";
 
 const loadRegionsConfig = cache(() => getRegionsForConfig(), "superadmin-regions-config");
-const loadWebConfig = cache(() => getWebConfig(), "superadmin-web-config");
 const loadMapDisplayConfig = cache(() => getMapDisplayConfig(), "superadmin-map-display-config");
 
 export const route = {
@@ -165,8 +164,9 @@ function WebConfigSection() {
   const config = createAsync(() => loadWebConfig());
   const [projectName, setProjectName] = createSignal("");
   const [tagline, setTagline] = createSignal("");
-  const [primaryColor, setPrimaryColor] = createSignal("#2d6a4f");
+  const [primaryColor, setPrimaryColor] = createSignal("#67B744");
   const [logoUrl, setLogoUrl] = createSignal("");
+  const [iconUrl, setIconUrl] = createSignal("");
   const [initialized, setInitialized] = createSignal(false);
   const [saving, setSaving] = createSignal(false);
 
@@ -176,6 +176,7 @@ function WebConfigSection() {
       setTagline(cfg.tagline ?? "");
       setPrimaryColor(cfg.primaryColor);
       setLogoUrl(cfg.logoUrl ?? "");
+      setIconUrl(cfg.iconUrl ?? "");
       setInitialized(true);
     }
   };
@@ -193,9 +194,10 @@ function WebConfigSection() {
         tagline: tagline().trim() || null,
         primaryColor: primaryColor(),
         logoUrl: logoUrl().trim() || null,
+        iconUrl: iconUrl().trim() || null,
       });
       notify({ kind: "success", title: "Konfigurasi web disimpan." });
-      await revalidate("superadmin-web-config");
+      await revalidate(WEB_CONFIG_KEY);
     } catch (err) {
       const msg = err instanceof Response ? await err.text() : "Gagal menyimpan.";
       notify({ kind: "error", title: msg });
@@ -270,6 +272,20 @@ function WebConfigSection() {
                       onInput={(e) => setLogoUrl(e.currentTarget.value)}
                       placeholder="/landing/logo.svg"
                     />
+                  </div>
+                  <div class="flex flex-col gap-1.5">
+                    <label class="form-label text-xs">URL Ikon Web (Favicon)</label>
+                    <div class="flex items-center gap-2">
+                      <Show when={iconUrl().trim()}>
+                        <img src={iconUrl()} alt="" class="h-10 w-10 rounded-lg border border-slate-200 object-contain p-1" />
+                      </Show>
+                      <input
+                        class={`${inp} flex-1`}
+                        value={iconUrl()}
+                        onInput={(e) => setIconUrl(e.currentTarget.value)}
+                        placeholder="/favicon.ico"
+                      />
+                    </div>
                   </div>
                   <div class="sm:col-span-2 flex justify-end">
                     <Button type="submit" tone="primary" disabled={saving()}>

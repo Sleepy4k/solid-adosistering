@@ -3,6 +3,7 @@ import type { WebConfig } from "~/server/actions/index";
 export const DEFAULT_WEB_CONFIG: WebConfig = {
   projectName: "Adosistering",
   logoUrl: null,
+  iconUrl: null,
   primaryColor: "#67B744",
   tagline: "Sistem Irigasi Cerdas Berbasis IoT untuk Mengoptimalkan Pengairan Lahan Kering",
 };

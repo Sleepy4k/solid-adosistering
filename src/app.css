@@ -122,19 +122,20 @@
 }
 
 html.landing-scrollbar {
-  scrollbar-color: #111827 #0a0a0a;
+  scrollbar-color: #67b744 transparent;
+  overflow-x: clip;
 }
 
 html.landing-scrollbar::-webkit-scrollbar-track {
-  background: #0a0a0a;
+  background: transparent;
 }
 
 html.landing-scrollbar::-webkit-scrollbar-thumb {
-  background: #111827;
+  background: #67b744;
 }
 
 html.landing-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #1f2937;
+  background: #186d3c;
 }
 
 .landing-page {
@@ -162,6 +163,57 @@ html.landing-scrollbar::-webkit-scrollbar-thumb:hover {
 
 .landing-page [class~="focus:border-emerald-500"]:focus {
   border-color: var(--landing-primary) !important;
+}
+
+/* ─── Landing page scroll reveal ───────────────────────── */
+.landing-page main.reveal-ready > * {
+  opacity: 0;
+  transform: translateY(28px);
+  transition:
+    opacity 0.6s ease-out,
+    transform 0.6s ease-out;
+}
+
+.landing-page main.reveal-ready > .is-revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-page main.reveal-ready > * {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* ─── Landing section spacing ──────────────────────────── */
+.landing-page section:not(#beranda) {
+  padding-top: 4rem;
+  padding-bottom: 4rem;
+}
+
+@media (min-width: 768px) {
+  .landing-page section:not(#beranda) {
+    padding-top: 5rem;
+    padding-bottom: 5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .landing-page section:not(#beranda) {
+    padding-top: 6rem;
+    padding-bottom: 6rem;
+  }
+}
+
+/* ─── Landing page full-width ──────────────────────────── */
+.landing-page {
+  width: 100%;
+}
+
+.landing-page .container {
+  max-width: 100%;
 }
 
 /* ─── Base transitions ─────────────────────────────────── */

@@ -444,10 +444,7 @@ function SafetyTimeoutPanel(props: {
 }
 
 function UserSettings(props: { settings: UserSettingsData }) {
-  const [selectedRegionId, setSelectedRegionId] = createSignal(props.settings.regions[0]?.id ?? "");
-  const selectedRegion = createMemo(
-    () => props.settings.regions.find((region) => region.id === selectedRegionId()) ?? props.settings.regions[0],
-  );
+  const selectedRegion = createMemo(() => props.settings.regions[0]);
 
   return (
     <Show
@@ -460,11 +457,6 @@ function UserSettings(props: { settings: UserSettingsData }) {
     >
       {(region) => (
         <>
-          <RegionSelector
-            regions={props.settings.regions}
-            selectedId={selectedRegionId()}
-            onChange={setSelectedRegionId}
-          />
           <IrrigationControl region={region()} />
           <SafetyTimeoutPanel
             initialMin={props.settings.safetyTimeout.min}

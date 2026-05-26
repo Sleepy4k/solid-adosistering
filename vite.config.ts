@@ -30,17 +30,31 @@ export default defineConfig(({ mode }) => {
 
   return {
     build: {
+      target: "es2020",
       minify: "terser",
+      sourcemap: false,
+      reportCompressedSize: false,
+      chunkSizeWarningLimit: 1000,
       terserOptions: {
-        format: {
-          comments: false,
-        },
+        format: { comments: false },
         compress: {
           drop_console: true,
           drop_debugger: true,
+          passes: 2,
+          pure_getters: true,
         },
+        mangle: true,
       },
       rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes("node_modules")) return;
+            if (id.includes("lucide-solid")) return "vendor-icons";
+            if (id.includes("solid-js") || id.includes("@solidjs")) return "vendor-solid";
+            if (id.includes("nodemailer") || id.includes("@prisma") || id.includes("firebase")) return "vendor-server";
+            return "vendor";
+          },
+        },
         onwarn(warning, defaultHandler) {
           const message = warning.message ?? "";
           if (
@@ -70,9 +84,7 @@ export default defineConfig(({ mode }) => {
     ],
     optimizeDeps: { exclude: ["leaflet"] },
     environments: {
-      ssr: {
-        define,
-      },
+      ssr: { define },
     },
   };
 });

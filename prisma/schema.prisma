@@ -429,6 +429,17 @@ model LandingPartner {
   @@map("landing_partner")
 }
 
+model NewsletterSubscriber {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  subscribedAt   DateTime  @default(now()) @map("subscribed_at")
+  isActive       Boolean   @default(true) @map("is_active")
+  unsubscribedAt DateTime? @map("unsubscribed_at")
+
+  @@index([isActive, subscribedAt])
+  @@map("newsletter_subscriber")
+}
+
 model UserProfile {
   userId         String    @id @map("user_id")
   whatsapp       String?

@@ -1,5 +1,6 @@
 import { createSignal } from "solid-js";
 import { CONTACT_INFO, FOOTER_LINKS, LANDING_DESCRIPTION, SOCIAL_LINKS } from "~/constants/landing";
+import { subscribeNewsletter } from "~/server/actions/index";
 import type { WebConfig } from "~/server/actions/index";
 
 type LandingFooterProps = {
@@ -52,20 +53,24 @@ function SocialIcon(props: { type: "instagram" | "youtube" | "tiktok" }) {
 export default function LandingFooter(props: LandingFooterProps) {
   const year = new Date().getFullYear();
   const [newsletterEmail, setNewsletterEmail] = createSignal("");
+  const [newsletterState, setNewsletterState] = createSignal<"idle" | "loading" | "success" | "error">("idle");
   let inputRef: HTMLInputElement | undefined;
 
-  const submitNewsletter = (event: SubmitEvent) => {
+  const submitNewsletter = async (event: SubmitEvent) => {
     event.preventDefault();
     const value = newsletterEmail().trim();
     if (!value || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
       inputRef?.focus();
       return;
     }
-    const subject = encodeURIComponent("Berlangganan informasi ADOSISTERING");
-    const body = encodeURIComponent(
-      `Halo tim ADOSISTERING,\n\nSaya ingin berlangganan informasi terkini.\nEmail saya: ${value}\n\nTerima kasih.`,
-    );
-    window.location.href = `mailto:${CONTACT_INFO.email}?subject=${subject}&body=${body}`;
+    setNewsletterState("loading");
+    try {
+      await subscribeNewsletter(value);
+      setNewsletterEmail("");
+      setNewsletterState("success");
+    } catch {
+      setNewsletterState("error");
+    }
   };
 
   return (
@@ -92,15 +97,27 @@ export default function LandingFooter(props: LandingFooterProps) {
                 placeholder="Masukkan email"
                 autocomplete="email"
                 aria-label="Alamat email untuk berlangganan informasi"
-                class="h-12 flex-1 rounded-full border border-[#3a5a3a] bg-[#2a3f2a] px-6 text-sm text-white placeholder:text-white/50 focus:border-[#67b744] focus:outline-none"
+                disabled={newsletterState() === "loading" || newsletterState() === "success"}
+                class="h-12 flex-1 rounded-full border border-[#3a5a3a] bg-[#2a3f2a] px-6 text-sm text-white placeholder:text-white/50 focus:border-[#67b744] focus:outline-none disabled:opacity-60"
               />
               <button
                 type="submit"
-                class="h-12 whitespace-nowrap rounded-full bg-amber-400 px-8 text-sm font-semibold text-neutral-900 transition-colors duration-200 hover:bg-amber-300"
+                disabled={newsletterState() === "loading" || newsletterState() === "success"}
+                class="h-12 whitespace-nowrap rounded-full bg-amber-400 px-8 text-sm font-semibold text-neutral-900 transition-colors duration-200 hover:bg-amber-300 disabled:opacity-60"
               >
-                Kirim Email
+                {newsletterState() === "loading"
+                  ? "Menyimpan..."
+                  : newsletterState() === "success"
+                    ? "Terdaftar!"
+                    : "Daftar"}
               </button>
             </form>
+            {newsletterState() === "success" && (
+              <p class="mt-2 text-xs text-emerald-400">Email berhasil didaftarkan. Terima kasih!</p>
+            )}
+            {newsletterState() === "error" && (
+              <p class="mt-2 text-xs text-rose-400">Gagal mendaftar. Silakan coba lagi.</p>
+            )}
           </div>
         </div>
       </div>

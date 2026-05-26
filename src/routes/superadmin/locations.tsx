@@ -9,6 +9,7 @@ import { Button } from "~/components/ui/Button";
 import { Badge } from "~/components/ui/Badge";
 import { useToast } from "~/components/shared/ToastProvider";
 import { useConfirm } from "~/components/shared/ConfirmProvider";
+import { ImageUpload } from "~/components/shared/ImageUpload";
 import { getAllLocations, createLocation, updateLocation, deleteLocation } from "~/server/actions/index";
 
 type Item = Awaited<ReturnType<typeof getAllLocations>>[number];
@@ -93,21 +94,14 @@ function LocationModal(props: { initial?: Item; onClose: () => void; onSaved: ()
           />
         </div>
         <div class="flex flex-col gap-1.5">
-          <label class="text-xs font-medium text-slate-600">URL Foto</label>
-          <input
-            class={inp}
+          <label class="text-xs font-medium text-slate-600">Foto</label>
+          <ImageUpload
             value={imageUrl()}
-            onInput={(e) => setImageUrl(e.currentTarget.value)}
-            placeholder="/landing/implement-lokasi.png atau https://..."
+            onChange={setImageUrl}
+            placeholder="/uploads/cms/lokasi.jpg atau https://..."
+            previewContainerClass="mt-1 h-24 w-full overflow-hidden rounded-lg border border-slate-200 relative"
+            previewImgClass="h-full w-full object-cover"
           />
-          <Show when={imageUrl()}>
-            <img
-              src={imageUrl()}
-              alt="Preview foto lokasi"
-              class="mt-1 h-24 w-full rounded-lg border border-slate-200 object-cover"
-              loading="lazy"
-            />
-          </Show>
         </div>
         <div class="grid grid-cols-2 gap-4">
           <div class="flex flex-col gap-1.5">

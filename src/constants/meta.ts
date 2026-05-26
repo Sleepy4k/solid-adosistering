@@ -126,6 +126,12 @@ export const PAGE_META = {
     path: ROUTES.cmsPartners,
     keywords: "cms mitra, landing page, adosistering",
   },
+  cmsSubscribers: {
+    title: "Newsletter",
+    description: "Kelola subscriber newsletter dan kirim bulk email Adosistering.",
+    path: ROUTES.cmsSubscribers,
+    keywords: "newsletter, subscriber, bulk email, adosistering",
+  },
   notFound: {
     title: "404",
     description: "Halaman yang diminta tidak tersedia atau sudah dipindahkan di aplikasi Adosistering.",

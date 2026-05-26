@@ -9,6 +9,7 @@ import { Button } from "~/components/ui/Button";
 import { Badge } from "~/components/ui/Badge";
 import { useToast } from "~/components/shared/ToastProvider";
 import { useConfirm } from "~/components/shared/ConfirmProvider";
+import { ImageUpload } from "~/components/shared/ImageUpload";
 import { getAllPartners, createPartner, updatePartner, deletePartner } from "~/server/actions/index";
 
 type Item = Awaited<ReturnType<typeof getAllPartners>>[number];
@@ -80,18 +81,14 @@ function PartnerModal(props: { initial?: Item; onClose: () => void; onSaved: () 
           />
         </div>
         <div class="flex flex-col gap-1.5">
-          <label class="text-xs font-medium text-slate-600">URL Logo</label>
-          <input
-            class={inp}
+          <label class="text-xs font-medium text-slate-600">Logo</label>
+          <ImageUpload
             value={logoUrl()}
-            onInput={(e) => setLogoUrl(e.currentTarget.value)}
-            placeholder="/landing/partner-logo.png atau https://..."
+            onChange={setLogoUrl}
+            placeholder="/uploads/cms/logo.png atau https://..."
+            previewContainerClass="mt-1 flex h-20 w-40 items-center justify-center rounded-lg border border-slate-200 bg-neutral-100 p-3 relative"
+            previewImgClass="max-h-full max-w-full object-contain"
           />
-          <Show when={logoUrl()}>
-            <div class="mt-1 flex h-20 w-40 items-center justify-center rounded-lg border border-slate-200 bg-neutral-100 p-3">
-              <img src={logoUrl()} alt="Preview logo" class="max-h-full max-w-full object-contain" loading="lazy" />
-            </div>
-          </Show>
         </div>
         <div class="flex flex-col gap-1.5">
           <label class="text-xs font-medium text-slate-600">URL Website</label>
@@ -117,7 +114,7 @@ function PartnerModal(props: { initial?: Item; onClose: () => void; onSaved: () 
               <label class="text-xs font-medium text-slate-600">Status</label>
               <button
                 type="button"
-                onClick={() => setIsActive((v) => !v)}
+                onClick={() => setIsActive((v: boolean) => !v)}
                 class={`rounded-lg border px-3 py-2 text-sm font-medium ${isActive() ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}
               >
                 {isActive() ? "Aktif" : "Nonaktif"}

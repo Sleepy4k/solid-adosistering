@@ -2,6 +2,7 @@ import { A, useLocation, useNavigate } from "@solidjs/router";
 import {
   Building2,
   ChartBar,
+  Mail,
   ChevronLeft,
   ClipboardList,
   Contact,
@@ -66,6 +67,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: ROUTES.cmsTestimonials, label: "Testimoni", icon: MessageSquare, superOnly: true },
       { href: ROUTES.cmsLocations, label: "Lokasi", icon: MapPin, superOnly: true },
       { href: ROUTES.cmsPartners, label: "Mitra", icon: Building2, superOnly: true },
+      { href: ROUTES.cmsSubscribers, label: "Newsletter", icon: Mail, superOnly: true },
     ],
   },
   {

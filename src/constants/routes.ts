@@ -22,6 +22,7 @@ export const ROUTES = {
   cmsTestimonials: "/superadmin/testimonials",
   cmsLocations: "/superadmin/locations",
   cmsPartners: "/superadmin/partners",
+  cmsSubscribers: "/superadmin/subscribers",
 } as const;
 
 export const PUBLIC_ROUTES = [ROUTES.landing, ROUTES.login, ROUTES.forgotPassword, ROUTES.resetPassword] as const;

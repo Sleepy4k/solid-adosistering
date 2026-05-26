@@ -13,3 +13,4 @@ export * from "./contact";
 export * from "./web-config";
 export * from "./admin-view";
 export * from "./landing-cms";
+export * from "./newsletter";

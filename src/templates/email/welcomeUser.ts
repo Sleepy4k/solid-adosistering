@@ -1,6 +1,13 @@
-import { baseEmailTemplate } from "./base";
+import { baseEmailTemplate, type EmailBrandConfig } from "./base";
 
-export function welcomeUserTemplate(input: { name: string; email: string; password: string; loginUrl: string }) {
+export function welcomeUserTemplate(input: {
+  name: string;
+  email: string;
+  password: string;
+  loginUrl: string;
+  config?: Partial<EmailBrandConfig>;
+}) {
+  const primaryColor = input.config?.primaryColor ?? "#186D3C";
   const subject = "Selamat Datang di Adosistering — Akun Anda Telah Dibuat";
   const bodyHtml = `
     <p style="margin:0 0 16px;font-size:15px;color:#374151">Halo, <strong>${input.name}</strong>,</p>
@@ -21,7 +28,7 @@ export function welcomeUserTemplate(input: { name: string; email: string; passwo
     </div>
     <div style="text-align:center;margin:28px 0">
       <a href="${input.loginUrl}"
-         style="display:inline-block;background:#186D3C;color:#fff;text-decoration:none;padding:14px 32px;border-radius:8px;font-weight:700;font-size:15px">
+         style="display:inline-block;background:${primaryColor};color:#fff;text-decoration:none;padding:14px 32px;border-radius:8px;font-weight:700;font-size:15px">
         Masuk Sekarang
       </a>
     </div>
@@ -33,5 +40,5 @@ export function welcomeUserTemplate(input: { name: string; email: string; passwo
   `;
   const bodyText = `Halo, ${input.name},\n\nAkun Adosistering Anda telah dibuat.\n\nEmail: ${input.email}\nPassword: ${input.password}\n\nLogin di: ${input.loginUrl}\n\nSegera ubah password Anda setelah pertama kali masuk.`;
 
-  return baseEmailTemplate({ subject, bodyHtml, bodyText });
+  return baseEmailTemplate({ subject, bodyHtml, bodyText, config: input.config });
 }

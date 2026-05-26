@@ -1,6 +1,6 @@
-import { baseEmailTemplate } from "./base";
+import { baseEmailTemplate, type EmailBrandConfig } from "./base";
 
-export function loginBlockedTemplate(userName: string, cooldownMinutes: number) {
+export function loginBlockedTemplate(userName: string, cooldownMinutes: number, config?: Partial<EmailBrandConfig>) {
   const subject = "Peringatan: Percobaan Login Gagal Berulang";
   const now = new Date().toLocaleString("id-ID", {
     dateStyle: "long",
@@ -27,5 +27,5 @@ export function loginBlockedTemplate(userName: string, cooldownMinutes: number) 
   `;
   const bodyText = `Halo, ${userName},\n\nSistem mendeteksi percobaan login gagal berulang pada akun Anda.\n\nWaktu: ${now} WIB\nAkun dikunci selama ${cooldownMinutes} menit.\n\nJika ini bukan Anda, segera hubungi administrator.`;
 
-  return baseEmailTemplate({ subject, bodyHtml, bodyText });
+  return baseEmailTemplate({ subject, bodyHtml, bodyText, config });
 }

@@ -5,7 +5,7 @@ import { redirect } from "@solidjs/router";
 import { prisma } from "../db/prisma";
 import { assertSuperadmin } from "../security";
 import { getSession } from "../session";
-import { sendTransactionalEmail } from "../email";
+import { getEmailBrandConfig, sendTransactionalEmail } from "../email";
 import { logActivity } from "./_helpers";
 import { newsletterTemplate } from "~/templates/email/newsletter";
 
@@ -60,7 +60,8 @@ export async function sendBulkEmail(input: { subject: string; body: string }) {
   });
   if (subscribers.length === 0) throw new Response("Tidak ada subscriber aktif.", { status: 400 });
 
-  const template = newsletterTemplate({ subject, body });
+  const brandConfig = await getEmailBrandConfig();
+  const template = newsletterTemplate({ subject, body, config: brandConfig });
   let sent = 0;
   let failed = 0;
 

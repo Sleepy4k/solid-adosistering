@@ -1,6 +1,6 @@
-import { baseEmailTemplate } from "./base";
+import { baseEmailTemplate, type EmailBrandConfig } from "./base";
 
-export function passwordChangedTemplate(userName: string) {
+export function passwordChangedTemplate(userName: string, config?: Partial<EmailBrandConfig>) {
   const subject = "Password Akun Anda Berhasil Diubah";
   const now = new Date().toLocaleString("id-ID", {
     dateStyle: "long",
@@ -21,5 +21,5 @@ export function passwordChangedTemplate(userName: string) {
   `;
   const bodyText = `Halo, ${userName},\n\nPassword akun Adosistering Anda telah berhasil diubah pada: ${now} WIB.\n\nJika Anda tidak melakukan ini, segera hubungi administrator.`;
 
-  return baseEmailTemplate({ subject, bodyHtml, bodyText });
+  return baseEmailTemplate({ subject, bodyHtml, bodyText, config });
 }

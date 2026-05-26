@@ -9,6 +9,7 @@ import { useToast } from "~/components/shared/ToastProvider";
 import { useConfirm } from "~/components/shared/ConfirmProvider";
 import { getAllSubscribers, deleteSubscriber, sendBulkEmail } from "~/server/actions/index";
 import { newsletterPreviewHtml } from "~/templates/email/newsletter";
+import { useWebConfig } from "~/lib/shared/webConfig";
 
 const KEY = "all-subscribers";
 const load = query(() => getAllSubscribers(), KEY);
@@ -21,6 +22,16 @@ export default function CmsSubscribers() {
   const { notify } = useToast();
   const confirm = useConfirm();
   const items = createAsync(() => load());
+  const webConfig = useWebConfig();
+  const emailBrand = () => {
+    const cfg = webConfig();
+    return {
+      projectName: cfg.projectName,
+      tagline: cfg.tagline ?? undefined,
+      logoUrl: cfg.logoUrl,
+      primaryColor: cfg.primaryColor,
+    };
+  };
 
   const [subject, setSubject] = createSignal<string>("");
   const [body, setBody] = createSignal<string>("");
@@ -137,7 +148,11 @@ export default function CmsSubscribers() {
                   }
                 >
                   <iframe
-                    srcdoc={newsletterPreviewHtml({ subject: subject() || "(tanpa subjek)", body: body() })}
+                    srcdoc={newsletterPreviewHtml({
+                      subject: subject() || "(tanpa subjek)",
+                      body: body(),
+                      config: emailBrand(),
+                    })}
                     class="h-[480px] w-full rounded-lg border border-slate-200"
                     sandbox="allow-same-origin"
                     title="Preview email"

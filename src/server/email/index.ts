@@ -5,6 +5,32 @@ import { loginBlockedTemplate } from "~/templates/email/loginBlocked";
 import { passwordChangedTemplate } from "~/templates/email/passwordChanged";
 import { passwordResetTemplate } from "~/templates/email/passwordReset";
 import { welcomeUserTemplate } from "~/templates/email/welcomeUser";
+import type { EmailBrandConfig } from "~/templates/email/base";
+
+type WebConfigValue = {
+  projectName?: string;
+  tagline?: string;
+  logoUrl?: string | null;
+  primaryColor?: string;
+};
+
+function resolveLogoUrl(logoUrl: string | null | undefined): string | null {
+  if (!logoUrl) return null;
+  if (logoUrl.startsWith("http://") || logoUrl.startsWith("https://")) return logoUrl;
+  return `${serverConfig.appOrigin}${logoUrl}`;
+}
+
+export async function getEmailBrandConfig(): Promise<Partial<EmailBrandConfig>> {
+  const setting = await prisma.systemSetting.findUnique({ where: { key: "webConfig" } });
+  if (!setting?.value) return {};
+  const val = setting.value as WebConfigValue;
+  return {
+    projectName: val.projectName ?? undefined,
+    tagline: val.tagline ?? undefined,
+    logoUrl: resolveLogoUrl(val.logoUrl),
+    primaryColor: val.primaryColor ?? undefined,
+  };
+}
 
 export async function sendTransactionalEmail(input: {
   recipientId?: string;
@@ -60,12 +86,14 @@ export async function sendTransactionalEmail(input: {
 }
 
 export async function sendPasswordResetEmail(input: { recipientId: string; to: string; resetUrl: string }) {
-  const template = passwordResetTemplate(input.resetUrl);
+  const config = await getEmailBrandConfig();
+  const template = passwordResetTemplate(input.resetUrl, config);
   await sendTransactionalEmail({ recipientId: input.recipientId, to: input.to, ...template });
 }
 
 export async function sendPasswordChangedEmail(input: { recipientId: string; to: string; userName: string }) {
-  const template = passwordChangedTemplate(input.userName);
+  const config = await getEmailBrandConfig();
+  const template = passwordChangedTemplate(input.userName, config);
   await sendTransactionalEmail({ recipientId: input.recipientId, to: input.to, ...template });
 }
 
@@ -75,7 +103,8 @@ export async function sendLoginBlockedEmail(input: {
   userName: string;
   cooldownMinutes: number;
 }) {
-  const template = loginBlockedTemplate(input.userName, input.cooldownMinutes);
+  const config = await getEmailBrandConfig();
+  const template = loginBlockedTemplate(input.userName, input.cooldownMinutes, config);
   await sendTransactionalEmail({ recipientId: input.recipientId, to: input.to, ...template });
 }
 
@@ -87,6 +116,7 @@ export async function sendWelcomeUserEmail(input: {
   password: string;
   loginUrl: string;
 }) {
-  const template = welcomeUserTemplate(input);
+  const config = await getEmailBrandConfig();
+  const template = welcomeUserTemplate({ ...input, config });
   await sendTransactionalEmail({ recipientId: input.recipientId, to: input.to, ...template });
 }

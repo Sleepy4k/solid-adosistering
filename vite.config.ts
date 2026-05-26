@@ -30,20 +30,30 @@ export default defineConfig(({ mode }) => {
 
   return {
     build: {
+      minify: "terser",
+      terserOptions: {
+        format: {
+          comments: false,
+        },
+        compress: {
+          drop_console: true,
+          drop_debugger: true,
+        },
+      },
       rollupOptions: {
         onwarn(warning, defaultHandler) {
           const message = warning.message ?? "";
           if (
             warning.code === "MODULE_LEVEL_DIRECTIVE" &&
             message.includes('"use server"') &&
-            message.includes("src/server/actions/index.ts")
+            message.includes("src/server/actions/")
           ) {
             return;
           }
           if (
             warning.code === "SOURCEMAP_ERROR" &&
             message.includes("Can't resolve original location of error") &&
-            message.includes("src/server/actions/index.ts")
+            message.includes("src/server/actions/")
           ) {
             return;
           }

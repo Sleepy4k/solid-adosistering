@@ -31,7 +31,7 @@ export async function login(input: { email: string; password: string }) {
     if (result.blocked) {
       const mins = Math.ceil(result.retryAfterSec / 60);
       sendLoginBlockedEmail({ recipientId: user.id, to: user.email, userName: user.name, cooldownMinutes: mins }).catch(
-        () => {},
+        (err: unknown) => console.error("[email] loginBlocked:", err),
       );
       throw cooldownResponse(result.retryAfterSec);
     }
@@ -113,7 +113,7 @@ export async function completePasswordReset(input: { token: string; newPassword:
   });
   if (resetUser) {
     sendPasswordChangedEmail({ recipientId: resetUser.id, to: resetUser.email, userName: resetUser.name }).catch(
-      () => {},
+      (err: unknown) => console.error("[email] passwordChanged:", err),
     );
   }
   return { ok: true };

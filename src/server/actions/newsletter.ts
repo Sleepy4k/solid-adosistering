@@ -5,7 +5,7 @@ import { redirect } from "@solidjs/router";
 import { prisma } from "../db/prisma";
 import { assertSuperadmin } from "../security";
 import { getSession } from "../session";
-import { getEmailBrandConfig, sendTransactionalEmail } from "../email";
+import { createSmtpTransporter, getEmailBrandConfig, sendTransactionalEmail } from "../email";
 import { logActivity } from "./_helpers";
 import { newsletterTemplate } from "~/templates/email/newsletter";
 
@@ -65,9 +65,10 @@ export async function sendBulkEmail(input: { subject: string; body: string }) {
   let sent = 0;
   let failed = 0;
 
+  const transporter = createSmtpTransporter();
   for (const sub of subscribers) {
     try {
-      await sendTransactionalEmail({ to: sub.email, subject, text: template.text, html: template.html });
+      await sendTransactionalEmail({ to: sub.email, subject, text: template.text, html: template.html }, transporter);
       sent++;
     } catch {
       failed++;

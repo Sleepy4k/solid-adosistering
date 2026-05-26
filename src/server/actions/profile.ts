@@ -90,6 +90,8 @@ export async function changeMyPassword(input: { currentPassword: string; newPass
 
   const newHash = await hashPassword(input.newPassword);
   await prisma.user.update({ where: { id: session.id }, data: { passwordHash: newHash } });
-  sendPasswordChangedEmail({ recipientId: user.id, to: user.email, userName: user.name }).catch(() => {});
+  sendPasswordChangedEmail({ recipientId: user.id, to: user.email, userName: user.name }).catch((err: unknown) =>
+    console.error("[email] passwordChanged:", err),
+  );
   return { ok: true };
 }

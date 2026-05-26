@@ -15,6 +15,15 @@ const DEFAULT_BRAND: EmailBrandConfig = {
   primaryColor: "#186D3C",
 };
 
+function mergeConfig(partial?: Partial<EmailBrandConfig>): EmailBrandConfig {
+  return {
+    projectName: partial?.projectName ?? DEFAULT_BRAND.projectName,
+    tagline: partial?.tagline ?? DEFAULT_BRAND.tagline,
+    logoUrl: partial?.logoUrl !== undefined ? partial.logoUrl : DEFAULT_BRAND.logoUrl,
+    primaryColor: partial?.primaryColor ?? DEFAULT_BRAND.primaryColor,
+  };
+}
+
 function hexShade(hex: string, factor: number): string {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
@@ -34,7 +43,7 @@ export function baseEmailTemplate(input: {
   bodyText: string;
   config?: Partial<EmailBrandConfig>;
 }) {
-  const cfg: EmailBrandConfig = { ...DEFAULT_BRAND, ...input.config };
+  const cfg = mergeConfig(input.config);
   const headerStart = cfg.primaryColor;
   const headerEnd = hexShade(cfg.primaryColor, -0.15);
   const footerBg = hexShade(cfg.primaryColor, -0.45);
@@ -42,8 +51,10 @@ export function baseEmailTemplate(input: {
   const subjectBorder = hexShade(cfg.primaryColor, 0.6);
   const subjectText = hexShade(cfg.primaryColor, -0.15);
 
-  const logoHtml = cfg.logoUrl
-    ? `<img src="${cfg.logoUrl}" alt="${escHtml(cfg.projectName)}" style="display:block;height:44px;max-width:180px;object-fit:contain;margin-bottom:10px" />`
+  const logoCell = cfg.logoUrl
+    ? `<td style="width:52px;padding-right:14px;vertical-align:middle">
+        <img src="${cfg.logoUrl}" alt="${escHtml(cfg.projectName)}" style="display:block;height:44px;width:44px;object-fit:contain;border-radius:6px" />
+       </td>`
     : "";
 
   const html = `
@@ -51,8 +62,8 @@ export function baseEmailTemplate(input: {
       <div style="background:linear-gradient(135deg,${headerStart} 0%,${headerEnd} 100%);padding:28px 32px">
         <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
           <tr>
-            <td>
-              ${logoHtml}
+            ${logoCell}
+            <td style="vertical-align:middle">
               <p style="margin:0;font-size:22px;font-weight:700;color:#fff;letter-spacing:0.05em">
                 ${escHtml(cfg.projectName.toUpperCase())}
               </p>
@@ -97,6 +108,7 @@ export function baseEmailTemplate(input: {
   return { subject: input.subject, html, text };
 }
 
-export function escHtml(str: string): string {
+export function escHtml(str: string | null | undefined): string {
+  if (!str) return "";
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }

@@ -204,7 +204,7 @@ export async function createUserWithProfile(input: {
     email: user.email,
     password: input.password,
     loginUrl: `${serverConfig.appOrigin}/login`,
-  }).catch(() => {});
+  }).catch((err: unknown) => console.error("[email] welcomeUser:", err));
   return { ...user, apiKey };
 }
 

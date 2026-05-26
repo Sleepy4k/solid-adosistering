@@ -32,57 +32,77 @@ export async function getEmailBrandConfig(): Promise<Partial<EmailBrandConfig>> 
   };
 }
 
-export async function sendTransactionalEmail(input: {
-  recipientId?: string;
-  to: string;
-  subject: string;
-  text: string;
-  html?: string;
-}) {
-  const { host, port, secure, user, pass, from } = serverConfig.smtp;
+export function createSmtpTransporter() {
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT ?? "587");
+  const secure = process.env.SMTP_SECURE === "true";
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+
   if (!host || !user || !pass) {
-    throw new Error("SMTP config is required before transactional email can be sent");
+    const missing = [!host && "SMTP_HOST", !user && "SMTP_USER", !pass && "SMTP_PASS"].filter(Boolean);
+    throw new Error(`SMTP not configured: ${missing.join(", ")} missing`);
   }
 
-  const transporter = nodemailer.createTransport({
+  return nodemailer.createTransport({
     host,
     port,
     secure,
     auth: { user, pass },
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 15_000,
+    tls: { rejectUnauthorized: false },
   });
+}
+
+function resolveFrom(): string {
+  const from = process.env.EMAIL_FROM;
+  if (from) return from;
+  return `Adosistering <${process.env.SMTP_USER}>`;
+}
+
+export async function sendTransactionalEmail(
+  input: { recipientId?: string; to: string; subject: string; text: string; html?: string },
+  transporter?: ReturnType<typeof nodemailer.createTransport>,
+) {
+  const t = transporter ?? createSmtpTransporter();
+
+  let messageId: string | undefined;
+  let smtpError: unknown;
 
   try {
-    const result = await transporter.sendMail({
-      from,
+    const result = await t.sendMail({
+      from: resolveFrom(),
       to: input.to,
       subject: input.subject,
       text: input.text,
       html: input.html,
     });
-
-    await prisma.emailDelivery.create({
-      data: {
-        recipientId: input.recipientId,
-        toEmail: input.to,
-        subject: input.subject,
-        provider: "smtp",
-        providerId: result.messageId,
-        sentAt: new Date(),
-      },
-    });
-  } catch (error) {
-    await prisma.emailDelivery.create({
-      data: {
-        recipientId: input.recipientId,
-        toEmail: input.to,
-        subject: input.subject,
-        provider: "smtp",
-        failedAt: new Date(),
-        error: error instanceof Error ? error.message : "Unknown email error",
-      },
-    });
-    throw error;
+    messageId = result.messageId;
+  } catch (err) {
+    smtpError = err;
   }
+
+  // DB logging is fire-and-forget — never let it mask the real SMTP error
+  prisma.emailDelivery
+    .create({
+      data: {
+        recipientId: input.recipientId,
+        toEmail: input.to,
+        subject: input.subject,
+        provider: "smtp",
+        ...(smtpError
+          ? {
+              failedAt: new Date(),
+              error: smtpError instanceof Error ? smtpError.message : "Unknown email error",
+            }
+          : { providerId: messageId, sentAt: new Date() }),
+      },
+    })
+    .catch((err: unknown) => console.error("[email] DB log failed:", err));
+
+  if (smtpError) throw smtpError;
 }
 
 export async function sendPasswordResetEmail(input: { recipientId: string; to: string; resetUrl: string }) {

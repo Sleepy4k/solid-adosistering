@@ -11,7 +11,8 @@
       "Bash(xargs grep *)",
       "Bash(bun pm *)",
       "Bash(node -e \"const pkg = require\\('./node_modules/lucide-solid/package.json'\\); console.log\\(pkg.version\\);\")",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(node *)"
     ]
   }
 }

@@ -8,7 +8,10 @@
       "Bash(npx --yes tsc --noEmit)",
       "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")",
       "Bash(curl -s -o /dev/null -w '%{http_code}' https://docs.solidjs.com/__TRACKED_VAR__)",
-      "Bash(xargs grep *)"
+      "Bash(xargs grep *)",
+      "Bash(bun pm *)",
+      "Bash(node -e \"const pkg = require\\('./node_modules/lucide-solid/package.json'\\); console.log\\(pkg.version\\);\")",
+      "Bash(node -e ' *)"
     ]
   }
 }

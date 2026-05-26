@@ -108,6 +108,24 @@ export const PAGE_META = {
     path: ROUTES.contactSubmissions,
     keywords: "pesan masuk, contact us, landing page, adosistering",
   },
+  cmsTestimonials: {
+    title: "CMS Testimoni",
+    description: "Kelola konten testimoni landing page Adosistering.",
+    path: ROUTES.cmsTestimonials,
+    keywords: "cms testimoni, landing page, adosistering",
+  },
+  cmsLocations: {
+    title: "CMS Lokasi",
+    description: "Kelola konten lokasi implementasi landing page Adosistering.",
+    path: ROUTES.cmsLocations,
+    keywords: "cms lokasi implementasi, landing page, adosistering",
+  },
+  cmsPartners: {
+    title: "CMS Mitra",
+    description: "Kelola konten mitra landing page Adosistering.",
+    path: ROUTES.cmsPartners,
+    keywords: "cms mitra, landing page, adosistering",
+  },
   notFound: {
     title: "404",
     description: "Halaman yang diminta tidak tersedia atau sudah dipindahkan di aplikasi Adosistering.",

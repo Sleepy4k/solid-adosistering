@@ -1,5 +1,6 @@
 import { A, useLocation, useNavigate } from "@solidjs/router";
 import {
+  Building2,
   ChartBar,
   ChevronLeft,
   ClipboardList,
@@ -10,7 +11,9 @@ import {
   House,
   LogOut,
   Map,
+  MapPin,
   MapPinned,
+  MessageSquare,
   Settings,
   ShieldCheck,
   User,
@@ -55,6 +58,14 @@ const NAV_GROUPS: NavGroup[] = [
       { href: ROUTES.userManagement, label: "Manajemen User", icon: Users, adminOnly: true },
       { href: ROUTES.regionManagement, label: "Manajemen Region", icon: MapPinned, superOnly: true },
       { href: ROUTES.mapConfiguration, label: "Konfigurasi Peta", icon: Map, superOnly: true },
+    ],
+  },
+  {
+    label: "Landing CMS",
+    items: [
+      { href: ROUTES.cmsTestimonials, label: "Testimoni", icon: MessageSquare, superOnly: true },
+      { href: ROUTES.cmsLocations, label: "Lokasi", icon: MapPin, superOnly: true },
+      { href: ROUTES.cmsPartners, label: "Mitra", icon: Building2, superOnly: true },
     ],
   },
   {
@@ -104,8 +115,10 @@ export default function Sidebar(props: SidebarProps) {
   const navigate = useNavigate();
   const confirm = useConfirm();
 
-  const isActive = (href: string) =>
-    href === ROUTES.dashboard ? location.pathname === ROUTES.dashboard : location.pathname.startsWith(href);
+  const isActive = (href: string) => {
+    if (href === ROUTES.dashboard || href === ROUTES.superadmin) return location.pathname === href;
+    return location.pathname.startsWith(href);
+  };
   const helpActive = () => isActive(ROUTES.helpCenter);
   const visibleGroups = () =>
     NAV_GROUPS.map((group) => ({

@@ -10,6 +10,8 @@ import { validateEmail } from "~/lib/shared/validation";
 import { useWebConfig } from "~/lib/shared/webConfig";
 import fallbackLogo from "~/assets/logo.svg?url";
 
+export const route = { prerender: true };
+
 export default function ForgotPassword() {
   const config = useWebConfig();
   const [email, setEmail] = createSignal("");

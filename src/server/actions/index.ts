@@ -12,3 +12,4 @@ export * from "./logs";
 export * from "./contact";
 export * from "./web-config";
 export * from "./admin-view";
+export * from "./landing-cms";

@@ -19,7 +19,7 @@ const checkLoginSession = query(async () => {
   return null;
 }, "login-session");
 
-export const route = { preload: () => checkLoginSession() };
+export const route = { preload: () => checkLoginSession(), prerender: true };
 
 export default function Login() {
   createAsync(() => checkLoginSession());

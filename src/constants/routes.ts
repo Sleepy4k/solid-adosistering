@@ -19,6 +19,9 @@ export const ROUTES = {
   helpCenter: "/help-center",
   superadmin: "/superadmin",
   adminView: "/admin-view",
+  cmsTestimonials: "/superadmin/testimonials",
+  cmsLocations: "/superadmin/locations",
+  cmsPartners: "/superadmin/partners",
 } as const;
 
 export const PUBLIC_ROUTES = [ROUTES.landing, ROUTES.login, ROUTES.forgotPassword, ROUTES.resetPassword] as const;

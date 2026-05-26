@@ -20,7 +20,7 @@ export const route = {
     redirectIfLoggedIn();
     return loadWebConfig();
   },
-  prerender: false,
+  prerender: true,
 };
 
 export default function LandingRoute() {

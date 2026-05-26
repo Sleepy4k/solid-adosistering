@@ -229,7 +229,7 @@ export const CONTACT_CARDS = [
   {
     icon: "/landing/telephone.svg",
     title: "Telepon & WhatsApp",
-    lines: ["(0281) 641 629", "(0281) 641 629"],
+    lines: ["(0281) 641 629"],
   },
   {
     icon: "/landing/service.svg",
@@ -239,7 +239,7 @@ export const CONTACT_CARDS = [
   {
     icon: "/landing/message.svg",
     title: "Sampaikan Pesan",
-    lines: ["adosisteringteam@gmail.com", "purwokerto.telkomuniversity.ac.id"],
+    lines: ["adosisteringteam@gmail.com"],
   },
 ] as const;
 

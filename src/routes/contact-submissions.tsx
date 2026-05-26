@@ -14,7 +14,7 @@ export const route = { preload: preloadContactSubmissions };
 
 export default function ContactSubmissionsRoute() {
   const contacts = createAsync<ContactRowData[]>(() => loadContacts());
-  const [showUnreadOnly, setShowUnreadOnly] = createSignal(false);
+  const [showUnreadOnly, setShowUnreadOnly] = createSignal<boolean>(false);
   const refresh = async () => revalidate("superadmin-contacts");
   const allContacts = () => (contacts() ?? []) as ContactRowData[];
   const filtered = () => {

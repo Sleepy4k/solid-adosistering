@@ -2,6 +2,7 @@
 
 import { redirect } from "@solidjs/router";
 import { prisma } from "../db/prisma";
+import { sendPasswordChangedEmail } from "../email";
 import { hashPassword, verifyPassword } from "../security";
 import { getSession } from "../session";
 import type { MyProfile } from "~/types/profile";
@@ -89,5 +90,6 @@ export async function changeMyPassword(input: { currentPassword: string; newPass
 
   const newHash = await hashPassword(input.newPassword);
   await prisma.user.update({ where: { id: session.id }, data: { passwordHash: newHash } });
+  sendPasswordChangedEmail({ recipientId: user.id, to: user.email, userName: user.name }).catch(() => {});
   return { ok: true };
 }

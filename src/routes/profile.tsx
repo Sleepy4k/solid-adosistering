@@ -44,15 +44,15 @@ function SectionCard(props: { title: string; onEdit?: () => void; children: unkn
 function EditProfileModal(props: { profile: MyProfile; onClose: () => void }) {
   const { notify } = useToast();
   const p = props.profile;
-  const [name, setName] = createSignal(p.name);
-  const [whatsapp, setWhatsapp] = createSignal(p.profile?.whatsapp ?? "");
-  const [gender, setGender] = createSignal(p.profile?.gender ?? "");
-  const [address, setAddress] = createSignal(p.profile?.address ?? "");
-  const [country, setCountry] = createSignal(p.profile?.country ?? "");
-  const [province, setProvince] = createSignal(p.profile?.province ?? "");
-  const [city, setCity] = createSignal(p.profile?.city ?? "");
-  const [postalCode, setPostalCode] = createSignal(p.profile?.postalCode ?? "");
-  const [loading, setLoading] = createSignal(false);
+  const [name, setName] = createSignal<string>(p.name);
+  const [whatsapp, setWhatsapp] = createSignal<string>(p.profile?.whatsapp ?? "");
+  const [gender, setGender] = createSignal<string>(p.profile?.gender ?? "");
+  const [address, setAddress] = createSignal<string>(p.profile?.address ?? "");
+  const [country, setCountry] = createSignal<string>(p.profile?.country ?? "");
+  const [province, setProvince] = createSignal<string>(p.profile?.province ?? "");
+  const [city, setCity] = createSignal<string>(p.profile?.city ?? "");
+  const [postalCode, setPostalCode] = createSignal<string>(p.profile?.postalCode ?? "");
+  const [loading, setLoading] = createSignal<boolean>(false);
 
   const save = async (e: SubmitEvent) => {
     e.preventDefault();
@@ -144,11 +144,11 @@ function EditProfileModal(props: { profile: MyProfile; onClose: () => void }) {
 
 function ChangePasswordModal(props: { onClose: () => void }) {
   const { notify } = useToast();
-  const [current, setCurrent] = createSignal("");
-  const [newPw, setNewPw] = createSignal("");
-  const [confirmPw, setConfirmPw] = createSignal("");
-  const [loading, setLoading] = createSignal(false);
-  const [error, setError] = createSignal("");
+  const [current, setCurrent] = createSignal<string>("");
+  const [newPw, setNewPw] = createSignal<string>("");
+  const [confirmPw, setConfirmPw] = createSignal<string>("");
+  const [loading, setLoading] = createSignal<boolean>(false);
+  const [error, setError] = createSignal<string>("");
 
   const save = async (e: SubmitEvent) => {
     e.preventDefault();
@@ -228,8 +228,8 @@ function ChangePasswordModal(props: { onClose: () => void }) {
 
 export default function Profil() {
   const profile = createAsync(() => loadProfile());
-  const [editProfile, setEditProfile] = createSignal(false);
-  const [editPw, setEditPw] = createSignal(false);
+  const [editProfile, setEditProfile] = createSignal<boolean>(false);
+  const [editPw, setEditPw] = createSignal<boolean>(false);
 
   return (
     <>

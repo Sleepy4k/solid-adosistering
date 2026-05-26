@@ -12,7 +12,7 @@ type ContactRowProps = {
 
 export default function ContactRow(props: ContactRowProps) {
   const { notify } = useToast();
-  const [loading, setLoading] = createSignal(false);
+  const [loading, setLoading] = createSignal<boolean>(false);
 
   const toggle = async () => {
     setLoading(true);

@@ -11,7 +11,7 @@ type LandingSelectProps = {
 };
 
 export default function LandingSelect(props: LandingSelectProps) {
-  const [open, setOpen] = createSignal(false);
+  const [open, setOpen] = createSignal<boolean>(false);
   let containerRef: HTMLDivElement | undefined;
 
   const selected = () => props.options.find((option) => option.value === props.value);

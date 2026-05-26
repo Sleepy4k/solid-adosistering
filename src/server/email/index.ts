@@ -1,7 +1,10 @@
 import nodemailer from "nodemailer";
 import { serverConfig } from "../config";
 import { prisma } from "../db/prisma";
+import { loginBlockedTemplate } from "~/templates/email/loginBlocked";
+import { passwordChangedTemplate } from "~/templates/email/passwordChanged";
 import { passwordResetTemplate } from "~/templates/email/passwordReset";
+import { welcomeUserTemplate } from "~/templates/email/welcomeUser";
 
 export async function sendTransactionalEmail(input: {
   recipientId?: string;
@@ -58,9 +61,32 @@ export async function sendTransactionalEmail(input: {
 
 export async function sendPasswordResetEmail(input: { recipientId: string; to: string; resetUrl: string }) {
   const template = passwordResetTemplate(input.resetUrl);
-  await sendTransactionalEmail({
-    recipientId: input.recipientId,
-    to: input.to,
-    ...template,
-  });
+  await sendTransactionalEmail({ recipientId: input.recipientId, to: input.to, ...template });
+}
+
+export async function sendPasswordChangedEmail(input: { recipientId: string; to: string; userName: string }) {
+  const template = passwordChangedTemplate(input.userName);
+  await sendTransactionalEmail({ recipientId: input.recipientId, to: input.to, ...template });
+}
+
+export async function sendLoginBlockedEmail(input: {
+  recipientId: string;
+  to: string;
+  userName: string;
+  cooldownMinutes: number;
+}) {
+  const template = loginBlockedTemplate(input.userName, input.cooldownMinutes);
+  await sendTransactionalEmail({ recipientId: input.recipientId, to: input.to, ...template });
+}
+
+export async function sendWelcomeUserEmail(input: {
+  recipientId: string;
+  to: string;
+  name: string;
+  email: string;
+  password: string;
+  loginUrl: string;
+}) {
+  const template = welcomeUserTemplate(input);
+  await sendTransactionalEmail({ recipientId: input.recipientId, to: input.to, ...template });
 }

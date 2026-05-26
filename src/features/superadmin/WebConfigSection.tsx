@@ -3,6 +3,7 @@ import { createSignal, Show, Suspense } from "solid-js";
 import { Card, CardHeader } from "~/components/ui/Card";
 import { Button } from "~/components/ui/Button";
 import { ErrorBoundary } from "solid-js";
+import { ImageUpload } from "~/components/shared/ImageUpload";
 import { useToast } from "~/components/shared/ToastProvider";
 import { saveWebConfig } from "~/server/actions/index";
 import { loadWebConfig, WEB_CONFIG_KEY } from "~/lib/shared/webConfig";
@@ -13,13 +14,13 @@ const inp = "form-input rounded-lg text-sm h-10 w-full";
 export function WebConfigSection() {
   const { notify } = useToast();
   const config = createAsync(() => loadWebConfig());
-  const [projectName, setProjectName] = createSignal("");
-  const [tagline, setTagline] = createSignal("");
-  const [primaryColor, setPrimaryColor] = createSignal("#67B744");
-  const [logoUrl, setLogoUrl] = createSignal("");
-  const [iconUrl, setIconUrl] = createSignal("");
-  const [initialized, setInitialized] = createSignal(false);
-  const [saving, setSaving] = createSignal(false);
+  const [projectName, setProjectName] = createSignal<string>("");
+  const [tagline, setTagline] = createSignal<string>("");
+  const [primaryColor, setPrimaryColor] = createSignal<string>("#67B744");
+  const [logoUrl, setLogoUrl] = createSignal<string>("");
+  const [iconUrl, setIconUrl] = createSignal<string>("");
+  const [initialized, setInitialized] = createSignal<boolean>(false);
+  const [saving, setSaving] = createSignal<boolean>(false);
 
   const ensureInit = (cfg: WebConfig) => {
     if (!initialized()) {
@@ -113,37 +114,25 @@ export function WebConfigSection() {
                       />
                     </div>
                   </div>
-                  <div class="flex flex-col gap-1.5">
-                    <label class="form-label text-xs">URL Logo</label>
-                    <input
-                      class={inp}
+                  <div class="flex flex-col gap-1.5 sm:col-span-2">
+                    <label class="form-label text-xs">Logo</label>
+                    <ImageUpload
                       value={logoUrl()}
-                      onInput={(e) => setLogoUrl(e.currentTarget.value)}
+                      onChange={setLogoUrl}
                       placeholder="/landing/logo.svg"
+                      previewContainerClass="h-16 w-48 rounded-lg border border-slate-200 bg-white p-2"
+                      previewImgClass="h-full w-full object-contain"
                     />
                   </div>
-                  <div class="flex flex-col gap-1.5">
-                    <label class="form-label text-xs">URL Ikon Web (Favicon)</label>
-                    <div class="flex items-center gap-2">
-                      <Show when={iconUrl().trim()}>
-                        <img
-                          src={iconUrl()}
-                          alt=""
-                          class="h-10 w-10 rounded-lg border border-slate-200 object-contain p-1"
-                          loading="lazy"
-                          decoding="async"
-                          fetchpriority="low"
-                          width={40}
-                          height={40}
-                        />
-                      </Show>
-                      <input
-                        class={`${inp} flex-1`}
-                        value={iconUrl()}
-                        onInput={(e) => setIconUrl(e.currentTarget.value)}
-                        placeholder="/favicon.ico"
-                      />
-                    </div>
+                  <div class="flex flex-col gap-1.5 sm:col-span-2">
+                    <label class="form-label text-xs">Ikon Web (Favicon)</label>
+                    <ImageUpload
+                      value={iconUrl()}
+                      onChange={setIconUrl}
+                      placeholder="/favicon.ico"
+                      previewContainerClass="h-12 w-12 rounded-lg border border-slate-200 bg-white p-1"
+                      previewImgClass="h-full w-full object-contain"
+                    />
                   </div>
                   <div class="flex justify-end sm:col-span-2">
                     <Button type="submit" tone="primary" disabled={saving()}>

@@ -8,10 +8,10 @@ type RegionRow = Awaited<ReturnType<typeof getRegionsForConfig>>[number];
 
 export function RegionConfigRow(props: { region: RegionRow; onSaved: () => void }) {
   const { notify } = useToast();
-  const [divider, setDivider] = createSignal(String(Number(props.region.volumeDivider)));
+  const [divider, setDivider] = createSignal<string>(String(Number(props.region.volumeDivider)));
   const [wind, setWind] = createSignal<boolean>(props.region.showWindDirection);
   const [autoIrrig, setAutoIrrig] = createSignal<boolean>(props.region.showAutoIrrigation);
-  const [saving, setSaving] = createSignal(false);
+  const [saving, setSaving] = createSignal<boolean>(false);
 
   const save = async () => {
     const val = parseFloat(divider());

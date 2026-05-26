@@ -8,6 +8,7 @@ import { Badge } from "~/components/ui/Badge";
 import { useToast } from "~/components/shared/ToastProvider";
 import { useConfirm } from "~/components/shared/ConfirmProvider";
 import { getAllSubscribers, deleteSubscriber, sendBulkEmail } from "~/server/actions/index";
+import { newsletterPreviewHtml } from "~/templates/email/newsletter";
 
 const KEY = "all-subscribers";
 const load = query(() => getAllSubscribers(), KEY);
@@ -21,9 +22,10 @@ export default function CmsSubscribers() {
   const confirm = useConfirm();
   const items = createAsync(() => load());
 
-  const [subject, setSubject] = createSignal("");
-  const [body, setBody] = createSignal("");
+  const [subject, setSubject] = createSignal<string>("");
+  const [body, setBody] = createSignal<string>("");
   const [sending, setSending] = createSignal<boolean>(false);
+  const [tab, setTab] = createSignal<"tulis" | "preview">("tulis");
 
   const activeCount = () => (items() ?? []).filter((s) => s.isActive).length;
 
@@ -56,6 +58,7 @@ export default function CmsSubscribers() {
       });
       setSubject("");
       setBody("");
+      setTab("tulis");
     } catch (err) {
       const msg = err instanceof Response ? await err.text() : "Gagal mengirim bulk email.";
       notify({ kind: "error", title: msg });
@@ -93,17 +96,54 @@ export default function CmsSubscribers() {
               />
             </div>
             <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-medium text-slate-600">
-                Isi Pesan <span class="text-rose-500">*</span>
-              </label>
-              <textarea
-                class={`${inp} resize-none`}
-                rows="6"
-                value={body()}
-                onInput={(e) => setBody(e.currentTarget.value)}
-                placeholder="Tulis isi pesan di sini..."
-                required
-              />
+              <div class="flex items-center justify-between">
+                <label class="text-xs font-medium text-slate-600">
+                  Isi Pesan <span class="text-rose-500">*</span>
+                </label>
+                <div class="flex rounded-lg border border-slate-200 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setTab("tulis")}
+                    class={`px-3 py-1 rounded-l-lg transition ${tab() === "tulis" ? "bg-emerald-600 text-white font-semibold" : "text-slate-500 hover:text-slate-700"}`}
+                  >
+                    Tulis
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTab("preview")}
+                    class={`px-3 py-1 rounded-r-lg transition ${tab() === "preview" ? "bg-emerald-600 text-white font-semibold" : "text-slate-500 hover:text-slate-700"}`}
+                  >
+                    Preview
+                  </button>
+                </div>
+              </div>
+              <Show when={tab() === "tulis"}>
+                <textarea
+                  class={`${inp} resize-none`}
+                  rows={6}
+                  value={body()}
+                  onInput={(e) => setBody(e.currentTarget.value)}
+                  placeholder="Tulis isi pesan di sini..."
+                  required
+                />
+              </Show>
+              <Show when={tab() === "preview"}>
+                <Show
+                  when={subject().trim() || body().trim()}
+                  fallback={
+                    <div class="flex h-40 items-center justify-center rounded-lg border border-dashed border-slate-200 text-xs text-slate-400">
+                      Isi subjek dan pesan untuk melihat preview.
+                    </div>
+                  }
+                >
+                  <iframe
+                    srcdoc={newsletterPreviewHtml({ subject: subject() || "(tanpa subjek)", body: body() })}
+                    class="h-[480px] w-full rounded-lg border border-slate-200"
+                    sandbox="allow-same-origin"
+                    title="Preview email"
+                  />
+                </Show>
+              </Show>
               <p class="text-xs text-slate-400">
                 Pesan akan dikirim dalam format teks biasa dan HTML ke semua <strong>{activeCount()}</strong> subscriber
                 aktif.

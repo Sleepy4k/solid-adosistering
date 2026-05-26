@@ -24,10 +24,10 @@ export function BlockCard(props: {
   readOnly?: boolean;
 }) {
   const [liveData, setLiveData] = createSignal<LiveSprayerData[]>([]);
-  const [connected, setConnected] = createSignal(false);
-  const [loading, setLoading] = createSignal(true);
-  const [error, setError] = createSignal("");
-  const [expanded, setExpanded] = createSignal(true);
+  const [connected, setConnected] = createSignal<boolean>(false);
+  const [loading, setLoading] = createSignal<boolean>(true);
+  const [error, setError] = createSignal<string>("");
+  const [expanded, setExpanded] = createSignal<boolean>(true);
   const confirm = useConfirm();
   const { notify } = useToast();
 

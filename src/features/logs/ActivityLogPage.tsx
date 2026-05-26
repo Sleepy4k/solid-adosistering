@@ -33,9 +33,9 @@ function formatDate(d: Date) {
 }
 
 export function ActivityLogView(props: { category: "auth" | "system"; title: string }) {
-  const [actionFilter, setActionFilter] = createSignal("");
-  const [page, setPage] = createSignal(0);
-  const [pageSize, setPageSize] = createSignal(10);
+  const [actionFilter, setActionFilter] = createSignal<string>("");
+  const [page, setPage] = createSignal<number>(0);
+  const [pageSize, setPageSize] = createSignal<number>(10);
   const data = createAsync<ActivityLogResult>(() =>
     loadLogs(props.category, actionFilter(), pageSize(), page() * pageSize()),
   );

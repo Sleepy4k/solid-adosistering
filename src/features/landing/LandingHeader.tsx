@@ -9,8 +9,8 @@ type LandingHeaderProps = {
 };
 
 export default function LandingHeader(props: LandingHeaderProps) {
-  const [mobileOpen, setMobileOpen] = createSignal(false);
-  const [scrolled, setScrolled] = createSignal(false);
+  const [mobileOpen, setMobileOpen] = createSignal<boolean>(false);
+  const [scrolled, setScrolled] = createSignal<boolean>(false);
   let menuRef: HTMLDivElement | undefined;
   let buttonRef: HTMLButtonElement | undefined;
 

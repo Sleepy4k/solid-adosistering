@@ -11,11 +11,11 @@ const inputCls =
 
 export function RegionModal(props: { initial?: RegionRow; onClose: () => void; onSaved: () => void }) {
   const { notify } = useToast();
-  const [name, setName] = createSignal(props.initial?.name ?? "");
-  const [desc, setDesc] = createSignal(props.initial?.description ?? "");
-  const [lat, setLat] = createSignal(props.initial?.latitude?.toString() ?? "");
-  const [lng, setLng] = createSignal(props.initial?.longitude?.toString() ?? "");
-  const [saving, setSaving] = createSignal(false);
+  const [name, setName] = createSignal<string>(props.initial?.name ?? "");
+  const [desc, setDesc] = createSignal<string>(props.initial?.description ?? "");
+  const [lat, setLat] = createSignal<string>(props.initial?.latitude?.toString() ?? "");
+  const [lng, setLng] = createSignal<string>(props.initial?.longitude?.toString() ?? "");
+  const [saving, setSaving] = createSignal<boolean>(false);
 
   const save = async (e: SubmitEvent) => {
     e.preventDefault();

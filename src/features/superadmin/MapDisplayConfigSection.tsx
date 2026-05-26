@@ -10,11 +10,11 @@ import type { MapDisplayConfig } from "~/types/map";
 export function MapDisplayConfigSection() {
   const { notify } = useToast();
   const config = createAsync(() => loadMapDisplayConfig());
-  const [keringColor, setKeringColor] = createSignal("#ef4444");
-  const [lembabColor, setLembabColor] = createSignal("#facc15");
-  const [basahColor, setBasahColor] = createSignal("#3b82f6");
-  const [initialized, setInitialized] = createSignal(false);
-  const [saving, setSaving] = createSignal(false);
+  const [keringColor, setKeringColor] = createSignal<string>("#ef4444");
+  const [lembabColor, setLembabColor] = createSignal<string>("#facc15");
+  const [basahColor, setBasahColor] = createSignal<string>("#3b82f6");
+  const [initialized, setInitialized] = createSignal<boolean>(false);
+  const [saving, setSaving] = createSignal<boolean>(false);
 
   const ensureInit = (cfg: MapDisplayConfig) => {
     if (initialized()) return;

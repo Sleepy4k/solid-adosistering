@@ -9,13 +9,13 @@ import { Eye, EyeOff } from "lucide-solid";
 export default function ResetPassword() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const [password, setPassword] = createSignal("");
-  const [confirm, setConfirm] = createSignal("");
-  const [showPw, setShowPw] = createSignal(false);
-  const [loading, setLoading] = createSignal(false);
-  const [error, setError] = createSignal("");
-  const [passwordError, setPasswordError] = createSignal("");
-  const [confirmError, setConfirmError] = createSignal("");
+  const [password, setPassword] = createSignal<string>("");
+  const [confirm, setConfirm] = createSignal<string>("");
+  const [showPw, setShowPw] = createSignal<boolean>(false);
+  const [loading, setLoading] = createSignal<boolean>(false);
+  const [error, setError] = createSignal<string>("");
+  const [passwordError, setPasswordError] = createSignal<string>("");
+  const [confirmError, setConfirmError] = createSignal<string>("");
 
   const validatePasswordDebounced = debounce((value: string) => setPasswordError(validateNewPassword(value)), 300);
   const validateConfirmDebounced = debounce(

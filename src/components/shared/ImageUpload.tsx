@@ -14,8 +14,8 @@ const inp =
 
 export function ImageUpload(props: Props) {
   const [mode, setMode] = createSignal<"url" | "file">("url");
-  const [uploading, setUploading] = createSignal(false);
-  const [uploadError, setUploadError] = createSignal("");
+  const [uploading, setUploading] = createSignal<boolean>(false);
+  const [uploadError, setUploadError] = createSignal<string>("");
 
   const switchMode = (m: "url" | "file") => {
     setMode(m);

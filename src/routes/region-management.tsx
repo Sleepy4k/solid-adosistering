@@ -31,12 +31,12 @@ export default function ManajemenRegion() {
   const { notify } = useToast();
   const confirm = useConfirm();
   const [editTarget, setEditTarget] = createSignal<RegionRow | null>(null);
-  const [showCreate, setShowCreate] = createSignal(false);
+  const [showCreate, setShowCreate] = createSignal<boolean>(false);
   const [adminTarget, setAdminTarget] = createSignal<RegionRow | null>(null);
-  const [refreshKey, setRefreshKey] = createSignal(0);
-  const [loadError, setLoadError] = createSignal("");
-  const [page, setPage] = createSignal(0);
-  const [pageSize, setPageSize] = createSignal(10);
+  const [refreshKey, setRefreshKey] = createSignal<number>(0);
+  const [loadError, setLoadError] = createSignal<string>("");
+  const [page, setPage] = createSignal<number>(0);
+  const [pageSize, setPageSize] = createSignal<number>(10);
 
   const regions = createAsync(async () => {
     void refreshKey();

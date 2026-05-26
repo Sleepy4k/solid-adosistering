@@ -13,8 +13,8 @@ const loadAdmins = query(() => getAdmins(), "admins-list");
 export function AdminAssignModal(props: { region: RegionRow; onClose: () => void; onSaved: () => void }) {
   const { notify } = useToast();
   const admins = createAsync(() => loadAdmins());
-  const [selectedAdmin, setSelectedAdmin] = createSignal("");
-  const [saving, setSaving] = createSignal(false);
+  const [selectedAdmin, setSelectedAdmin] = createSignal<string>("");
+  const [saving, setSaving] = createSignal<boolean>(false);
 
   const assignedIds = new Set(props.region.adminAssignments.map((a) => a.admin.id));
 

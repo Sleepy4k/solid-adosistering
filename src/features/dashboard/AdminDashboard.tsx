@@ -8,8 +8,8 @@ import { AdminUserSensorCard } from "./AdminUserSensorCard";
 import { MapCard } from "./MapCard";
 
 export function AdminDashboard(props: { users: AdminUserCard[]; regions: DashboardRegion[] }) {
-  const [sensorStatus, setSensorStatus] = createSignal("");
-  const [pumpStatus, setPumpStatus] = createSignal("");
+  const [sensorStatus, setSensorStatus] = createSignal<string>("");
+  const [pumpStatus, setPumpStatus] = createSignal<string>("");
 
   const filteredUsers = () => {
     let users = props.users;

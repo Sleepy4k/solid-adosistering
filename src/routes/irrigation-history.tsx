@@ -64,13 +64,13 @@ function moistureClass(status?: string) {
 }
 
 export default function RiwayatIrigasi() {
-  const [regionId, setRegionId] = createSignal("");
-  const [blockId, setBlockId] = createSignal("");
-  const [status, setStatus] = createSignal("");
-  const [mode, setMode] = createSignal("");
-  const [dateFrom, setDateFrom] = createSignal("");
-  const [dateTo, setDateTo] = createSignal("");
-  const [loadError, setLoadError] = createSignal("");
+  const [regionId, setRegionId] = createSignal<string>("");
+  const [blockId, setBlockId] = createSignal<string>("");
+  const [status, setStatus] = createSignal<string>("");
+  const [mode, setMode] = createSignal<string>("");
+  const [dateFrom, setDateFrom] = createSignal<string>("");
+  const [dateTo, setDateTo] = createSignal<string>("");
+  const [loadError, setLoadError] = createSignal<string>("");
 
   const blocks = createAsync(async () => {
     try {

@@ -94,14 +94,14 @@ function colorForIndex(index: number) {
 
 function MapConfigForm(props: { initial: MapWorkspace; onSaved: () => void }) {
   const { notify } = useToast();
-  const [lat, setLat] = createSignal(props.initial.lat);
-  const [lng, setLng] = createSignal(props.initial.lng);
-  const [zoom, setZoom] = createSignal(props.initial.zoom);
-  const [selectedRegionId, setSelectedRegionId] = createSignal(props.initial.regions[0]?.id ?? "");
-  const [selectedBlockId, setSelectedBlockId] = createSignal(props.initial.regions[0]?.blocks[0]?.id ?? "");
-  const [pointsText, setPointsText] = createSignal("");
-  const [savingConfig, setSavingConfig] = createSignal(false);
-  const [savingGeometry, setSavingGeometry] = createSignal(false);
+  const [lat, setLat] = createSignal<number>(props.initial.lat);
+  const [lng, setLng] = createSignal<number>(props.initial.lng);
+  const [zoom, setZoom] = createSignal<number>(props.initial.zoom);
+  const [selectedRegionId, setSelectedRegionId] = createSignal<string>(props.initial.regions[0]?.id ?? "");
+  const [selectedBlockId, setSelectedBlockId] = createSignal<string>(props.initial.regions[0]?.blocks[0]?.id ?? "");
+  const [pointsText, setPointsText] = createSignal<string>("");
+  const [savingConfig, setSavingConfig] = createSignal<boolean>(false);
+  const [savingGeometry, setSavingGeometry] = createSignal<boolean>(false);
 
   const selectedRegion = createMemo(
     () => props.initial.regions.find((region) => region.id === selectedRegionId()) ?? props.initial.regions[0],
@@ -265,7 +265,7 @@ function MapConfigForm(props: { initial: MapWorkspace; onSaved: () => void }) {
 }
 
 export default function PetaKonfigurasi() {
-  const [refreshKey, setRefreshKey] = createSignal(0);
+  const [refreshKey, setRefreshKey] = createSignal<number>(0);
   const workspace = createAsync(() => loadMapWorkspace(refreshKey()));
 
   return (

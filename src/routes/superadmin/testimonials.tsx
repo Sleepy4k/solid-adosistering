@@ -24,13 +24,13 @@ const inp =
 
 function TestimonialModal(props: { initial?: Item; onClose: () => void; onSaved: () => void }) {
   const { notify } = useToast();
-  const [name, setName] = createSignal(props.initial?.name ?? "");
-  const [role, setRole] = createSignal(props.initial?.role ?? "");
-  const [quote, setQuote] = createSignal(props.initial?.quote ?? "");
-  const [imageUrl, setImageUrl] = createSignal(props.initial?.imageUrl ?? "");
-  const [sortOrder, setSortOrder] = createSignal(props.initial?.sortOrder ?? 0);
-  const [isActive, setIsActive] = createSignal(props.initial?.isActive ?? true);
-  const [saving, setSaving] = createSignal(false);
+  const [name, setName] = createSignal<string>(props.initial?.name ?? "");
+  const [role, setRole] = createSignal<string>(props.initial?.role ?? "");
+  const [quote, setQuote] = createSignal<string>(props.initial?.quote ?? "");
+  const [imageUrl, setImageUrl] = createSignal<string>(props.initial?.imageUrl ?? "");
+  const [sortOrder, setSortOrder] = createSignal<number>(props.initial?.sortOrder ?? 0);
+  const [isActive, setIsActive] = createSignal<boolean>(props.initial?.isActive ?? true);
+  const [saving, setSaving] = createSignal<boolean>(false);
 
   const save = async (e: SubmitEvent) => {
     e.preventDefault();
@@ -155,7 +155,7 @@ export default function CmsTestimonials() {
   const { notify } = useToast();
   const confirm = useConfirm();
   const items = createAsync(() => load());
-  const [adding, setAdding] = createSignal(false);
+  const [adding, setAdding] = createSignal<boolean>(false);
   const [editing, setEditing] = createSignal<Item | null>(null);
 
   const handleDelete = async (item: Item) => {

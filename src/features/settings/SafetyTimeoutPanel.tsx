@@ -14,10 +14,10 @@ export function SafetyTimeoutPanel(props: {
   note?: string;
 }) {
   const { notify } = useToast();
-  const [editing, setEditing] = createSignal(false);
-  const [minVal, setMinVal] = createSignal(clampTimeout(props.initialMin));
-  const [maxVal, setMaxVal] = createSignal(clampTimeout(props.initialMax));
-  const [saving, setSaving] = createSignal(false);
+  const [editing, setEditing] = createSignal<boolean>(false);
+  const [minVal, setMinVal] = createSignal<number>(clampTimeout(props.initialMin));
+  const [maxVal, setMaxVal] = createSignal<number>(clampTimeout(props.initialMax));
+  const [saving, setSaving] = createSignal<boolean>(false);
 
   createEffect(() => {
     setMinVal(clampTimeout(props.initialMin));

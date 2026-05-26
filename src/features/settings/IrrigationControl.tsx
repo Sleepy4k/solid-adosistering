@@ -13,14 +13,14 @@ const preferenceLabels: Record<Preference, string> = {
 
 export function IrrigationControl(props: { region: SettingsRegion }) {
   const { notify } = useToast();
-  const [editing, setEditing] = createSignal(false);
-  const [dry, setDry] = createSignal(props.region.threshold?.dryMaxPercent ?? 40);
-  const [wet, setWet] = createSignal(props.region.threshold?.wetMinPercent ?? 80);
+  const [editing, setEditing] = createSignal<boolean>(false);
+  const [dry, setDry] = createSignal<number>(props.region.threshold?.dryMaxPercent ?? 40);
+  const [wet, setWet] = createSignal<number>(props.region.threshold?.wetMinPercent ?? 80);
   const [preference, setPreference] = createSignal<Preference>(props.region.threshold?.landPreference ?? "LEMBAB");
-  const [displayDry, setDisplayDry] = createSignal(props.region.threshold?.displayDryMaxPercent ?? 40);
-  const [displayMoist, setDisplayMoist] = createSignal(props.region.threshold?.displayMoistMaxPercent ?? 70);
-  const [displayWet, setDisplayWet] = createSignal(props.region.threshold?.displayWetMinPercent ?? 80);
-  const [saving, setSaving] = createSignal(false);
+  const [displayDry, setDisplayDry] = createSignal<number>(props.region.threshold?.displayDryMaxPercent ?? 40);
+  const [displayMoist, setDisplayMoist] = createSignal<number>(props.region.threshold?.displayMoistMaxPercent ?? 70);
+  const [displayWet, setDisplayWet] = createSignal<number>(props.region.threshold?.displayWetMinPercent ?? 80);
+  const [saving, setSaving] = createSignal<boolean>(false);
 
   const reset = () => {
     setDry(props.region.threshold?.dryMaxPercent ?? 40);

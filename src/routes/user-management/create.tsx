@@ -44,27 +44,27 @@ export default function TambahUser() {
   const { notify } = useToast();
   const formOptions = createAsync(() => loadFormOptions());
 
-  const [name, setName] = createSignal("");
-  const [email, setEmail] = createSignal("");
+  const [name, setName] = createSignal<string>("");
+  const [email, setEmail] = createSignal<string>("");
   const [role, setRole] = createSignal<Role>("USER");
   const [regionIds, setRegionIds] = createSignal<string[]>([]);
-  const [password, setPassword] = createSignal("");
-  const [confirmPw, setConfirmPw] = createSignal("");
-  const [showPw, setShowPw] = createSignal(false);
+  const [password, setPassword] = createSignal<string>("");
+  const [confirmPw, setConfirmPw] = createSignal<string>("");
+  const [showPw, setShowPw] = createSignal<boolean>(false);
 
-  const [whatsapp, setWhatsapp] = createSignal("");
-  const [nickname, setNickname] = createSignal("");
-  const [gender, setGender] = createSignal("");
-  const [birthDate, setBirthDate] = createSignal("");
-  const [altPhone, setAltPhone] = createSignal("");
-  const [occupation, setOccupation] = createSignal("");
-  const [domicile, setDomicile] = createSignal("");
-  const [address, setAddress] = createSignal("");
-  const [internalNotes, setInternalNotes] = createSignal("");
-  const [deviceUsername, setDeviceUsername] = createSignal("");
+  const [whatsapp, setWhatsapp] = createSignal<string>("");
+  const [nickname, setNickname] = createSignal<string>("");
+  const [gender, setGender] = createSignal<string>("");
+  const [birthDate, setBirthDate] = createSignal<string>("");
+  const [altPhone, setAltPhone] = createSignal<string>("");
+  const [occupation, setOccupation] = createSignal<string>("");
+  const [domicile, setDomicile] = createSignal<string>("");
+  const [address, setAddress] = createSignal<string>("");
+  const [internalNotes, setInternalNotes] = createSignal<string>("");
+  const [deviceUsername, setDeviceUsername] = createSignal<string>("");
 
-  const [loading, setLoading] = createSignal(false);
-  const [error, setError] = createSignal("");
+  const [loading, setLoading] = createSignal<boolean>(false);
+  const [error, setError] = createSignal<string>("");
 
   const actorRole = createMemo(() => formOptions()?.actorRole ?? "ADMIN");
   const targetRole = createMemo<Role>(() => (actorRole() === "ADMIN" ? "USER" : role()));

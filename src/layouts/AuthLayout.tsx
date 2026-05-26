@@ -8,7 +8,7 @@ const backgroundLoaders = [
 ];
 
 export function AuthLayout(props: { children: JSX.Element }) {
-  const [background, setBackground] = createSignal("");
+  const [background, setBackground] = createSignal<string>("");
 
   onMount(async () => {
     void finishProgress();

@@ -23,12 +23,12 @@ export function EditUserModal(props: {
   onSaved: () => void;
 }) {
   const { notify } = useToast();
-  const [name, setName] = createSignal(props.user.name);
-  const [email, setEmail] = createSignal(props.user.email);
+  const [name, setName] = createSignal<string>(props.user.name);
+  const [email, setEmail] = createSignal<string>(props.user.email);
   const [role, setRole] = createSignal<Role>(props.options.actorRole === "ADMIN" ? "USER" : props.user.role);
-  const [whatsapp, setWhatsapp] = createSignal(props.user.whatsapp ?? "");
-  const [regionIds, setRegionIds] = createSignal(props.user.regions.map((region) => region.id));
-  const [loading, setLoading] = createSignal(false);
+  const [whatsapp, setWhatsapp] = createSignal<string>(props.user.whatsapp ?? "");
+  const [regionIds, setRegionIds] = createSignal<string[]>(props.user.regions.map((region) => region.id));
+  const [loading, setLoading] = createSignal<boolean>(false);
 
   const targetRole = createMemo<Role>(() => (props.options.actorRole === "ADMIN" ? "USER" : role()));
   const selectedRegion = createMemo(() => regionIds()[0] ?? "");

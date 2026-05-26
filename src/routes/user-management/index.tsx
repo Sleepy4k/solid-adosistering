@@ -35,13 +35,13 @@ export default function ManajemenUser() {
   const { notify } = useToast();
   const confirm = useConfirm();
 
-  const [roleFilter, setRoleFilter] = createSignal("");
-  const [search, setSearch] = createSignal(normalizedSearchParam(params.search));
-  const [searchInput, setSearchInput] = createSignal(normalizedSearchParam(params.search));
+  const [roleFilter, setRoleFilter] = createSignal<string>("");
+  const [search, setSearch] = createSignal<string>(normalizedSearchParam(params.search));
+  const [searchInput, setSearchInput] = createSignal<string>(normalizedSearchParam(params.search));
   const [editTarget, setEditTarget] = createSignal<UserListItem | null>(null);
-  const [refreshKey, setRefreshKey] = createSignal(0);
-  const [page, setPage] = createSignal(0);
-  const [pageSize, setPageSize] = createSignal(10);
+  const [refreshKey, setRefreshKey] = createSignal<number>(0);
+  const [page, setPage] = createSignal<number>(0);
+  const [pageSize, setPageSize] = createSignal<number>(10);
 
   createEffect(() => {
     const value = normalizedSearchParam(params.search);

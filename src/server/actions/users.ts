@@ -5,6 +5,8 @@ import type { Role, Prisma } from "@prisma/client";
 import { ActivityAction, MoistureStatus } from "@prisma/client";
 import { redirect } from "@solidjs/router";
 import { prisma } from "../db/prisma";
+import { sendWelcomeUserEmail } from "../email";
+import { serverConfig } from "../config";
 import { assertAdminOrHigher, assertSuperadmin, hashPassword, type SessionUser } from "../security";
 import { getSession } from "../session";
 import { assertRegionsAssignable, displayThresholdDefaults, getScopedRegionIds, logActivity } from "./_helpers";
@@ -195,6 +197,14 @@ export async function createUserWithProfile(input: {
   }
 
   await logActivity({ actorId: session.id, action: ActivityAction.CREATE, entityType: "User", entityId: user.id });
+  sendWelcomeUserEmail({
+    recipientId: user.id,
+    to: user.email,
+    name: user.name,
+    email: user.email,
+    password: input.password,
+    loginUrl: `${serverConfig.appOrigin}/login`,
+  }).catch(() => {});
   return { ...user, apiKey };
 }
 

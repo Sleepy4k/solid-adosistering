@@ -4,14 +4,14 @@ import LandingSelect from "~/features/landing/components/LandingSelect";
 import { saveContactSubmission } from "~/server/actions/index";
 
 export default function ContactSection() {
-  const [name, setName] = createSignal("");
-  const [email, setEmail] = createSignal("");
-  const [phone, setPhone] = createSignal("");
-  const [userType, setUserType] = createSignal("");
-  const [message, setMessage] = createSignal("");
-  const [loading, setLoading] = createSignal(false);
-  const [success, setSuccess] = createSignal(false);
-  const [error, setError] = createSignal("");
+  const [name, setName] = createSignal<string>("");
+  const [email, setEmail] = createSignal<string>("");
+  const [phone, setPhone] = createSignal<string>("");
+  const [userType, setUserType] = createSignal<string>("");
+  const [message, setMessage] = createSignal<string>("");
+  const [loading, setLoading] = createSignal<boolean>(false);
+  const [success, setSuccess] = createSignal<boolean>(false);
+  const [error, setError] = createSignal<string>("");
 
   const submit = async (e: SubmitEvent) => {
     e.preventDefault();

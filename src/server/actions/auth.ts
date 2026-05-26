@@ -2,7 +2,7 @@
 
 import { ActivityAction } from "@prisma/client";
 import { prisma } from "../db/prisma";
-import { sendPasswordResetEmail } from "../email";
+import { sendLoginBlockedEmail, sendPasswordChangedEmail, sendPasswordResetEmail } from "../email";
 import { serverConfig } from "../config";
 import { checkLoginThrottle, clearLoginThrottle, registerLoginFailure } from "../loginRateLimit";
 import { hashPassword, hashToken, newOpaqueToken, verifyPassword } from "../security";
@@ -28,7 +28,14 @@ export async function login(input: { email: string; password: string }) {
   const valid = await verifyPassword(input.password, user.passwordHash);
   if (!valid) {
     const result = registerLoginFailure(email);
-    throw result.blocked ? cooldownResponse(result.retryAfterSec) : invalidCredentialsResponse(result.remaining);
+    if (result.blocked) {
+      const mins = Math.ceil(result.retryAfterSec / 60);
+      sendLoginBlockedEmail({ recipientId: user.id, to: user.email, userName: user.name, cooldownMinutes: mins }).catch(
+        () => {},
+      );
+      throw cooldownResponse(result.retryAfterSec);
+    }
+    throw invalidCredentialsResponse(result.remaining);
   }
 
   clearLoginThrottle(email);
@@ -89,6 +96,10 @@ export async function completePasswordReset(input: { token: string; newPassword:
   if (!reset || reset.usedAt || reset.expiresAt < new Date())
     throw new Response("Token tidak valid atau sudah kedaluwarsa", { status: 400 });
 
+  const resetUser = await prisma.user.findUnique({
+    where: { id: reset.userId },
+    select: { id: true, name: true, email: true },
+  });
   const newHash = await hashPassword(input.newPassword);
   await prisma.$transaction([
     prisma.user.update({ where: { id: reset.userId }, data: { passwordHash: newHash } }),
@@ -100,5 +111,10 @@ export async function completePasswordReset(input: { token: string; newPassword:
     entityType: "User",
     entityId: reset.userId,
   });
+  if (resetUser) {
+    sendPasswordChangedEmail({ recipientId: resetUser.id, to: resetUser.email, userName: resetUser.name }).catch(
+      () => {},
+    );
+  }
   return { ok: true };
 }

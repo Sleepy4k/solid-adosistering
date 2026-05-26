@@ -12,8 +12,8 @@ export function SelectSearch(props: {
   class?: string;
   onChange: (value: string) => void;
 }) {
-  const [open, setOpen] = createSignal(false);
-  const [query, setQuery] = createSignal("");
+  const [open, setOpen] = createSignal<boolean>(false);
+  const [query, setQuery] = createSignal<string>("");
   let containerRef: HTMLDivElement | undefined;
   let inputRef: HTMLInputElement | undefined;
 

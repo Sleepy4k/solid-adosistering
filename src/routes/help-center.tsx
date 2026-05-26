@@ -180,7 +180,7 @@ const HELP_BY_ROLE: Record<Role, HelpItem[]> = {
 };
 
 function AccordionItem(props: HelpItem & { index: number }) {
-  const [open, setOpen] = createSignal(props.index === 0);
+  const [open, setOpen] = createSignal<boolean>(props.index === 0);
   return (
     <section class="border-b border-gray-100 last:border-b-0">
       <button

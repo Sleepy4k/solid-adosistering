@@ -82,10 +82,10 @@ export function LeafletMap(props: {
   let markerLayer: LayerGroup | undefined;
   let polygonLayer: LayerGroup | undefined;
 
-  const [ready, setReady] = createSignal(false);
+  const [ready, setReady] = createSignal<boolean>(false);
   const [tileType, setTileType] = createSignal<"satellite" | "standard">("satellite");
-  const [showPolygons, setShowPolygons] = createSignal(true);
-  const [error, setError] = createSignal("");
+  const [showPolygons, setShowPolygons] = createSignal<boolean>(true);
+  const [error, setError] = createSignal<string>("");
 
   const redrawOverlays = () => {
     if (!L || !map || !markerLayer || !polygonLayer) return;

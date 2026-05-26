@@ -205,8 +205,8 @@ function toMessage(error: unknown) {
 export default function Statistik() {
   const [range, setRange] = createSignal<Range>("today");
   const [dataMode, setDataMode] = createSignal<DataMode>("raw");
-  const [regionId, setRegionId] = createSignal("");
-  const [loadError, setLoadError] = createSignal("");
+  const [regionId, setRegionId] = createSignal<string>("");
+  const [loadError, setLoadError] = createSignal<string>("");
 
   const regions = createAsync(() => loadRegions());
 

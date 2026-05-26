@@ -25,15 +25,15 @@ export default function Login() {
   createAsync(() => checkLoginSession());
 
   const config = useWebConfig();
-  const [email, setEmail] = createSignal("");
-  const [password, setPassword] = createSignal("");
-  const [showPw, setShowPw] = createSignal(false);
-  const [loading, setLoading] = createSignal(false);
-  const [error, setError] = createSignal("");
-  const [emailError, setEmailError] = createSignal("");
-  const [passwordError, setPasswordError] = createSignal("");
-  const [cooldownUntil, setCooldownUntil] = createSignal(0);
-  const [nowTs, setNowTs] = createSignal(Date.now());
+  const [email, setEmail] = createSignal<string>("");
+  const [password, setPassword] = createSignal<string>("");
+  const [showPw, setShowPw] = createSignal<boolean>(false);
+  const [loading, setLoading] = createSignal<boolean>(false);
+  const [error, setError] = createSignal<string>("");
+  const [emailError, setEmailError] = createSignal<string>("");
+  const [passwordError, setPasswordError] = createSignal<string>("");
+  const [cooldownUntil, setCooldownUntil] = createSignal<number>(0);
+  const [nowTs, setNowTs] = createSignal<number>(Date.now());
   const [params] = useSearchParams();
   const navigate = useNavigate();
 

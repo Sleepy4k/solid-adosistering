@@ -6,7 +6,7 @@ import { RegionSelector } from "./RegionSelector";
 import type { AdminSettingsData } from "./types";
 
 export function AdminSettings(props: { settings: AdminSettingsData }) {
-  const [selectedRegionId, setSelectedRegionId] = createSignal(props.settings.regions[0]?.id ?? "");
+  const [selectedRegionId, setSelectedRegionId] = createSignal<string>(props.settings.regions[0]?.id ?? "");
   const selectedRegion = createMemo(
     () => props.settings.regions.find((region) => region.id === selectedRegionId()) ?? props.settings.regions[0],
   );

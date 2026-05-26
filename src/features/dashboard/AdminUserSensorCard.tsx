@@ -12,9 +12,9 @@ import { ROUTES } from "~/constants/routes";
 
 export function AdminUserSensorCard(props: { user: AdminUserCard }) {
   const [allLive, setAllLive] = createSignal<Map<string, LiveSprayerData[]>>(new Map());
-  const [loading, setLoading] = createSignal(props.user.sprayersByBlock.length > 0);
-  const [error, setError] = createSignal("");
-  const [menuOpen, setMenuOpen] = createSignal(false);
+  const [loading, setLoading] = createSignal<boolean>(props.user.sprayersByBlock.length > 0);
+  const [error, setError] = createSignal<string>("");
+  const [menuOpen, setMenuOpen] = createSignal<boolean>(false);
   const [lastSeen, setLastSeen] = createSignal<Date | null>(null);
 
   onMount(() => {

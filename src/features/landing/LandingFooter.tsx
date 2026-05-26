@@ -52,7 +52,7 @@ function SocialIcon(props: { type: "instagram" | "youtube" | "tiktok" }) {
 
 export default function LandingFooter(props: LandingFooterProps) {
   const year = new Date().getFullYear();
-  const [newsletterEmail, setNewsletterEmail] = createSignal("");
+  const [newsletterEmail, setNewsletterEmail] = createSignal<string>("");
   const [newsletterState, setNewsletterState] = createSignal<"idle" | "loading" | "success" | "error">("idle");
   let inputRef: HTMLInputElement | undefined;
 

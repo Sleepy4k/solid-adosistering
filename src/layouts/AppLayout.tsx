@@ -28,8 +28,8 @@ function RouterProgress() {
 
 export default function AppShell(props: { children: JSX.Element }) {
   const user = createAsync(() => getUser());
-  const [menuOpen, setMenuOpen] = createSignal(false);
-  const [collapsed, setCollapsed] = createSignal(false);
+  const [menuOpen, setMenuOpen] = createSignal<boolean>(false);
+  const [collapsed, setCollapsed] = createSignal<boolean>(false);
 
   return (
     <div class="min-h-screen bg-gray-50">

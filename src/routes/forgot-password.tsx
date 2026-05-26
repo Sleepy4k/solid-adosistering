@@ -14,11 +14,11 @@ export const route = { prerender: true };
 
 export default function ForgotPassword() {
   const config = useWebConfig();
-  const [email, setEmail] = createSignal("");
-  const [loading, setLoading] = createSignal(false);
-  const [sent, setSent] = createSignal(false);
-  const [error, setError] = createSignal("");
-  const [emailError, setEmailError] = createSignal("");
+  const [email, setEmail] = createSignal<string>("");
+  const [loading, setLoading] = createSignal<boolean>(false);
+  const [sent, setSent] = createSignal<boolean>(false);
+  const [error, setError] = createSignal<string>("");
+  const [emailError, setEmailError] = createSignal<string>("");
 
   const validateEmailDebounced = debounce((value: string) => setEmailError(validateEmail(value)), 300);
   onCleanup(() => validateEmailDebounced.cancel());

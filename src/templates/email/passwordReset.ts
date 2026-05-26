@@ -1,18 +1,28 @@
+import { baseEmailTemplate } from "./base";
+
 export function passwordResetTemplate(resetUrl: string) {
-  return {
-    subject: "Reset password Adosistering",
-    text: `Buka tautan ini untuk reset password: ${resetUrl}\n\nTautan berlaku 30 menit.`,
-    html: `
-      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#1f2937">
-        <h1 style="font-size:20px;margin:0 0 12px;color:#186D3C">Reset Password Adosistering</h1>
-        <p>Klik tombol berikut untuk membuat password baru.</p>
-        <p>
-          <a href="${resetUrl}" style="display:inline-block;background:#67B744;color:#fff;text-decoration:none;padding:10px 16px;border-radius:10px;font-weight:700">
-            Reset Password
-          </a>
-        </p>
-        <p style="font-size:13px;color:#6b7280">Tautan berlaku 30 menit. Abaikan email ini jika Anda tidak meminta reset password.</p>
-      </div>
-    `,
-  };
+  const subject = "Reset Password Adosistering";
+  const bodyHtml = `
+    <p style="margin:0 0 16px;font-size:15px;color:#374151">Halo,</p>
+    <p style="margin:0 0 16px;font-size:15px;color:#374151">
+      Kami menerima permintaan untuk mereset password akun Adosistering Anda.
+      Klik tombol di bawah untuk membuat password baru.
+    </p>
+    <div style="text-align:center;margin:28px 0">
+      <a href="${resetUrl}"
+         style="display:inline-block;background:#186D3C;color:#fff;text-decoration:none;padding:14px 32px;border-radius:8px;font-weight:700;font-size:15px">
+        Reset Password
+      </a>
+    </div>
+    <p style="margin:0 0 8px;font-size:13px;color:#6b7280">
+      Atau salin tautan berikut ke browser Anda:
+    </p>
+    <p style="margin:0 0 16px;font-size:12px;color:#186D3C;word-break:break-all">${resetUrl}</p>
+    <p style="margin:0;font-size:13px;color:#6b7280">
+      Tautan ini berlaku selama <strong>30 menit</strong>. Abaikan email ini jika Anda tidak meminta reset password.
+    </p>
+  `;
+  const bodyText = `Halo,\n\nKami menerima permintaan reset password akun Adosistering Anda.\n\nBuka tautan berikut untuk membuat password baru:\n${resetUrl}\n\nTautan berlaku 30 menit. Abaikan jika Anda tidak meminta reset password.`;
+
+  return baseEmailTemplate({ subject, bodyHtml, bodyText });
 }

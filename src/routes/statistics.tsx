@@ -1,6 +1,6 @@
-import { cache, createAsync } from "@solidjs/router";
+import { query, createAsync } from "@solidjs/router";
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, Suspense } from "solid-js";
-import { BarChart2, Activity } from "lucide-solid";
+import { ChartBar, Activity } from "lucide-solid";
 import { PageMeta } from "~/components/shared/PageMeta";
 import { getMyRegions, getStatistics } from "~/server/actions/index";
 import { finishProgress, startProgress } from "~/lib/client/progress";
@@ -12,11 +12,11 @@ type Range = "today" | "7d" | "30d";
 type DataMode = "raw" | "smooth";
 type Reading = Awaited<ReturnType<typeof getStatistics>>["readings"][number];
 
-const loadStats = cache(
+const loadStats = query(
   (range: Range, regionId: string) => getStatistics({ range, regionId: regionId || undefined }),
   "statistics",
 );
-const loadRegions = cache(() => getMyRegions(), "my-regions");
+const loadRegions = query(() => getMyRegions(), "my-regions");
 export const route = { preload: () => loadStats("today", "") };
 
 function StatBadge(props: { label: string; value: string; sub?: string; accent?: boolean }) {
@@ -286,7 +286,7 @@ export default function Statistik() {
                 placeholder="Semua Region"
                 options={[
                   { value: "", label: "Semua Region" },
-                  ...((regions() ?? []).map((r) => ({ value: r.id, label: r.name }))),
+                  ...(regions() ?? []).map((r) => ({ value: r.id, label: r.name })),
                 ]}
                 onChange={setRegionId}
               />
@@ -298,7 +298,7 @@ export default function Statistik() {
               class={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium ${dataMode() === "raw" ? "bg-emerald-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
               onClick={() => setDataMode("raw")}
             >
-              <BarChart2 size={16} />
+              <ChartBar size={16} />
               Data Mentah
             </button>
             <button

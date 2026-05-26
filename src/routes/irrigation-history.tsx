@@ -1,15 +1,15 @@
-import { cache, createAsync } from "@solidjs/router";
+import { query, createAsync } from "@solidjs/router";
 import { createSignal, ErrorBoundary, For, Show, Suspense } from "solid-js";
 import { PageMeta } from "~/components/shared/PageMeta";
-import { CalendarDays, Clock3, Droplets, Gauge, RotateCcw, Waves } from "lucide-solid";
+import { CalendarDays, Clock3, Droplets, Gauge, RotateCcw, WavesHorizontal } from "lucide-solid";
 import { getIrrigationHistory, getMyBlocks, getMyRegions } from "~/server/actions/index";
 import { finishProgress, startProgress } from "~/lib/client/progress";
 import { SkCard } from "~/components/shared/Skeleton";
 import { SelectSearch } from "~/components/ui/SelectSearch";
 
-const loadBlocks = cache(() => getMyBlocks(), "my-blocks");
-const loadRegions = cache(() => getMyRegions(), "my-regions");
-const loadHistory = cache(
+const loadBlocks = query(() => getMyBlocks(), "my-blocks");
+const loadRegions = query(() => getMyRegions(), "my-regions");
+const loadHistory = query(
   (regionId: string, blockId: string, status: string, mode: string, dateFrom: string, dateTo: string) =>
     getIrrigationHistory({
       regionId: regionId || undefined,
@@ -146,7 +146,7 @@ export default function RiwayatIrigasi() {
                 placeholder="Semua Region"
                 options={[
                   { value: "", label: "Semua Region" },
-                  ...((regions() ?? []).map((r) => ({ value: r.id, label: r.name }))),
+                  ...(regions() ?? []).map((r) => ({ value: r.id, label: r.name })),
                 ]}
                 onChange={(value) => {
                   setRegionId(value);
@@ -158,7 +158,11 @@ export default function RiwayatIrigasi() {
 
           <div class="flex flex-col gap-1.5">
             <label class="text-xs font-medium text-[#4F4F4F]">Nama Lahan</label>
-            <Suspense fallback={<div class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-400">Memuat...</div>}>
+            <Suspense
+              fallback={
+                <div class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-400">Memuat...</div>
+              }
+            >
               <SelectSearch
                 value={blockId()}
                 placeholder="Pilih nama lahan"
@@ -292,7 +296,7 @@ export default function RiwayatIrigasi() {
                           <div class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
                             <div class="rounded-xl border border-[#DDECD7] bg-[#F7FBF5] p-4">
                               <p class="mb-1 inline-flex items-center gap-2 text-xs font-medium text-[#6B7280]">
-                                <Waves size={15} /> Kelembaban
+                                <WavesHorizontal size={15} /> Kelembaban
                               </p>
                               <p class={`text-sm font-semibold ${moistureClass(event.sensor?.moistureStatus)}`}>
                                 {event.sensor?.moisturePercent?.toFixed(2) ?? "0.00"}%
@@ -320,7 +324,9 @@ export default function RiwayatIrigasi() {
                               <p class="mb-1 inline-flex items-center gap-2 text-xs font-medium text-[#6B7280]">
                                 <Clock3 size={15} /> Durasi
                               </p>
-                              <p class="text-sm font-semibold text-[#4F4F4F]">{formatDuration(event.durationSeconds)}</p>
+                              <p class="text-sm font-semibold text-[#4F4F4F]">
+                                {formatDuration(event.durationSeconds)}
+                              </p>
                             </div>
                             <div class="rounded-xl border border-[#DDECD7] bg-[#F7FBF5] p-4 sm:col-span-2 xl:col-span-2">
                               <p class="mb-1 inline-flex items-center gap-2 text-xs font-medium text-[#6B7280]">

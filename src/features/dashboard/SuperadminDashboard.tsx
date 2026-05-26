@@ -6,18 +6,7 @@ import { Card, CardHeader } from "~/components/ui/Card";
 import { MetricCard } from "~/components/ui/MetricCard";
 import { LeafletMap, type LeafletRegionMarker } from "~/components/shared/LeafletMap";
 import type { SuperadminSummary } from "./DashboardTypes";
-
-function syncTone(status: string): "success" | "warning" | "danger" {
-  if (status === "SYNCED") return "success";
-  if (status === "FAILED") return "danger";
-  return "warning";
-}
-
-function syncLabel(status: string) {
-  if (status === "SYNCED") return "Tersinkron";
-  if (status === "FAILED") return "Gagal";
-  return "Menunggu";
-}
+import { syncLabel, syncTone } from "./helpers";
 
 export function SuperadminDashboard(props: { summary: SuperadminSummary }) {
   const summary = () => props.summary;

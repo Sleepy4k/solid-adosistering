@@ -15,7 +15,6 @@ import "./app.css";
 function RootLayout(props: { children: JSX.Element }) {
   const location = useLocation();
 
-  // "/" exact match is landing page, other public routes are auth pages
   const isPublic = () =>
     PUBLIC_ROUTES.some((r) => {
       if (r === "/") return location.pathname === "/";

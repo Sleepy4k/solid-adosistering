@@ -1,4 +1,4 @@
-import { cache, createAsync } from "@solidjs/router";
+import { query, createAsync } from "@solidjs/router";
 import type { ActivityAction } from "@prisma/client";
 import { createSignal, For, Show, Suspense } from "solid-js";
 import { RotateCcw } from "lucide-solid";
@@ -9,13 +9,13 @@ import ActionBadge from "~/features/logs/ActionBadge";
 import { getActivityLogs, type ActivityLogItem } from "~/server/actions/index";
 import { ACTION_LABELS, AUTH_ACTIONS } from "~/constants/activity-log";
 
-const loadLogs = cache(
+type ActivityLogResult = Awaited<ReturnType<typeof getActivityLogs>>;
+
+const loadLogs = query(
   (category: "auth" | "system", action: string, pageSize: number, offset: number) =>
     getActivityLogs({ category, action: action || undefined, limit: pageSize, offset }),
   "activity-logs",
 );
-
-type ActivityLogResult = Awaited<ReturnType<typeof getActivityLogs>>;
 
 export function preloadActivityLogs(category: "auth" | "system") {
   return loadLogs(category, "", 10, 0);
@@ -36,7 +36,10 @@ export function ActivityLogView(props: { category: "auth" | "system"; title: str
   const [actionFilter, setActionFilter] = createSignal("");
   const [page, setPage] = createSignal(0);
   const [pageSize, setPageSize] = createSignal(10);
-  const data = createAsync<ActivityLogResult>(() => loadLogs(props.category, actionFilter(), pageSize(), page() * pageSize()));
+  const data = createAsync<ActivityLogResult>(() =>
+    loadLogs(props.category, actionFilter(), pageSize(), page() * pageSize()),
+  );
+
   const actionOptions = () => {
     const entries = Object.entries(ACTION_LABELS) as [ActivityAction, string][];
     const filtered =

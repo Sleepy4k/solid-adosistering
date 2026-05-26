@@ -1,22 +1,22 @@
-import { cache, redirect } from "@solidjs/router";
+import { query, redirect } from "@solidjs/router";
 import { getSession } from "./session";
 import type { Role } from "~/lib/shared/irrigation";
 
 export type { SessionUser } from "./session";
 
-export const getUser = cache(async () => {
+export const getUser = query(async () => {
   "use server";
   const session = await getSession();
   if (!session) throw redirect("/login");
   return session;
 }, "current-user");
 
-export const getOptionalUser = cache(async () => {
+export const getOptionalUser = query(async () => {
   "use server";
   return await getSession();
 }, "optional-user");
 
-export const redirectIfLoggedIn = cache(async () => {
+export const redirectIfLoggedIn = query(async () => {
   "use server";
   const session = await getSession();
   if (session) throw redirect("/dashboard");

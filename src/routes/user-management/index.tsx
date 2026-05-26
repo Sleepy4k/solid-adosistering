@@ -1,207 +1,29 @@
-import { cache, createAsync, useNavigate, useSearchParams } from "@solidjs/router";
-import { createEffect, createMemo, createSignal, For, Show, Suspense } from "solid-js";
-import { Plus } from "lucide-solid";
+import { query, createAsync, useNavigate, useSearchParams } from "@solidjs/router";
+import { createEffect, createMemo, createSignal, For, lazy, Show, Suspense } from "solid-js";
+import { Plus, RotateCcw } from "lucide-solid";
 import { PageMeta } from "~/components/shared/PageMeta";
-import { ModalFrame } from "~/components/shared/ModalFrame";
-import resetIcon from "~/assets/icons/reset.svg?url";
 import { PageSizeSelect, TablePagination } from "~/components/ui/TablePagination";
-import {
-  deleteUser,
-  getUserFormOptions,
-  getUsers,
-  setUserActive,
-  updateUserById,
-  type UserListItem,
-} from "~/server/actions/index";
+import { deleteUser, getUserFormOptions, getUsers, setUserActive } from "~/server/actions/index";
 import { SkTableRow } from "~/components/shared/Skeleton";
 import { useToast } from "~/components/shared/ToastProvider";
 import { useConfirm } from "~/components/shared/ConfirmProvider";
 import { SelectSearch } from "~/components/ui/SelectSearch";
+import { roleBadge, formatDate, regionLabel } from "~/features/user-management/utils";
 import type { Role } from "@prisma/client";
+import type { UserListItem } from "~/types/users";
 
 type UserFormOptions = Awaited<ReturnType<typeof getUserFormOptions>>;
 
-const loadUsers = cache((role: string, search: string, refreshKey: number) => {
+const EditUserModal = lazy(() =>
+  import("~/features/user-management/EditUserModal").then((m) => ({ default: m.EditUserModal })),
+);
+
+const loadUsers = query((role: string, search: string, refreshKey: number) => {
   void refreshKey;
   return getUsers({ role: (role as Role) || undefined, search: search || undefined });
 }, "users-list");
-const loadFormOptions = cache(() => getUserFormOptions(), "users-form-options");
+const loadFormOptions = query(() => getUserFormOptions(), "users-form-options");
 export const route = { preload: () => Promise.all([loadUsers("", "", 0), loadFormOptions()]) };
-
-function roleBadge(role: Role) {
-  const map: Record<Role, { label: string; cls: string }> = {
-    SUPERADMIN: { label: "Superadmin", cls: "bg-violet-100 text-violet-700" },
-    ADMIN: { label: "Admin", cls: "bg-sky-100 text-sky-700" },
-    USER: { label: "User", cls: "bg-slate-100 text-slate-700" },
-  };
-  const { label, cls } = map[role];
-  return <span class={`rounded-full px-2 py-0.5 text-xs font-semibold ${cls}`}>{label}</span>;
-}
-
-function formatDate(d: Date) {
-  return new Date(d).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
-}
-
-function regionLabel(regions: UserListItem["regions"]) {
-  return regions.length > 0 ? regions.map((region) => region.name).join(", ") : "Belum di-assign";
-}
-
-function EditUserModal(props: {
-  user: UserListItem;
-  options: UserFormOptions;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const { notify } = useToast();
-  const [name, setName] = createSignal(props.user.name);
-  const [email, setEmail] = createSignal(props.user.email);
-  const [role, setRole] = createSignal<Role>(props.options.actorRole === "ADMIN" ? "USER" : props.user.role);
-  const [whatsapp, setWhatsapp] = createSignal(props.user.whatsapp ?? "");
-  const [regionIds, setRegionIds] = createSignal(props.user.regions.map((region) => region.id));
-  const [loading, setLoading] = createSignal(false);
-
-  const targetRole = createMemo<Role>(() => (props.options.actorRole === "ADMIN" ? "USER" : role()));
-  const selectedRegion = createMemo(() => regionIds()[0] ?? "");
-
-  const setSingleRegion = (regionId: string) => setRegionIds(regionId ? [regionId] : []);
-  const toggleRegion = (regionId: string) => {
-    setRegionIds((ids) => (ids.includes(regionId) ? ids.filter((id) => id !== regionId) : [...ids, regionId]));
-  };
-
-  const validateAssignment = () => {
-    if (targetRole() === "USER" && regionIds().length !== 1) return "User wajib di-assign tepat 1 region.";
-    if (targetRole() === "ADMIN" && regionIds().length === 0) return "Admin wajib memiliki minimal 1 region.";
-    return "";
-  };
-
-  const save = async (e: SubmitEvent) => {
-    e.preventDefault();
-    const error = validateAssignment();
-    if (error) {
-      notify({ kind: "error", title: error });
-      return;
-    }
-    setLoading(true);
-    try {
-      await updateUserById({
-        id: props.user.id,
-        name: name(),
-        email: email(),
-        role: targetRole(),
-        whatsapp: whatsapp(),
-        regionIds: targetRole() === "SUPERADMIN" ? [] : regionIds(),
-      });
-      notify({ kind: "success", title: "Data pengguna berhasil diperbarui" });
-      props.onSaved();
-      props.onClose();
-    } catch (err) {
-      const msg = err instanceof Response ? await err.text() : "Gagal memperbarui pengguna";
-      notify({ kind: "error", title: msg });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <ModalFrame onClose={props.onClose} panelClass="max-h-[calc(100dvh-2rem)] max-w-2xl overflow-y-auto p-5 sm:p-6">
-      <>
-        <h2 class="mb-5 text-lg font-semibold text-slate-900">Edit Pengguna</h2>
-        <form onSubmit={save} class="grid gap-4 sm:grid-cols-2">
-          <div class="sm:col-span-2">
-            <label class="mb-1 block text-xs font-medium text-slate-600">Nama Lengkap</label>
-            <input value={name()} onInput={(e) => setName(e.currentTarget.value)} class="input-field w-full" required />
-          </div>
-          <div>
-            <label class="mb-1 block text-xs font-medium text-slate-600">Email</label>
-            <input
-              type="email"
-              value={email()}
-              onInput={(e) => setEmail(e.currentTarget.value)}
-              class="input-field w-full"
-              required
-            />
-          </div>
-          <div>
-            <label class="mb-1 block text-xs font-medium text-slate-600">WhatsApp</label>
-            <input value={whatsapp()} onInput={(e) => setWhatsapp(e.currentTarget.value)} class="input-field w-full" />
-          </div>
-
-          <Show
-            when={props.options.actorRole === "SUPERADMIN"}
-            fallback={
-              <div class="sm:col-span-2">
-                <label class="mb-1 block text-xs font-medium text-slate-600">Role</label>
-                <div class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
-                  User
-                </div>
-              </div>
-            }
-          >
-            <div class="sm:col-span-2">
-              <label class="mb-1 block text-xs font-medium text-slate-600">Role</label>
-              <SelectSearch
-                value={role()}
-                options={[
-                  { value: "USER", label: "User" },
-                  { value: "ADMIN", label: "Admin" },
-                  { value: "SUPERADMIN", label: "Superadmin" },
-                ]}
-                onChange={(value) => setRole(value as Role)}
-              />
-            </div>
-          </Show>
-
-          <Show when={targetRole() !== "SUPERADMIN"}>
-            <div class="sm:col-span-2">
-              <label class="mb-2 block text-xs font-medium text-slate-600">
-                Region {targetRole() === "USER" ? "(pilih 1)" : "(boleh lebih dari 1)"}
-              </label>
-              <Show
-                when={targetRole() === "ADMIN"}
-                fallback={
-                  <SelectSearch
-                    value={selectedRegion()}
-                    placeholder="Pilih region..."
-                    options={[
-                      { value: "", label: "Pilih region..." },
-                      ...props.options.regions.map((region) => ({ value: region.id, label: region.name })),
-                    ]}
-                    onChange={setSingleRegion}
-                  />
-                }
-              >
-                <div class="grid gap-2 rounded-xl border border-slate-200 p-3 sm:grid-cols-2">
-                  <For each={props.options.regions}>
-                    {(region) => (
-                      <label class="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-700 hover:bg-slate-50">
-                        <input
-                          type="checkbox"
-                          checked={regionIds().includes(region.id)}
-                          onChange={() => toggleRegion(region.id)}
-                          class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                        />
-                        {region.name}
-                      </label>
-                    )}
-                  </For>
-                </div>
-              </Show>
-            </div>
-          </Show>
-
-          <div class="flex justify-end gap-3 sm:col-span-2">
-            <button type="button" class="btn-ghost" onClick={props.onClose}>
-              Batal
-            </button>
-            <button type="submit" disabled={loading()} class="btn-primary">
-              {loading() ? "Menyimpan..." : "Simpan"}
-            </button>
-          </div>
-        </form>
-      </>
-    </ModalFrame>
-  );
-}
 
 function normalizedSearchParam(value: unknown) {
   return typeof value === "string" ? value : "";
@@ -230,9 +52,7 @@ export default function ManajemenUser() {
   });
 
   const formOptions = createAsync(() => loadFormOptions());
-  const users = createAsync(() => {
-    return loadUsers(roleFilter(), search(), refreshKey());
-  });
+  const users = createAsync(() => loadUsers(roleFilter(), search(), refreshKey()));
   const userRows = createMemo(() => users() ?? []);
   const pagedUsers = createMemo(() => userRows().slice(page() * pageSize(), (page() + 1) * pageSize()));
 
@@ -358,7 +178,7 @@ export default function ManajemenUser() {
             onClick={resetFilters}
             class="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
           >
-            <img src={resetIcon} alt="" class="h-4 w-4" aria-hidden="true" decoding="async" loading="lazy" />
+            <RotateCcw size={16} aria-hidden="true" />
             Reset
           </button>
         </div>
@@ -451,21 +271,11 @@ export default function ManajemenUser() {
       <Show when={editTarget() && formOptions()}>
         <EditUserModal
           user={editTarget()!}
-          options={formOptions()!}
+          options={formOptions()! as UserFormOptions}
           onClose={() => setEditTarget(null)}
           onSaved={() => setRefreshKey((k) => k + 1)}
         />
       </Show>
-
-      <style>{`
-        .input-field { border-radius: 0.625rem; border: 1px solid #e2e8f0; padding: 0.5rem 0.75rem; font-size: 0.875rem; outline: none; transition: border-color 150ms, box-shadow 150ms; }
-        .input-field:focus { border-color: #10b981; box-shadow: 0 0 0 3px #10b98133; }
-        .btn-primary { background: #059669; color: #fff; font-size: 0.875rem; font-weight: 600; padding: 0.5rem 1.25rem; border-radius: 0.625rem; transition: background 150ms; }
-        .btn-primary:hover { background: #047857; }
-        .btn-primary:disabled { opacity: 0.6; }
-        .btn-ghost { border: 1px solid #e2e8f0; color: #374151; font-size: 0.875rem; font-weight: 500; padding: 0.5rem 1rem; border-radius: 0.625rem; transition: background 150ms; }
-        .btn-ghost:hover { background: #f8fafc; }
-      `}</style>
     </>
   );
 }

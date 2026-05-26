@@ -32,9 +32,7 @@ export default function FieldInsightSection() {
                   <div>
                     <h3 class="text-xl font-bold text-neutral-900 sm:text-2xl">{item.name}</h3>
                     <p class="mt-0.5 text-sm text-neutral-400 sm:text-base">{item.role}</p>
-                    <p class="mt-3 text-sm leading-relaxed text-neutral-600 sm:text-base">
-                      &ldquo;{item.quote}&rdquo;
-                    </p>
+                    <p class="mt-3 text-sm leading-relaxed text-neutral-600 sm:text-base">&ldquo;{item.quote}&rdquo;</p>
                   </div>
                 </div>
               </div>

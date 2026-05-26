@@ -1,4 +1,4 @@
-import { MoreVertical } from "lucide-solid";
+import { EllipsisVertical } from "lucide-solid";
 import { A } from "@solidjs/router";
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
 import { Badge } from "~/components/ui/Badge";
@@ -113,7 +113,7 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
             aria-label="Menu pengguna"
             onClick={() => setMenuOpen((value) => !value)}
           >
-            <MoreVertical size={20} />
+            <EllipsisVertical size={20} />
           </button>
           <Show when={menuOpen()}>
             <div class="absolute right-0 top-8 z-20 w-44 rounded-xl border border-gray-200 bg-white py-2 text-sm shadow-lg">

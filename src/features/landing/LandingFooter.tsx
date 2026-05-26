@@ -9,7 +9,15 @@ type LandingFooterProps = {
 function SocialIcon(props: { type: "instagram" | "youtube" | "tiktok" }) {
   if (props.type === "instagram") {
     return (
-      <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg
+        class="h-5 w-5"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
         <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
         <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
         <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
@@ -26,7 +34,15 @@ function SocialIcon(props: { type: "instagram" | "youtube" | "tiktok" }) {
   }
 
   return (
-    <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <svg
+      class="h-5 w-5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
       <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19.13C5.12 19.56 12 19.56 12 19.56s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.43z" />
       <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02" />
     </svg>
@@ -57,11 +73,17 @@ export default function LandingFooter(props: LandingFooterProps) {
       <div class="container mx-auto max-w-screen-xl px-4 pb-14 pt-16 sm:px-6 lg:px-12 xl:px-16 md:pt-20">
         <div class="grid gap-10 lg:grid-cols-2 lg:gap-16">
           <h2 class="text-3xl font-bold leading-tight text-white sm:text-4xl md:text-5xl lg:text-[3.5rem]">
-            Mari Terhubung &amp;<br />Berkolaborasi
+            Mari Terhubung &amp;
+            <br />
+            Berkolaborasi
           </h2>
           <div class="lg:text-right">
             <p class="mb-4 text-sm font-semibold text-white sm:text-base">Dapatkan Informasi Terkini</p>
-            <form class="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center" noValidate onSubmit={submitNewsletter}>
+            <form
+              class="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center"
+              noValidate
+              onSubmit={submitNewsletter}
+            >
               <input
                 ref={inputRef}
                 type="email"
@@ -120,7 +142,9 @@ export default function LandingFooter(props: LandingFooterProps) {
                 </a>
               ))}
             </div>
-            <p class="text-xs text-white/40">&copy; {year} {props.config.projectName}. All Right Reserved</p>
+            <p class="text-xs text-white/40">
+              &copy; {year} {props.config.projectName}. All Right Reserved
+            </p>
           </div>
 
           <div>

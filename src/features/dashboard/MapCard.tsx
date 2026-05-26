@@ -1,47 +1,14 @@
 import { Map } from "lucide-solid";
 import { createEffect, createSignal, onCleanup } from "solid-js";
-import { cache, createAsync } from "@solidjs/router";
+import { query, createAsync } from "@solidjs/router";
 import { Card, CardHeader } from "~/components/ui/Card";
 import { LeafletMap, type LeafletPolygon, type LeafletRegionMarker } from "~/components/shared/LeafletMap";
 import { subscribeToBlock } from "~/lib/client/firebaseClient";
 import { getMapDisplayConfig } from "~/server/actions/index";
 import type { DashboardRegion } from "./DashboardTypes";
+import { colorForIndex, colorForStatus, pointsFromGeojson } from "./helpers";
 
-const loadMapDisplayConfig = cache(() => getMapDisplayConfig(), "map-display-config");
-
-function pointsFromGeojson(value: unknown): [number, number][] {
-  if (!value || typeof value !== "object") return [];
-  const geo = value as { type?: string; coordinates?: unknown };
-  const coordinates =
-    geo.type === "Polygon" && Array.isArray(geo.coordinates)
-      ? geo.coordinates[0]
-      : Array.isArray(geo.coordinates)
-        ? geo.coordinates
-        : [];
-  if (!Array.isArray(coordinates)) return [];
-  return coordinates
-    .map((point) => {
-      if (!Array.isArray(point) || point.length < 2) return null;
-      const lng = Number(point[0]);
-      const lat = Number(point[1]);
-      return Number.isFinite(lat) && Number.isFinite(lng) ? ([lat, lng] as [number, number]) : null;
-    })
-    .filter((point): point is [number, number] => Boolean(point));
-}
-
-function colorForIndex(index: number) {
-  return ["#3b82f6", "#67B744", "#f59e0b", "#ef4444", "#8b5cf6"][index % 5] ?? "#3b82f6";
-}
-
-function colorForStatus(
-  status: string | undefined,
-  colors: { basahColor: string; keringColor: string; lembabColor: string },
-) {
-  if (status === "Kering") return colors.keringColor;
-  if (status === "Basah") return colors.basahColor;
-  if (status === "Lembab") return colors.lembabColor;
-  return null;
-}
+const loadMapDisplayConfig = query(() => getMapDisplayConfig(), "map-display-config");
 
 export function MapCard(props: { regions?: DashboardRegion[] }) {
   const [blockStatuses, setBlockStatuses] = createSignal<Record<string, string>>({});
@@ -60,7 +27,7 @@ export function MapCard(props: { regions?: DashboardRegion[] }) {
               threshold: region.threshold ?? { dryMaxPercent: 40, wetMinPercent: 80 },
             },
             (sprayers) => {
-              const statuses = sprayers.map((sprayer) => sprayer.moistureStatus);
+              const statuses = sprayers.map((s) => s.moistureStatus);
               const status = statuses.includes("Kering")
                 ? "Kering"
                 : statuses.includes("Basah")

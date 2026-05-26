@@ -1,4 +1,4 @@
-import { cache, createAsync, useNavigate } from "@solidjs/router";
+import { query, createAsync, useNavigate } from "@solidjs/router";
 import { createEffect, createMemo, createSignal, For, Show, Suspense } from "solid-js";
 import { PageMeta } from "~/components/shared/PageMeta";
 import { createUserWithProfile, getUserFormOptions } from "~/server/actions/index";
@@ -6,11 +6,9 @@ import { useToast } from "~/components/shared/ToastProvider";
 import { SkCard } from "~/components/shared/Skeleton";
 import { SelectSearch } from "~/components/ui/SelectSearch";
 import type { Role } from "@prisma/client";
-import chevronLeftIcon from "~/assets/icons/chevron-left.svg?url";
-import eyeOnIcon from "~/assets/icons/eye_on.svg?url";
-import eyeOffIcon from "~/assets/icons/eye_off.svg?url";
+import { ChevronLeft, Eye, EyeOff } from "lucide-solid";
 
-const loadFormOptions = cache(() => getUserFormOptions(), "user-create-form-options");
+const loadFormOptions = query(() => getUserFormOptions(), "user-create-form-options");
 export const route = { preload: () => loadFormOptions() };
 
 function FormSection(props: { title: string; subtitle?: string; children: unknown }) {
@@ -149,7 +147,7 @@ export default function TambahUser() {
             onClick={() => navigate("/user-management")}
             class="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50"
           >
-            <img src={chevronLeftIcon} alt="" class="h-4 w-4" aria-hidden="true" decoding="async" loading="lazy" />
+            <ChevronLeft size={16} aria-hidden="true" />
           </button>
           <h1 class="text-2xl font-bold text-slate-900">Tambah Pengguna</h1>
         </div>
@@ -327,11 +325,9 @@ export default function TambahUser() {
                       class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                       onClick={() => setShowPw((v) => !v)}
                     >
-                      <img
-                        src={showPw() ? eyeOffIcon : eyeOnIcon}
-                        alt={showPw() ? "Sembunyikan password" : "Tampilkan password"}
-                        class="h-4 w-4"
-                      />
+                      <Show when={showPw()} fallback={<Eye size={16} />}>
+                        <EyeOff size={16} />
+                      </Show>
                     </button>
                   </div>
                 </Field>

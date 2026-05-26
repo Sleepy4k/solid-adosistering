@@ -1,6 +1,5 @@
 export { default as ColabSection } from "./ColabSection";
 export { default as ContactSection } from "./ContactSection";
-export { default as DirectorViewSection } from "./DirectorViewSection";
 export { default as FeaturesGrid } from "./FeaturesGrid";
 export { default as FieldInsightSection } from "./FieldInsightSection";
 export { default as HeroSection } from "./HeroSection";

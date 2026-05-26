@@ -1,4 +1,4 @@
-import { A, cache, createAsync, redirect, useNavigate, useSearchParams } from "@solidjs/router";
+import { A, query, createAsync, redirect, useNavigate, useSearchParams } from "@solidjs/router";
 import { Eye, EyeOff } from "lucide-solid";
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
 import { PageMeta } from "~/components/shared/PageMeta";
@@ -12,7 +12,7 @@ import { validateEmail, validateRequired } from "~/lib/shared/validation";
 import { useWebConfig } from "~/lib/shared/webConfig";
 import fallbackLogo from "~/assets/logo.svg?url";
 
-const checkLoginSession = cache(async () => {
+const checkLoginSession = query(async () => {
   "use server";
   const session = await getSession();
   if (session) throw redirect("/dashboard");
@@ -172,7 +172,11 @@ export default function Login() {
             </Field>
 
             <Button tone="neutral" type="submit" disabled={loading() || cooldownLeft() > 0} class="h-[52px] w-full">
-              {cooldownLeft() > 0 ? `Coba lagi dalam ${formatCountdown(cooldownLeft())}` : loading() ? "Memproses..." : "Login"}
+              {cooldownLeft() > 0
+                ? `Coba lagi dalam ${formatCountdown(cooldownLeft())}`
+                : loading()
+                  ? "Memproses..."
+                  : "Login"}
             </Button>
           </form>
 

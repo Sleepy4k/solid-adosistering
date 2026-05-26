@@ -1,13 +1,13 @@
 import { A, useLocation, useNavigate } from "@solidjs/router";
 import {
-  BarChart3,
+  ChartBar,
   ChevronLeft,
   ClipboardList,
   Contact,
   FileClock,
-  HelpCircle,
+  CircleQuestionMark,
   History,
-  Home,
+  House,
   LogOut,
   Map,
   MapPinned,
@@ -44,9 +44,9 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Utama",
     items: [
-      { href: ROUTES.home, label: "Beranda", icon: Home },
+      { href: ROUTES.home, label: "Beranda", icon: House },
       { href: ROUTES.irrigationHistory, label: "Riwayat Irigasi", icon: History },
-      { href: ROUTES.statistics, label: "Statistik", icon: BarChart3 },
+      { href: ROUTES.statistics, label: "Statistik", icon: ChartBar },
     ],
   },
   {
@@ -162,9 +162,7 @@ export default function Sidebar(props: SidebarProps) {
             {(group) => (
               <section>
                 <Show when={!isCollapsed()}>
-                  <p class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-                    {group.label}
-                  </p>
+                  <p class="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">{group.label}</p>
                 </Show>
                 <ul class="space-y-1">
                   <For each={group.items}>
@@ -222,7 +220,7 @@ export default function Sidebar(props: SidebarProps) {
             helpActive() ? "cursor-default bg-[#67B744] text-white" : "text-[#111827] hover:bg-gray-50"
           } ${isCollapsed() ? "justify-center" : ""}`}
         >
-          <HelpCircle size={20} class="shrink-0" aria-hidden="true" />
+          <CircleQuestionMark size={20} class="shrink-0" aria-hidden="true" />
           <Show when={!isCollapsed()}>
             <span class="truncate">Pusat Bantuan</span>
           </Show>

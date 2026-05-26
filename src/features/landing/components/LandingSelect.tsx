@@ -5,7 +5,7 @@ export type LandingSelectOption = { value: string; label: string };
 type LandingSelectProps = {
   id?: string;
   value: string;
-  options: LandingSelectOption[];
+  options: readonly LandingSelectOption[];
   placeholder?: string;
   onChange: (value: string) => void;
 };
@@ -37,9 +37,7 @@ export default function LandingSelect(props: LandingSelectProps) {
         type="button"
         id={props.id}
         class={`flex h-[49px] w-full items-center justify-between gap-2 rounded-[12px] border bg-white px-4 text-[0.9375rem] transition ${
-          open()
-            ? "border-2 border-[#54A610] text-[#111827]"
-            : "border-[#C2C2C2] text-[#9CA3AF]"
+          open() ? "border-2 border-[#54A610] text-[#111827]" : "border-[#C2C2C2] text-[#9CA3AF]"
         }`}
         aria-haspopup="listbox"
         aria-expanded={open()}

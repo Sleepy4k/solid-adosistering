@@ -229,7 +229,7 @@ export const CONTACT_CARDS = [
   {
     icon: "/landing/telephone.svg",
     title: "Telepon & WhatsApp",
-    lines: ["(0281) 641629", "+62 812-3994-2119"],
+    lines: ["(0281) 641 629", "(0281) 641 629"],
   },
   {
     icon: "/landing/service.svg",
@@ -254,7 +254,12 @@ export const DIRECTOR_PROFILE = {
 } as const;
 
 export const PARTNERS = [
-  { src: "/landing/telkom-university-logo.png", width: 746, height: 331, alt: "Telkom University - Mitra ADOSISTERING" },
+  {
+    src: "/landing/telkom-university-logo.png",
+    width: 746,
+    height: 331,
+    alt: "Telkom University - Mitra ADOSISTERING",
+  },
   { src: "/landing/pertamina-logo.png", width: 3840, height: 894, alt: "Pertamina - Mitra ADOSISTERING" },
   { src: "/landing/mernek_jenek-logo.png", width: 345, height: 345, alt: "MernekJenek - Mitra ADOSISTERING" },
 ] as const;
@@ -283,7 +288,7 @@ export const SOCIAL_LINKS = [
 ] as const;
 
 export const CONTACT_INFO = {
-  phone: "+62 812-3994-2119",
+  phone: "(0281) 641 629",
   email: "adosisteringteam@gmail.com",
   address:
     "Jl. DI Panjaitan No.128, Karangreja, Purwokerto Kidul, Kec. Purwokerto Sel., Kabupaten Banyumas, Jawa Tengah 53147",

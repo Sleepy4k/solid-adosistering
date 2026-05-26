@@ -4,8 +4,7 @@ import { PageMeta } from "~/components/shared/PageMeta";
 import { completePasswordReset } from "~/server/actions/index";
 import { debounce } from "~/lib/shared/debounce";
 import { validateNewPassword, validatePasswordConfirm } from "~/lib/shared/validation";
-import eyeOnIcon from "~/assets/icons/eye_on.svg?url";
-import eyeOffIcon from "~/assets/icons/eye_off.svg?url";
+import { Eye, EyeOff } from "lucide-solid";
 
 export default function ResetPassword() {
   const [params] = useSearchParams();
@@ -125,13 +124,9 @@ export default function ResetPassword() {
                         class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
                         onClick={() => setShowPw((v) => !v)}
                       >
-                        <img
-                          src={showPw() ? eyeOffIcon : eyeOnIcon}
-                          alt={showPw() ? "Sembunyikan password" : "Tampilkan password"}
-                          class="h-5 w-5"
-                          loading="lazy"
-                          decoding="async"
-                        />
+                        <Show when={showPw()} fallback={<Eye size={20} />}>
+                          <EyeOff size={20} />
+                        </Show>
                       </button>
                     </div>
                     <Show when={passwordError()}>

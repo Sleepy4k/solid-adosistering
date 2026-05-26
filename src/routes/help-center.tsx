@@ -1,4 +1,4 @@
-import { cache, createAsync } from "@solidjs/router";
+import { query, createAsync } from "@solidjs/router";
 import { PageMeta } from "~/components/shared/PageMeta";
 import { ChevronDown } from "lucide-solid";
 import { createSignal, For, Show, Suspense } from "solid-js";
@@ -9,7 +9,7 @@ import type { Role } from "@prisma/client";
 
 type HelpItem = { title: string; body: string };
 
-const loadUser = cache(() => getUser(), "help-center-user");
+const loadUser = query(() => getUser(), "help-center-user");
 
 const COMMON_HELP: HelpItem[] = [
   {

@@ -1,6 +1,6 @@
 export const siteConfig = {
   name: "Adosistering",
-  url: import.meta.env.VITE_SITE_URL ?? "https://adosistering.local",
+  url: import.meta.env.VITE_SITE_URL ?? "https://adosistering.labgo.id",
   description:
     "IoT drip irrigation management system for dryland farming with Firebase RTDB telemetry and SQL-backed administration.",
   locale: "id_ID",

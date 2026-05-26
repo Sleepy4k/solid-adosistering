@@ -6,7 +6,8 @@ export default function UseCasesSection() {
       <div class="container mx-auto max-w-screen-xl px-4 sm:px-6 lg:px-12 xl:px-16">
         <h2 class="mb-14 text-center text-3xl font-extrabold leading-tight text-[#67b744] sm:text-4xl md:mb-20 md:text-5xl lg:text-[3.5rem]">
           Lokasi Implementasi
-          <br />&amp; Uji Lapangan
+          <br />
+          &amp; Uji Lapangan
         </h2>
         <div class="relative flex min-h-[600px] items-center pb-20 pt-4 md:min-h-[700px] md:pb-28 lg:min-h-[800px] lg:pb-36">
           <div class="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden="true">

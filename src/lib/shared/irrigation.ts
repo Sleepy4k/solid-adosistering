@@ -1,31 +1,5 @@
-export type MoistureStatusLabel = "Kering" | "Lembab" | "Basah";
-
-export type Role = "SUPERADMIN" | "ADMIN" | "USER";
-
-export type Threshold = {
-  dryMaxPercent: number;
-  wetMinPercent: number;
-  displayDryMaxPercent?: number;
-  displayMoistMaxPercent?: number;
-  displayWetMinPercent?: number;
-  volumeDivider?: number;
-};
-
-export type LiveSprayerData = {
-  regionName: string;
-  blockName: string;
-  sprayerId: string;
-  flowLmin: number;
-  moisturePercent: number;
-  moistureStatus: MoistureStatusLabel;
-  pumpStatus: string;
-  pumpOn: boolean;
-  totalVolumeLiter: number;
-  windDirection: string | null;
-  lastUpdated: number | null;
-  mode: 0 | 1;
-  relay: 0 | 1;
-};
+export type { MoistureStatusLabel, Role, Threshold, LiveSprayerData } from "~/types/irrigation";
+import type { MoistureStatusLabel, Threshold } from "~/types/irrigation";
 
 export function calculateMoistureStatus(moisturePercent: number, threshold: Threshold): MoistureStatusLabel {
   const dryMax = threshold.displayDryMaxPercent ?? threshold.dryMaxPercent;

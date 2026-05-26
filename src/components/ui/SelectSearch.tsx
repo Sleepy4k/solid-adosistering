@@ -65,7 +65,13 @@ export function SelectSearch(props: {
         </span>
         <div class="flex items-center gap-1 text-slate-400">
           <Show when={props.value}>
-            <span role="button" tabindex="0" class="rounded p-0.5 hover:text-slate-600" onClick={clear} aria-label="Hapus">
+            <span
+              role="button"
+              tabindex="0"
+              class="rounded p-0.5 hover:text-slate-600"
+              onClick={clear}
+              aria-label="Hapus"
+            >
               <X size={14} />
             </span>
           </Show>

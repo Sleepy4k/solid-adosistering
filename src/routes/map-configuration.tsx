@@ -1,4 +1,4 @@
-import { cache, createAsync } from "@solidjs/router";
+import { query, createAsync } from "@solidjs/router";
 import { createEffect, createMemo, createSignal, Show, Suspense } from "solid-js";
 import { PageMeta } from "~/components/shared/PageMeta";
 import {
@@ -13,7 +13,7 @@ import { useToast } from "~/components/shared/ToastProvider";
 import { LeafletMap, type LeafletPolygon, type LeafletRegionMarker } from "~/components/shared/LeafletMap";
 import { SelectSearch } from "~/components/ui/SelectSearch";
 
-const loadMapWorkspace = cache((key: number) => {
+const loadMapWorkspace = query((key: number) => {
   void key;
   return getMapWorkspace();
 }, "map-workspace");

@@ -1,4 +1,4 @@
-import { cache, createAsync, revalidate } from "@solidjs/router";
+import { query, createAsync, revalidate } from "@solidjs/router";
 import { createSignal, Show, Suspense } from "solid-js";
 import { PageMeta } from "~/components/shared/PageMeta";
 import { ModalFrame } from "~/components/shared/ModalFrame";
@@ -6,9 +6,9 @@ import { getMyProfile, updateMyProfile, changeMyPassword, type MyProfile } from 
 import { SkCard } from "~/components/shared/Skeleton";
 import { useToast } from "~/components/shared/ToastProvider";
 import { SelectSearch } from "~/components/ui/SelectSearch";
-import editIcon from "~/assets/icons/edit.svg?url";
+import { Pencil } from "lucide-solid";
 
-const loadProfile = cache(() => getMyProfile(), "my-profile");
+const loadProfile = query(() => getMyProfile(), "my-profile");
 export const route = { preload: () => loadProfile() };
 
 function InfoRow(props: { label: string; value: string | null | undefined }) {
@@ -31,7 +31,7 @@ function SectionCard(props: { title: string; onEdit?: () => void; children: unkn
             class="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
             onClick={props.onEdit}
           >
-            <img src={editIcon} alt="" class="h-4 w-4" aria-hidden="true" decoding="async" loading="lazy" />
+            <Pencil size={16} aria-hidden="true" />
             Edit
           </button>
         </Show>

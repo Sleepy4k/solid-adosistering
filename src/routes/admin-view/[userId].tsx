@@ -1,4 +1,4 @@
-import { A, cache, createAsync, useParams } from "@solidjs/router";
+import { A, query, createAsync, useParams } from "@solidjs/router";
 import { ErrorBoundary, For, Show, Suspense } from "solid-js";
 import { ArrowLeft, Eye } from "lucide-solid";
 import { PageMeta } from "~/components/shared/PageMeta";
@@ -10,7 +10,7 @@ import { RegionSection } from "~/features/dashboard/RegionSection";
 import { MapCard } from "~/features/dashboard/MapCard";
 import { ROUTES } from "~/constants/routes";
 
-const loadUserView = cache((userId: string) => getUserDashboardView(userId), "admin-view");
+const loadUserView = query((userId: string) => getUserDashboardView(userId), "admin-view");
 
 export const route = { preload: () => undefined };
 

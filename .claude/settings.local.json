@@ -10,7 +10,12 @@
       "Bash(git log*)",
       "Bash(git checkout *)",
       "Bash(dir *)",
-      "Bash(grep *)"
+      "Bash(grep *)",
+      "Bash(git stash *)",
+      "Bash('\\); *)",
+      "Bash(awk 'NR>=10 && NR<=30')",
+      "Bash(awk 'NR>=25 && NR<=50')",
+      "Bash(del debug-strip.mjs strip-comments.mjs)"
     ]
   }
 }

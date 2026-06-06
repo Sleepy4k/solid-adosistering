@@ -84,7 +84,6 @@ export async function sendTransactionalEmail(
     smtpError = err;
   }
 
-  // DB logging is fire-and-forget — never let it mask the real SMTP error
   prisma.emailDelivery
     .create({
       data: {

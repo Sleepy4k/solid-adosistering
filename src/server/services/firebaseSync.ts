@@ -282,40 +282,72 @@ export async function syncFirebaseSnapshotToDatabase(input: { staleMs?: number }
         for (const [dateKey, entries] of Object.entries(sprayerNode.history ?? {})) {
           for (const [eventId, entry] of Object.entries(entries ?? {})) {
             const firebaseEventId = `${region.name}/${blockName}/${hardwareId}/${dateKey}/${eventId}`;
-            await prisma.irrigationEvent.upsert({
-              where: { firebaseEventId },
-              update: {
-                blockId: block.id,
+            const fbStartedAt = fromEpoch(entry.starttime ?? entry.timestamp);
+            const fbEndedAt = entry.endtime ? fromEpoch(entry.endtime) : null;
+            const fbDuration =
+              entry.endtime != null && entry.starttime != null
+                ? entry.endtime - entry.starttime
+                : (entry.duration ?? null);
+            const fbVolume = entry.totalVolume === undefined ? null : numberOrZero(entry.totalVolume);
+            const fbMode = entry.mode === "AUTO" ? IrrigationMode.AUTO : IrrigationMode.MANUAL;
+            const fbRelay = relayState(entry.pump_status);
+
+            const MATCH_MS = 5 * 60 * 1000;
+            const manualMatch = await prisma.irrigationEvent.findFirst({
+              where: {
                 sprayerId: sprayer.id,
-                mode: entry.mode === "AUTO" ? IrrigationMode.AUTO : IrrigationMode.MANUAL,
-                relay: relayState(entry.pump_status),
-                durationSeconds:
-                  entry.endtime != null && entry.starttime != null
-                    ? entry.endtime - entry.starttime
-                    : (entry.duration ?? null),
-                totalVolumeLiter: entry.totalVolume === undefined ? null : numberOrZero(entry.totalVolume),
-                firebaseDateKey: dateKey,
-                startedAt: fromEpoch(entry.starttime ?? entry.timestamp),
-                endedAt: entry.endtime ? fromEpoch(entry.endtime) : null,
+                firebaseEventId: null,
+                startedAt: {
+                  gte: new Date(fbStartedAt.getTime() - MATCH_MS),
+                  lte: new Date(fbStartedAt.getTime() + MATCH_MS),
+                },
               },
-              create: {
-                blockId: block.id,
-                sprayerId: sprayer.id,
-                actorId: null,
-                mode: entry.mode === "AUTO" ? IrrigationMode.AUTO : IrrigationMode.MANUAL,
-                relay: relayState(entry.pump_status),
-                reason: "Imported from Firebase RTDB snapshot",
-                durationSeconds:
-                  entry.endtime != null && entry.starttime != null
-                    ? entry.endtime - entry.starttime
-                    : (entry.duration ?? null),
-                totalVolumeLiter: entry.totalVolume === undefined ? null : numberOrZero(entry.totalVolume),
-                firebaseEventId,
-                firebaseDateKey: dateKey,
-                startedAt: fromEpoch(entry.starttime ?? entry.timestamp),
-                endedAt: entry.endtime ? fromEpoch(entry.endtime) : null,
-              },
+              orderBy: { startedAt: "desc" },
             });
+
+            if (manualMatch) {
+              await prisma.irrigationEvent.update({
+                where: { id: manualMatch.id },
+                data: {
+                  firebaseEventId,
+                  firebaseDateKey: dateKey,
+                  ...(fbEndedAt && !manualMatch.endedAt ? { endedAt: fbEndedAt } : {}),
+                  ...(fbDuration !== null && manualMatch.durationSeconds === null
+                    ? { durationSeconds: fbDuration }
+                    : {}),
+                  ...(fbVolume !== null ? { totalVolumeLiter: fbVolume } : {}),
+                },
+              });
+            } else {
+              await prisma.irrigationEvent.upsert({
+                where: { firebaseEventId },
+                update: {
+                  blockId: block.id,
+                  sprayerId: sprayer.id,
+                  mode: fbMode,
+                  relay: fbRelay,
+                  durationSeconds: fbDuration,
+                  totalVolumeLiter: fbVolume,
+                  firebaseDateKey: dateKey,
+                  startedAt: fbStartedAt,
+                  endedAt: fbEndedAt,
+                },
+                create: {
+                  blockId: block.id,
+                  sprayerId: sprayer.id,
+                  actorId: null,
+                  mode: fbMode,
+                  relay: fbRelay,
+                  reason: "Imported from Firebase RTDB snapshot",
+                  durationSeconds: fbDuration,
+                  totalVolumeLiter: fbVolume,
+                  firebaseEventId,
+                  firebaseDateKey: dateKey,
+                  startedAt: fbStartedAt,
+                  endedAt: fbEndedAt,
+                },
+              });
+            }
             stats.events += 1;
 
             const recordedAt = fromEpoch(entry.timestamp ?? entry.endtime ?? entry.starttime);

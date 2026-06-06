@@ -91,8 +91,6 @@ export async function getAllPartners() {
   return prisma.landingPartner.findMany({ orderBy: { sortOrder: "asc" } });
 }
 
-// ── Testimonials CRUD ────────────────────────────────────────────────────────
-
 export async function createTestimonial(input: {
   name: string;
   role: string;

@@ -184,7 +184,6 @@ export default function CmsSubscribers() {
           </form>
         </Card>
 
-        {/* Subscriber list */}
         <Card>
           <CardHeader title={`Daftar Subscriber (${(items() ?? []).length})`} />
           <Suspense fallback={<div class="p-8 text-center text-sm text-slate-500">Memuat...</div>}>

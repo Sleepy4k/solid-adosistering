@@ -250,7 +250,6 @@ export default function Profil() {
           <Show when={profile()}>
             {(p) => (
               <>
-                {/* Profil Saya */}
                 <div class="rounded-xl border border-slate-200 bg-white p-6">
                   <h2 class="mb-4 font-semibold text-slate-900">Profil Saya</h2>
                   <div class="flex items-center gap-4">
@@ -265,7 +264,6 @@ export default function Profil() {
                   </div>
                 </div>
 
-                {/* Informasi Pribadi */}
                 <SectionCard title="Informasi Pribadi" onEdit={() => setEditProfile(true)}>
                   <div class="grid gap-4 sm:grid-cols-2">
                     <InfoRow label="Nama Lengkap" value={p().name} />
@@ -276,7 +274,6 @@ export default function Profil() {
                   </div>
                 </SectionCard>
 
-                {/* Domisili */}
                 <SectionCard title="Domisili" onEdit={() => setEditProfile(true)}>
                   <div class="grid gap-4 sm:grid-cols-2">
                     <InfoRow label="Negara" value={p().profile?.country ?? "Indonesia"} />
@@ -286,7 +283,6 @@ export default function Profil() {
                   </div>
                 </SectionCard>
 
-                {/* Keamanan */}
                 <SectionCard title="Keamanan">
                   <div class="mb-4 flex justify-end">
                     <button type="button" class="btn-outline text-sm" onClick={() => setEditPw(true)}>
@@ -299,7 +295,6 @@ export default function Profil() {
                   </div>
                 </SectionCard>
 
-                {/* Modals */}
                 <Show when={editProfile()}>
                   <EditProfileModal profile={p()} onClose={() => setEditProfile(false)} />
                 </Show>

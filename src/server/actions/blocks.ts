@@ -175,17 +175,33 @@ export async function overridePump(input: { sprayerId: string; mode: "AUTO" | "M
     relay: input.relay,
   });
 
-  const event = await prisma.irrigationEvent.create({
-    data: {
-      blockId: sprayer.blockId,
-      sprayerId: sprayer.id,
-      actorId: session.id,
-      mode: input.mode === "AUTO" ? IrrigationMode.AUTO : IrrigationMode.MANUAL,
-      relay: input.relay === "ON" ? RelayState.ON : RelayState.OFF,
-      reason: "Manual dashboard override",
-      startedAt: new Date(),
-    },
-  });
+  let event;
+  if (input.relay === "ON") {
+    event = await prisma.irrigationEvent.create({
+      data: {
+        blockId: sprayer.blockId,
+        sprayerId: sprayer.id,
+        actorId: session.id,
+        mode: input.mode === "AUTO" ? IrrigationMode.AUTO : IrrigationMode.MANUAL,
+        relay: RelayState.ON,
+        reason: "Manual dashboard override",
+        startedAt: new Date(),
+      },
+    });
+  } else {
+    const openEvent = await prisma.irrigationEvent.findFirst({
+      where: { sprayerId: sprayer.id, relay: RelayState.ON, endedAt: null },
+      orderBy: { startedAt: "desc" },
+    });
+    if (openEvent) {
+      const endedAt = new Date();
+      const durationSeconds = Math.round((endedAt.getTime() - openEvent.startedAt.getTime()) / 1000);
+      event = await prisma.irrigationEvent.update({
+        where: { id: openEvent.id },
+        data: { endedAt, durationSeconds },
+      });
+    }
+  }
 
   await logActivity({
     actorId: session.id,
@@ -196,5 +212,5 @@ export async function overridePump(input: { sprayerId: string; mode: "AUTO" | "M
     entityId: sprayer.id,
   });
 
-  return event;
+  return event ?? null;
 }

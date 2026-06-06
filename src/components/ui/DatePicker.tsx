@@ -44,11 +44,10 @@ export function DatePicker(props: { value: string; placeholder?: string; onChang
   const [viewYear, setViewYear] = createSignal(today.getFullYear());
   const [viewMonth, setViewMonth] = createSignal(today.getMonth());
   const [showYearPicker, setShowYearPicker] = createSignal(false);
-  // Independent year-grid center — only moves when user navigates prev/next in year picker
+
   const [yearCenter, setYearCenter] = createSignal(today.getFullYear());
   let containerRef!: HTMLDivElement;
 
-  // 12 years centred on yearCenter: yearCenter-5 … yearCenter+6
   const years = createMemo(() => Array.from({ length: 12 }, (_, i) => yearCenter() - 5 + i));
 
   createEffect(
@@ -104,7 +103,6 @@ export function DatePicker(props: { value: string; placeholder?: string; onChang
     props.onChange("");
   };
 
-  // When opening year picker: snap yearCenter to currently viewed year so it's visible
   const openYearPicker = () => {
     setYearCenter(viewYear());
     setShowYearPicker(true);
@@ -125,9 +123,7 @@ export function DatePicker(props: { value: string; placeholder?: string; onChang
 
   createEffect(() => {
     const handler = (e: MouseEvent) => {
-      // composedPath() preserves the original event path even if SolidJS
-      // synchronously removes the clicked element from the DOM during the
-      // same tick (e.g. year button disappears when showYearPicker flips).
+
       if (!e.composedPath().includes(containerRef as EventTarget)) {
         setOpen(false);
         setShowYearPicker(false);
@@ -169,7 +165,6 @@ export function DatePicker(props: { value: string; placeholder?: string; onChang
 
       <Show when={open()}>
         <div class="absolute left-0 top-full z-50 mt-1 w-72 rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
-          {/* Header — adapts to calendar vs year picker mode */}
           <div class="mb-3 flex items-center justify-between">
             <button
               type="button"
@@ -188,7 +183,6 @@ export function DatePicker(props: { value: string; placeholder?: string; onChang
                 </span>
               }
             >
-              {/* Click year to open year picker */}
               <div class="flex items-center gap-1 text-sm font-semibold text-slate-800">
                 <span>{MONTHS[viewMonth()]}</span>
                 <button
@@ -212,7 +206,6 @@ export function DatePicker(props: { value: string; placeholder?: string; onChang
             </button>
           </div>
 
-          {/* Year picker grid */}
           <Show when={showYearPicker()}>
             <div class="grid grid-cols-3 gap-1">
               <For each={years()}>
@@ -242,7 +235,6 @@ export function DatePicker(props: { value: string; placeholder?: string; onChang
             </button>
           </Show>
 
-          {/* Month / day calendar view */}
           <Show when={!showYearPicker()}>
             <div class="mb-1 grid grid-cols-7 text-center">
               <For each={DAYS_SHORT}>

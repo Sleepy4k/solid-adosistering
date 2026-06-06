@@ -11,7 +11,7 @@ export type SessionUser = {
   role: Role;
 };
 
-const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
+const SESSION_MAX_AGE = 60 * 60 * 24 * 7;
 
 export async function getSession(): Promise<SessionUser | null> {
   const token = getCookie(serverConfig.sessionCookieName);

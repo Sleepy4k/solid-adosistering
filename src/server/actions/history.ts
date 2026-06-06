@@ -130,7 +130,6 @@ export async function getIrrigationHistory(filters: HistoryFilters) {
           : Number(reading.totalVolumeLiter)
         : Number(event.totalVolumeLiter);
 
-    // Calculate duration from timestamps if durationSeconds is not stored
     const durationSeconds =
       event.durationSeconds ??
       (event.endedAt

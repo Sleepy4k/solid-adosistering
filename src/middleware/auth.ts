@@ -18,13 +18,9 @@ export default createMiddleware({
       const url = new URL(event.request.url);
       const path = url.pathname;
 
-      // Allow static assets and internal routes
       if (path.startsWith("/_") || path.startsWith("/__") || path.includes(".")) return;
-
-      // Allow public routes (landing page, login, forgot/reset password)
       if (PUBLIC_ROUTES.some((p) => path === p || path.startsWith(p + "/"))) return;
 
-      // All other routes require a valid session
       const cookieName = process.env.SESSION_COOKIE_NAME ?? "adosistering_session";
       const cookieHeader = event.request.headers.get("Cookie") ?? "";
       const token = parseCookieHeader(cookieHeader, cookieName);
@@ -65,7 +61,7 @@ export default createMiddleware({
           return new Response(null, { status: 302, headers: { Location: ROUTES.dashboard } });
         }
       } catch {
-        // DB unavailable — let the page handle the error gracefully
+
       }
     },
   ],

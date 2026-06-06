@@ -61,7 +61,6 @@ export function ImageUpload(props: Props) {
 
   return (
     <div class="flex flex-col gap-2">
-      {/* Mode toggle */}
       <div class="flex w-fit rounded-lg border border-slate-200 p-0.5 text-xs font-medium">
         <button
           type="button"
@@ -85,7 +84,6 @@ export function ImageUpload(props: Props) {
         </button>
       </div>
 
-      {/* URL input */}
       <Show when={mode() === "url"}>
         <input
           class={inp}
@@ -96,7 +94,6 @@ export function ImageUpload(props: Props) {
         />
       </Show>
 
-      {/* File picker */}
       <Show when={mode() === "file"}>
         <label
           class={`flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-4 text-sm transition ${
@@ -122,7 +119,6 @@ export function ImageUpload(props: Props) {
         </Show>
       </Show>
 
-      {/* Preview */}
       <Show when={props.value}>
         <div class="relative w-fit">
           <div

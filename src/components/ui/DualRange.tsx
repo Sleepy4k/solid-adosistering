@@ -11,14 +11,13 @@ export function DualRange(props: {
   onMin: (value: number) => void;
   onMax: (value: number) => void;
 }) {
-  const THUMB = 20; // thumb width in px (matches .dual-range-slider::-webkit-slider-thumb)
+  const THUMB = 20;
   const clamp = (value: number) => Math.min(props.max, Math.max(props.min, value));
   const range = () => props.max - props.min;
   const minPct = () => ((clamp(props.minValue) - props.min) / range()) * 100;
   const maxPct = () => ((clamp(props.maxValue) - props.min) / range()) * 100;
   const unit = () => props.unit ?? "%";
 
-  // Corrected pixel position for a given percentage to align with browser thumb center
   const pos = (pct: number) => `calc(${pct}% + ${(0.5 - pct / 100) * THUMB}px)`;
 
   const ticks = () => {
@@ -33,7 +32,6 @@ export function DualRange(props: {
 
   return (
     <div class="relative pb-2 pt-8">
-      {/* Min tooltip */}
       <div
         class="absolute top-0 z-10 -translate-x-1/2 rounded bg-primary px-2 py-1 text-xs font-semibold text-white"
         style={{ left: pos(minPct()) }}
@@ -41,7 +39,6 @@ export function DualRange(props: {
         {clamp(props.minValue)}
         {unit()}
       </div>
-      {/* Max tooltip */}
       <div
         class="absolute top-0 z-10 -translate-x-1/2 rounded bg-primary px-2 py-1 text-xs font-semibold text-white"
         style={{ left: pos(maxPct()) }}
@@ -52,7 +49,6 @@ export function DualRange(props: {
 
       <div class="relative h-2">
         <div class="absolute h-2 w-full rounded-full bg-[#E5E5E5]" />
-        {/* Fill bar: left edge at min thumb center, right edge at max thumb center */}
         <div
           class="absolute h-2 rounded-full bg-primary"
           style={{
@@ -82,7 +78,6 @@ export function DualRange(props: {
         />
       </div>
 
-      {/* Ticks — absolutely positioned to match corrected thumb positions */}
       <div class="relative mt-4 h-5">
         <For each={ticks()}>
           {(tick, i) => {

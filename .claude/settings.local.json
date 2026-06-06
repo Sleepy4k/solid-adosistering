@@ -2,17 +2,15 @@
   "permissions": {
     "allow": [
       "Bash(bunx tsc *)",
-      "Bash(npx tsc *)",
       "Bash(bun run *)",
-      "Bash(node -e \"const ts = require\\('typescript'\\); const cfg = ts.readConfigFile\\('tsconfig.json', ts.sys.readFile\\); console.log\\(JSON.stringify\\(cfg.error || 'ok'\\)\\)\")",
-      "Bash(npx --yes tsc --noEmit)",
-      "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")",
-      "Bash(curl -s -o /dev/null -w '%{http_code}' https://docs.solidjs.com/__TRACKED_VAR__)",
-      "Bash(xargs grep *)",
       "Bash(bun pm *)",
-      "Bash(node -e \"const pkg = require\\('./node_modules/lucide-solid/package.json'\\); console.log\\(pkg.version\\);\")",
-      "Bash(node -e ' *)",
-      "Bash(node *)"
+      "Bash(node *)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git checkout *)",
+      "Bash(dir *)",
+      "Bash(grep *)"
     ]
   }
 }

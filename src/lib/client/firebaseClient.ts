@@ -63,9 +63,18 @@ function mapSprayerNode(
   const liveData = (value?.live_data ?? value?.data ?? {}) as Record<string, unknown>;
   const control = (value?.control ?? {}) as Record<string, unknown>;
   const moisturePercent = Number(liveData.moisture_percent ?? liveData.moisture ?? 0);
-  const flowLmin = Number(liveData.flow_Lmin ?? liveData.flowRate ?? 0);
-  const rawVolume = Number(liveData.totalVolume ?? liveData.totalVolume_L ?? 0);
-  const totalVolumeLiter = rawVolume / (threshold.volumeDivider ?? 1);
+  const volumeDivider = threshold.volumeDivider ?? 1;
+  const flowLmin = Number(liveData.flow_Lmin ?? liveData.flowRate ?? 0) / volumeDivider;
+  const rawVolume = Number(
+    liveData.totalVolume ??
+      liveData.totalVolume_L ??
+      liveData.total_volume_L ??
+      liveData.total_volume ??
+      liveData.volume_L ??
+      liveData.waterVolume ??
+      0,
+  );
+  const totalVolumeLiter = rawVolume / volumeDivider;
   const pumpOn =
     control.pump_status === true || control.pump_status === 1 || control.relay === 1 || control.relay === "1";
   const autoMode = control.mode === "AUTO" || control.mode === 1 || control.mode === "1";

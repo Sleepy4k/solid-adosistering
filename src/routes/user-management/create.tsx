@@ -1,12 +1,15 @@
 import { query, createAsync, useNavigate } from "@solidjs/router";
-import { createEffect, createMemo, createSignal, For, Show, Suspense } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, Show, Suspense } from "solid-js";
 import { PageMeta } from "~/components/shared/PageMeta";
 import { createUserWithProfile, getUserFormOptions } from "~/server/actions/index";
 import { useToast } from "~/components/shared/ToastProvider";
 import { SkCard } from "~/components/shared/Skeleton";
 import { SelectSearch } from "~/components/ui/SelectSearch";
+import { SimpleSelect } from "~/components/ui/SimpleSelect";
 import type { Role } from "@prisma/client";
 import { ChevronLeft, Eye, EyeOff } from "lucide-solid";
+import { debounce } from "~/lib/shared/debounce";
+import { validateEmail, validateName, validateNewPassword, validatePasswordConfirm, validatePhone } from "~/lib/shared/validation";
 
 const loadFormOptions = query(() => getUserFormOptions(), "user-create-form-options");
 export const route = { preload: () => loadFormOptions() };
@@ -66,6 +69,49 @@ export default function TambahUser() {
   const [loading, setLoading] = createSignal<boolean>(false);
   const [error, setError] = createSignal<string>("");
 
+  const [nameErr, setNameErr] = createSignal<string>("");
+  const [emailErr, setEmailErr] = createSignal<string>("");
+  const [whatsappErr, setWhatsappErr] = createSignal<string>("");
+  const [passwordErr, setPasswordErr] = createSignal<string>("");
+  const [confirmPwErr, setConfirmPwErr] = createSignal<string>("");
+
+  const validateNameD = debounce((v: string) => setNameErr(validateName(v)), 300);
+  const validateEmailD = debounce((v: string) => setEmailErr(validateEmail(v)), 300);
+  const validateWhatsappD = debounce((v: string) => setWhatsappErr(validatePhone(v)), 300);
+  const validatePasswordD = debounce((v: string) => setPasswordErr(validateNewPassword(v)), 300);
+  onCleanup(() => {
+    validateNameD.cancel();
+    validateEmailD.cancel();
+    validateWhatsappD.cancel();
+    validatePasswordD.cancel();
+  });
+
+  const onNameInput = (v: string) => {
+    setName(v);
+    if (nameErr()) setNameErr(validateName(v));
+    else validateNameD(v);
+  };
+  const onEmailInput = (v: string) => {
+    setEmail(v);
+    if (emailErr()) setEmailErr(validateEmail(v));
+    else validateEmailD(v);
+  };
+  const onWhatsappInput = (v: string) => {
+    setWhatsapp(v);
+    if (whatsappErr()) setWhatsappErr(validatePhone(v));
+    else validateWhatsappD(v);
+  };
+  const onPasswordInput = (v: string) => {
+    setPassword(v);
+    if (passwordErr()) setPasswordErr(validateNewPassword(v));
+    else validatePasswordD(v);
+    if (confirmPw() || confirmPwErr()) setConfirmPwErr(validatePasswordConfirm(v, confirmPw()));
+  };
+  const onConfirmPwInput = (v: string) => {
+    setConfirmPw(v);
+    setConfirmPwErr(validatePasswordConfirm(password(), v));
+  };
+
   const actorRole = createMemo(() => formOptions()?.actorRole ?? "ADMIN");
   const targetRole = createMemo<Role>(() => (actorRole() === "ADMIN" ? "USER" : role()));
   const selectedRegion = createMemo(() => regionIds()[0] ?? "");
@@ -91,21 +137,29 @@ export default function TambahUser() {
 
   const submit = async (e: SubmitEvent) => {
     e.preventDefault();
-    setError("");
+    validateNameD.cancel();
+    validateEmailD.cancel();
+    validateWhatsappD.cancel();
+    validatePasswordD.cancel();
 
-    if (password().length < 8) {
-      setError("Password minimal 8 karakter.");
-      return;
-    }
-    if (password() !== confirmPw()) {
-      setError("Konfirmasi password tidak cocok.");
-      return;
-    }
+    const nErr = validateName(name());
+    const eErr = validateEmail(email());
+    const waErr = validatePhone(whatsapp());
+    const pwErr = validateNewPassword(password());
+    const cfErr = validatePasswordConfirm(password(), confirmPw());
+    setNameErr(nErr);
+    setEmailErr(eErr);
+    setWhatsappErr(waErr);
+    setPasswordErr(pwErr);
+    setConfirmPwErr(cfErr);
+    if (nErr || eErr || waErr || pwErr || cfErr) return;
+
     const assignmentError = validateAssignment();
     if (assignmentError) {
       setError(assignmentError);
       return;
     }
+    setError("");
 
     setLoading(true);
     try {
@@ -161,16 +215,29 @@ export default function TambahUser() {
             <FormSection title="Data Wajib" subtitle="Informasi utama yang harus diisi untuk membuat akun">
               <div class="grid gap-4 sm:grid-cols-2">
                 <Field label="Nama Lengkap" required>
-                  <input value={name()} onInput={(e) => setName(e.currentTarget.value)} class={baseInput} required />
+                  <input
+                    value={name()}
+                    onInput={(e) => onNameInput(e.currentTarget.value)}
+                    onBlur={() => setNameErr(validateName(name()))}
+                    class={`${baseInput} ${nameErr() ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20" : ""}`}
+                    aria-invalid={nameErr() ? "true" : undefined}
+                  />
+                  <Show when={nameErr()}>
+                    <span class="mt-0.5 text-xs text-rose-600">{nameErr()}</span>
+                  </Show>
                 </Field>
                 <Field label="Email" required>
                   <input
                     type="email"
                     value={email()}
-                    onInput={(e) => setEmail(e.currentTarget.value)}
-                    class={baseInput}
-                    required
+                    onInput={(e) => onEmailInput(e.currentTarget.value)}
+                    onBlur={() => setEmailErr(validateEmail(email()))}
+                    class={`${baseInput} ${emailErr() ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20" : ""}`}
+                    aria-invalid={emailErr() ? "true" : undefined}
                   />
+                  <Show when={emailErr()}>
+                    <span class="mt-0.5 text-xs text-rose-600">{emailErr()}</span>
+                  </Show>
                 </Field>
                 <Show
                   when={actorRole() === "SUPERADMIN"}
@@ -183,7 +250,7 @@ export default function TambahUser() {
                   }
                 >
                   <Field label="Role" required>
-                    <SelectSearch
+                    <SimpleSelect
                       value={role()}
                       options={[
                         { value: "USER", label: "User" },
@@ -197,10 +264,15 @@ export default function TambahUser() {
                 <Field label="Nomor WhatsApp">
                   <input
                     value={whatsapp()}
-                    onInput={(e) => setWhatsapp(e.currentTarget.value)}
+                    onInput={(e) => onWhatsappInput(e.currentTarget.value)}
+                    onBlur={() => setWhatsappErr(validatePhone(whatsapp()))}
                     placeholder="08xx"
-                    class={baseInput}
+                    class={`${baseInput} ${whatsappErr() ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20" : ""}`}
+                    aria-invalid={whatsappErr() ? "true" : undefined}
                   />
+                  <Show when={whatsappErr()}>
+                    <span class="mt-0.5 text-xs text-rose-600">{whatsappErr()}</span>
+                  </Show>
                 </Field>
               </div>
             </FormSection>
@@ -315,10 +387,11 @@ export default function TambahUser() {
                     <input
                       type={showPw() ? "text" : "password"}
                       value={password()}
-                      onInput={(e) => setPassword(e.currentTarget.value)}
+                      onInput={(e) => onPasswordInput(e.currentTarget.value)}
+                      onBlur={() => setPasswordErr(validateNewPassword(password()))}
                       placeholder="Min. 8 karakter"
-                      class={`${baseInput} pr-11`}
-                      required
+                      class={`${baseInput} pr-11 ${passwordErr() ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20" : ""}`}
+                      aria-invalid={passwordErr() ? "true" : undefined}
                     />
                     <button
                       type="button"
@@ -330,16 +403,23 @@ export default function TambahUser() {
                       </Show>
                     </button>
                   </div>
+                  <Show when={passwordErr()}>
+                    <span class="mt-0.5 text-xs text-rose-600">{passwordErr()}</span>
+                  </Show>
                 </Field>
                 <Field label="Konfirmasi Password" required>
                   <input
                     type="password"
                     value={confirmPw()}
-                    onInput={(e) => setConfirmPw(e.currentTarget.value)}
+                    onInput={(e) => onConfirmPwInput(e.currentTarget.value)}
+                    onBlur={() => setConfirmPwErr(validatePasswordConfirm(password(), confirmPw()))}
                     placeholder="Ulangi password"
-                    class={baseInput}
-                    required
+                    class={`${baseInput} ${confirmPwErr() ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20" : ""}`}
+                    aria-invalid={confirmPwErr() ? "true" : undefined}
                   />
+                  <Show when={confirmPwErr()}>
+                    <span class="mt-0.5 text-xs text-rose-600">{confirmPwErr()}</span>
+                  </Show>
                 </Field>
               </div>
             </FormSection>

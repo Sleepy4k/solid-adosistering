@@ -5,6 +5,7 @@ import { PageHeader } from "~/components/ui/PageHeader";
 import { ErrorBoundary, lazy, Show, Suspense } from "solid-js";
 import { getMyDashboard } from "~/server/actions/index";
 import type { AdminUserCard, DashboardRegion, SuperadminSummary } from "~/types/dashboard";
+import { useLiveDate } from "~/lib/client/liveDate";
 
 const loadDashboard = query(() => getMyDashboard(), "dashboard");
 
@@ -20,17 +21,9 @@ const AdminDashboard = lazy(() =>
   import("~/features/dashboard/AdminDashboard").then((m) => ({ default: m.AdminDashboard })),
 );
 
-function todayLabel() {
-  return new Intl.DateTimeFormat("id-ID", {
-    weekday: "long",
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  }).format(new Date());
-}
-
 export default function Beranda() {
   const dashboard = createAsync(() => loadDashboard());
+  const liveDate = useLiveDate();
 
   return (
     <>
@@ -39,7 +32,7 @@ export default function Beranda() {
       <div class="space-y-5">
         <PageHeader
           title="Beranda"
-          actions={<p class="text-sm font-medium capitalize text-slate-500">{todayLabel()}</p>}
+          actions={<p class="text-sm font-medium capitalize text-slate-500">{new Intl.DateTimeFormat("id-ID", { weekday: "long", day: "2-digit", month: "long", year: "numeric" }).format(liveDate())}</p>}
         />
 
         <ErrorBoundary

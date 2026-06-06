@@ -15,7 +15,7 @@ import fallbackLogo from "~/assets/logo.svg?url";
 const checkLoginSession = query(async () => {
   "use server";
   const session = await getSession();
-  if (session) throw redirect("/dashboard");
+  if (session) throw redirect("/");
   return null;
 }, "login-session");
 

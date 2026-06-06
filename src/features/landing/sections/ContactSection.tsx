@@ -1,7 +1,9 @@
-import { createSignal, Show } from "solid-js";
+import { createMemo, createSignal, onCleanup, Show } from "solid-js";
 import { CONTACT_CARDS, CONTACT_USER_TYPES } from "~/constants/landing";
 import LandingSelect from "~/features/landing/components/LandingSelect";
 import { saveContactSubmission } from "~/server/actions/index";
+import { debounce } from "~/lib/shared/debounce";
+import { validateEmail, validateMessage, validateName, validatePhone } from "~/lib/shared/validation";
 
 export default function ContactSection() {
   const [name, setName] = createSignal<string>("");
@@ -11,15 +13,65 @@ export default function ContactSection() {
   const [message, setMessage] = createSignal<string>("");
   const [loading, setLoading] = createSignal<boolean>(false);
   const [success, setSuccess] = createSignal<boolean>(false);
-  const [error, setError] = createSignal<string>("");
+  const [submitError, setSubmitError] = createSignal<string>("");
+
+  const [nameErr, setNameErr] = createSignal<string>("");
+  const [emailErr, setEmailErr] = createSignal<string>("");
+  const [phoneErr, setPhoneErr] = createSignal<string>("");
+  const [messageErr, setMessageErr] = createSignal<string>("");
+
+  const validateNameD = debounce((v: string) => setNameErr(validateName(v)), 300);
+  const validateEmailD = debounce((v: string) => setEmailErr(validateEmail(v)), 300);
+  const validatePhoneD = debounce((v: string) => setPhoneErr(validatePhone(v)), 300);
+  const validateMessageD = debounce((v: string) => setMessageErr(validateMessage(v)), 300);
+  onCleanup(() => {
+    validateNameD.cancel();
+    validateEmailD.cancel();
+    validatePhoneD.cancel();
+    validateMessageD.cancel();
+  });
+
+  const onNameInput = (v: string) => {
+    setName(v);
+    if (nameErr()) setNameErr(validateName(v));
+    else validateNameD(v);
+  };
+  const onEmailInput = (v: string) => {
+    setEmail(v);
+    if (emailErr()) setEmailErr(validateEmail(v));
+    else validateEmailD(v);
+  };
+  const onPhoneInput = (v: string) => {
+    setPhone(v);
+    if (phoneErr()) setPhoneErr(validatePhone(v));
+    else validatePhoneD(v);
+  };
+  const onMessageInput = (v: string) => {
+    setMessage(v);
+    if (messageErr()) setMessageErr(validateMessage(v));
+    else validateMessageD(v);
+  };
+
+  const hasErrors = createMemo(() => !!(nameErr() || emailErr() || phoneErr() || messageErr()));
 
   const submit = async (e: SubmitEvent) => {
     e.preventDefault();
-    if (!name().trim() || !email().trim() || !message().trim()) {
-      setError("Nama, email, dan pesan wajib diisi.");
-      return;
-    }
-    setError("");
+    validateNameD.cancel();
+    validateEmailD.cancel();
+    validatePhoneD.cancel();
+    validateMessageD.cancel();
+
+    const nErr = validateName(name());
+    const eErr = validateEmail(email());
+    const pErr = validatePhone(phone());
+    const mErr = validateMessage(message());
+    setNameErr(nErr);
+    setEmailErr(eErr);
+    setPhoneErr(pErr);
+    setMessageErr(mErr);
+    if (nErr || eErr || pErr || mErr) return;
+
+    setSubmitError("");
     setLoading(true);
     try {
       await saveContactSubmission({
@@ -35,12 +87,19 @@ export default function ContactSection() {
       setPhone("");
       setUserType("");
       setMessage("");
+      setNameErr("");
+      setEmailErr("");
+      setPhoneErr("");
+      setMessageErr("");
     } catch {
-      setError("Gagal mengirim pesan. Silakan coba lagi.");
+      setSubmitError("Gagal mengirim pesan. Silakan coba lagi.");
     } finally {
       setLoading(false);
     }
   };
+
+  const inputBase =
+    "h-[49px] rounded-[12px] border bg-white px-4 text-[0.9375rem] text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#3b7410]";
 
   return (
     <section id="hubungi-kami" class="bg-white py-16 md:py-24 lg:py-32">
@@ -59,13 +118,17 @@ export default function ContactSection() {
                   <input
                     id="lp-nama"
                     type="text"
-                    required
                     autocomplete="name"
                     placeholder="Nama Lengkap"
-                    class="h-[49px] rounded-[12px] border border-[#C2C2C2] bg-white px-4 text-[0.9375rem] text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#3b7410]"
+                    class={`${inputBase} ${nameErr() ? "border-rose-400" : "border-[#C2C2C2]"}`}
                     value={name()}
-                    onInput={(e) => setName(e.currentTarget.value)}
+                    onInput={(e) => onNameInput(e.currentTarget.value)}
+                    onBlur={() => setNameErr(validateName(name()))}
+                    aria-invalid={nameErr() ? "true" : undefined}
                   />
+                  <Show when={nameErr()}>
+                    <span class="text-xs text-rose-600">{nameErr()}</span>
+                  </Show>
                 </div>
                 <div class="flex flex-col gap-1.5">
                   <label class="text-sm font-medium text-[#4F4F4F]" for="lp-email">
@@ -74,13 +137,17 @@ export default function ContactSection() {
                   <input
                     id="lp-email"
                     type="email"
-                    required
                     autocomplete="email"
                     placeholder="Alamat email"
-                    class="h-[49px] rounded-[12px] border border-[#C2C2C2] bg-white px-4 text-[0.9375rem] text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#3b7410]"
+                    class={`${inputBase} ${emailErr() ? "border-rose-400" : "border-[#C2C2C2]"}`}
                     value={email()}
-                    onInput={(e) => setEmail(e.currentTarget.value)}
+                    onInput={(e) => onEmailInput(e.currentTarget.value)}
+                    onBlur={() => setEmailErr(validateEmail(email()))}
+                    aria-invalid={emailErr() ? "true" : undefined}
                   />
+                  <Show when={emailErr()}>
+                    <span class="text-xs text-rose-600">{emailErr()}</span>
+                  </Show>
                 </div>
               </div>
               <div class="grid gap-6 sm:grid-cols-2">
@@ -93,10 +160,15 @@ export default function ContactSection() {
                     type="tel"
                     autocomplete="tel"
                     placeholder="Nomor yang dapat dihubungi"
-                    class="h-[49px] rounded-[12px] border border-[#C2C2C2] bg-white px-4 text-[0.9375rem] text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#3b7410]"
+                    class={`${inputBase} ${phoneErr() ? "border-rose-400" : "border-[#C2C2C2]"}`}
                     value={phone()}
-                    onInput={(e) => setPhone(e.currentTarget.value)}
+                    onInput={(e) => onPhoneInput(e.currentTarget.value)}
+                    onBlur={() => setPhoneErr(validatePhone(phone()))}
+                    aria-invalid={phoneErr() ? "true" : undefined}
                   />
+                  <Show when={phoneErr()}>
+                    <span class="text-xs text-rose-600">{phoneErr()}</span>
+                  </Show>
                 </div>
                 <div class="flex flex-col gap-1.5">
                   <label class="text-sm font-medium text-[#4F4F4F]" for="lp-tipe">
@@ -117,16 +189,22 @@ export default function ContactSection() {
                 </label>
                 <textarea
                   id="lp-pesan"
-                  required
                   rows="5"
                   placeholder="Apakah ada yang perlu kami ketahui?"
-                  class="min-h-[120px] rounded-[12px] border border-[#C2C2C2] bg-white px-4 py-3 text-[0.9375rem] text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#3b7410]"
+                  class={`min-h-[120px] rounded-[12px] border bg-white px-4 py-3 text-[0.9375rem] text-[#111827] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#3b7410] ${
+                    messageErr() ? "border-rose-400" : "border-[#C2C2C2]"
+                  }`}
                   value={message()}
-                  onInput={(e) => setMessage(e.currentTarget.value)}
+                  onInput={(e) => onMessageInput(e.currentTarget.value)}
+                  onBlur={() => setMessageErr(validateMessage(message()))}
+                  aria-invalid={messageErr() ? "true" : undefined}
                 />
+                <Show when={messageErr()}>
+                  <span class="text-xs text-rose-600">{messageErr()}</span>
+                </Show>
               </div>
-              <Show when={error()}>
-                <p class="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error()}</p>
+              <Show when={submitError()}>
+                <p class="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{submitError()}</p>
               </Show>
               <Show when={success()}>
                 <p class="rounded-lg bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
@@ -135,8 +213,8 @@ export default function ContactSection() {
               </Show>
               <button
                 type="submit"
-                disabled={loading()}
-                class="inline-flex items-center rounded-full bg-emerald-600 px-10 py-3.5 text-base font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
+                disabled={loading() || hasErrors()}
+                class="inline-flex items-center rounded-full bg-emerald-600 px-10 py-3.5 text-base font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading() ? "Mengirim..." : "Kirim Pesan"}
               </button>

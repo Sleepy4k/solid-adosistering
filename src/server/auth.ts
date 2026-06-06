@@ -19,7 +19,7 @@ export const getOptionalUser = query(async () => {
 export const redirectIfLoggedIn = query(async () => {
   "use server";
   const session = await getSession();
-  if (session) throw redirect("/dashboard");
+  if (session) throw redirect("/");
   return null;
 }, "redirect-if-logged-in");
 

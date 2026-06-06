@@ -1,4 +1,4 @@
-import { createEffect, createSignal } from "solid-js";
+import { createEffect, createSignal, Show } from "solid-js";
 import { useToast } from "~/components/shared/ToastProvider";
 import { DualRange } from "~/components/ui/DualRange";
 import { EditButton } from "~/components/ui/EditButton";
@@ -10,8 +10,9 @@ function clampTimeout(value: number) {
 export function SafetyTimeoutPanel(props: {
   initialMin: number;
   initialMax: number;
-  onSave: (min: number, max: number) => Promise<unknown>;
+  onSave?: (min: number, max: number) => Promise<unknown>;
   note?: string;
+  readOnly?: boolean;
 }) {
   const { notify } = useToast();
   const [editing, setEditing] = createSignal<boolean>(false);
@@ -30,6 +31,7 @@ export function SafetyTimeoutPanel(props: {
   };
 
   const save = async () => {
+    if (!props.onSave) return;
     if (minVal() >= maxVal()) {
       notify({ kind: "warning", title: "Durasi minimum harus lebih kecil dari maksimum" });
       return;
@@ -50,7 +52,9 @@ export function SafetyTimeoutPanel(props: {
     <div class="overflow-hidden rounded-2xl border border-[#C2C2C2] bg-white">
       <div class="flex items-center justify-between border-b border-[#E5E5E5] px-6 py-4">
         <h2 class="text-lg font-bold text-[#4F4F4F]">Safety Timeout</h2>
-        <EditButton editing={editing()} onClick={() => setEditing((value) => !value)} />
+        <Show when={!props.readOnly}>
+          <EditButton editing={editing()} onClick={() => setEditing((value) => !value)} />
+        </Show>
       </div>
       <div class="p-6">
         <div class="rounded-xl border border-[#E5E5E5] p-5">
@@ -71,24 +75,26 @@ export function SafetyTimeoutPanel(props: {
           <p class="mb-6 mt-4 text-xs italic text-[#6B7280]">
             {props.note ?? "Fitur ini memastikan irigasi aktif dapat dimatikan otomatis saat alat tidak mengirim data."}
           </p>
-          <div class="flex gap-3">
-            <button
-              type="button"
-              disabled={!editing() || saving()}
-              onClick={save}
-              class="btn-3d-green h-11 flex-1 font-semibold text-white disabled:opacity-50"
-            >
-              {saving() ? "Menyimpan..." : "Simpan"}
-            </button>
-            <button
-              type="button"
-              disabled={!editing()}
-              onClick={reset}
-              class="h-11 flex-1 rounded-xl border border-[#C2C2C2] bg-white font-semibold text-[#4F4F4F] hover:bg-gray-50 disabled:opacity-50"
-            >
-              Reset
-            </button>
-          </div>
+          <Show when={!props.readOnly}>
+            <div class="flex gap-3">
+              <button
+                type="button"
+                disabled={!editing() || saving()}
+                onClick={save}
+                class="btn-3d-green h-11 flex-1 font-semibold text-white disabled:opacity-50"
+              >
+                {saving() ? "Menyimpan..." : "Simpan"}
+              </button>
+              <button
+                type="button"
+                disabled={!editing()}
+                onClick={reset}
+                class="h-11 flex-1 rounded-xl border border-[#C2C2C2] bg-white font-semibold text-[#4F4F4F] hover:bg-gray-50 disabled:opacity-50"
+              >
+                Reset
+              </button>
+            </div>
+          </Show>
         </div>
       </div>
     </div>

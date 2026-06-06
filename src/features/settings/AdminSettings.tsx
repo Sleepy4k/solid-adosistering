@@ -1,5 +1,4 @@
 import { createMemo, createSignal, Show } from "solid-js";
-import { saveRegionSafetyTimeout } from "~/server/actions/index";
 import { IrrigationControl } from "./IrrigationControl";
 import { SafetyTimeoutPanel } from "./SafetyTimeoutPanel";
 import { RegionSelector } from "./RegionSelector";
@@ -27,11 +26,11 @@ export function AdminSettings(props: { settings: AdminSettingsData }) {
             selectedId={selectedRegionId()}
             onChange={setSelectedRegionId}
           />
-          <IrrigationControl region={region()} />
+          <IrrigationControl region={region()} readOnly />
           <SafetyTimeoutPanel
             initialMin={region().safetyTimeout.min}
             initialMax={region().safetyTimeout.max}
-            onSave={(min, max) => saveRegionSafetyTimeout({ regionId: region().id, min, max })}
+            readOnly
             note={`Fitur ini memastikan irigasi aktif dapat dimatikan otomatis untuk region ${region().name}.`}
           />
         </>

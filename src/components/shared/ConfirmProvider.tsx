@@ -29,7 +29,7 @@ export function ConfirmProvider(props: { children: JSX.Element }) {
       <Show when={pending()}>
         {(d) => (
           <div
-            class="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
+            class="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/40 p-4"
             onClick={(e) => e.target === e.currentTarget && close(false)}
           >
             <section

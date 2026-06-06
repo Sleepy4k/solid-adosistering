@@ -5,4 +5,6 @@ export type HistoryFilters = {
   mode?: "AUTO" | "MANUAL";
   dateFrom?: string;
   dateTo?: string;
+  cursor?: string;
+  limit?: number;
 };

@@ -26,3 +26,29 @@ export function validatePasswordConfirm(password: string, confirm: string): stri
   if (password !== confirm) return "Password tidak cocok.";
   return "";
 }
+
+export function validateName(value: string, label = "Nama"): string {
+  const v = value.trim();
+  if (!v) return `${label} wajib diisi.`;
+  if (v.length < 2) return `${label} minimal 2 karakter.`;
+  if (v.length > 100) return `${label} maksimal 100 karakter.`;
+  return "";
+}
+
+export function validatePhone(value: string): string {
+  const v = value.trim();
+  if (!v) return "";
+  const digits = v.replace(/[\s\-().+]/g, "");
+  if (!/^\d+$/.test(digits)) return "Nomor telepon tidak valid.";
+  if (digits.length < 9) return "Nomor telepon terlalu pendek (min 9 digit).";
+  if (digits.length > 15) return "Nomor telepon terlalu panjang (maks 15 digit).";
+  return "";
+}
+
+export function validateMessage(value: string, label = "Pesan"): string {
+  const v = value.trim();
+  if (!v) return `${label} wajib diisi.`;
+  if (v.length < 10) return `${label} minimal 10 karakter.`;
+  if (v.length > 2000) return `${label} maksimal 2000 karakter.`;
+  return "";
+}

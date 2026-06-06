@@ -1,5 +1,8 @@
-import { A, useSearchParams, useNavigate } from "@solidjs/router";
+import { A, createAsync, useSearchParams, useNavigate } from "@solidjs/router";
 import { createSignal, onCleanup, Show } from "solid-js";
+import { redirectIfLoggedIn } from "~/server/auth";
+
+export const route = { preload: () => redirectIfLoggedIn() };
 import { PageMeta } from "~/components/shared/PageMeta";
 import { completePasswordReset } from "~/server/actions/index";
 import { debounce } from "~/lib/shared/debounce";
@@ -7,6 +10,7 @@ import { validateNewPassword, validatePasswordConfirm } from "~/lib/shared/valid
 import { Eye, EyeOff } from "lucide-solid";
 
 export default function ResetPassword() {
+  createAsync(() => redirectIfLoggedIn());
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const [password, setPassword] = createSignal<string>("");

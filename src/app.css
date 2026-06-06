@@ -216,6 +216,15 @@ html.landing-scrollbar::-webkit-scrollbar-thumb:hover {
   max-width: 100%;
 }
 
+/* ─── Pointer cursor on interactive elements ─────────── */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+
 /* ─── Base transitions ─────────────────────────────────── */
 button,
 a,

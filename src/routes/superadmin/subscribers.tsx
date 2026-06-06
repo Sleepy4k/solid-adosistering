@@ -18,6 +18,13 @@ export const route = { preload: () => load() };
 const inp =
   "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20";
 
+type Subscriber = {
+  id: string;
+  email: string;
+  isActive: boolean;
+  subscribedAt: Date;
+};
+
 export default function CmsSubscribers() {
   const { notify } = useToast();
   const confirm = useConfirm();
@@ -38,9 +45,9 @@ export default function CmsSubscribers() {
   const [sending, setSending] = createSignal<boolean>(false);
   const [tab, setTab] = createSignal<"tulis" | "preview">("tulis");
 
-  const activeCount = () => (items() ?? []).filter((s) => s.isActive).length;
+  const activeCount = () => (items() ?? []).filter((s: Subscriber) => s.isActive).length;
 
-  const handleDelete = async (item: { id: string; email: string }) => {
+  const handleDelete = async (item: Subscriber) => {
     const ok = await confirm({
       title: "Hapus Subscriber",
       message: `Hapus "${item.email}" dari daftar subscriber?`,

@@ -11,7 +11,7 @@ const preferenceLabels: Record<Preference, string> = {
   BASAH: "Basah",
 };
 
-export function IrrigationControl(props: { region: SettingsRegion }) {
+export function IrrigationControl(props: { region: SettingsRegion; readOnly?: boolean }) {
   const { notify } = useToast();
   const [editing, setEditing] = createSignal<boolean>(false);
   const [dry, setDry] = createSignal<number>(props.region.threshold?.dryMaxPercent ?? 40);
@@ -74,7 +74,9 @@ export function IrrigationControl(props: { region: SettingsRegion }) {
     <div class="overflow-hidden rounded-2xl border border-[#C2C2C2] bg-white">
       <div class="flex items-center justify-between border-b border-[#E5E5E5] px-6 py-4">
         <h2 class="text-lg font-bold text-[#4F4F4F]">Kontrol Irigasi</h2>
-        <EditButton editing={editing()} onClick={() => setEditing((value) => !value)} />
+        <Show when={!props.readOnly}>
+          <EditButton editing={editing()} onClick={() => setEditing((value) => !value)} />
+        </Show>
       </div>
 
       <div class="grid gap-6 p-6 lg:grid-cols-2">
@@ -95,24 +97,26 @@ export function IrrigationControl(props: { region: SettingsRegion }) {
           <p class="mb-6 mt-4 text-xs italic text-[#6B7280]">
             Setting ini diterapkan ke semua sprayer pada region {props.region.name}.
           </p>
-          <div class="flex gap-3">
-            <button
-              type="button"
-              disabled={!editing() || saving()}
-              onClick={save}
-              class="btn-3d-green h-11 flex-1 font-semibold text-white disabled:opacity-50"
-            >
-              {saving() ? "Menyimpan..." : "Simpan"}
-            </button>
-            <button
-              type="button"
-              disabled={!editing()}
-              onClick={reset}
-              class="h-11 flex-1 rounded-xl border border-[#C2C2C2] bg-white font-semibold text-[#4F4F4F] hover:bg-gray-50 disabled:opacity-50"
-            >
-              Reset
-            </button>
-          </div>
+          <Show when={!props.readOnly}>
+            <div class="flex gap-3">
+              <button
+                type="button"
+                disabled={!editing() || saving()}
+                onClick={save}
+                class="btn-3d-green h-11 flex-1 font-semibold text-white disabled:opacity-50"
+              >
+                {saving() ? "Menyimpan..." : "Simpan"}
+              </button>
+              <button
+                type="button"
+                disabled={!editing()}
+                onClick={reset}
+                class="h-11 flex-1 rounded-xl border border-[#C2C2C2] bg-white font-semibold text-[#4F4F4F] hover:bg-gray-50 disabled:opacity-50"
+              >
+                Reset
+              </button>
+            </div>
+          </Show>
         </div>
 
         <div class="rounded-xl border border-[#E5E5E5] p-5">
@@ -183,24 +187,26 @@ export function IrrigationControl(props: { region: SettingsRegion }) {
           <div class="mb-6 rounded-xl bg-[#F4F9F2] p-4 text-xs leading-5 text-[#4F4F4F]">
             Kering: 0-{displayDry()}%, Lembab: {displayDry() + 1}-{displayMoist()}%, Basah: {displayWet()}-100%.
           </div>
-          <div class="flex gap-3">
-            <button
-              type="button"
-              disabled={!editing() || saving()}
-              onClick={save}
-              class="btn-3d-green h-11 flex-1 font-semibold text-white disabled:opacity-50"
-            >
-              Simpan
-            </button>
-            <button
-              type="button"
-              disabled={!editing()}
-              onClick={reset}
-              class="h-11 flex-1 rounded-xl border border-[#C2C2C2] bg-white font-semibold text-[#4F4F4F] hover:bg-gray-50 disabled:opacity-50"
-            >
-              Reset
-            </button>
-          </div>
+          <Show when={!props.readOnly}>
+            <div class="flex gap-3">
+              <button
+                type="button"
+                disabled={!editing() || saving()}
+                onClick={save}
+                class="btn-3d-green h-11 flex-1 font-semibold text-white disabled:opacity-50"
+              >
+                Simpan
+              </button>
+              <button
+                type="button"
+                disabled={!editing()}
+                onClick={reset}
+                class="h-11 flex-1 rounded-xl border border-[#C2C2C2] bg-white font-semibold text-[#4F4F4F] hover:bg-gray-50 disabled:opacity-50"
+              >
+                Reset
+              </button>
+            </div>
+          </Show>
         </div>
       </div>
     </div>

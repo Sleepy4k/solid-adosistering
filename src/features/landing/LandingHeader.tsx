@@ -2,10 +2,12 @@ import { A } from "@solidjs/router";
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
 import { NAV_LINKS } from "~/constants/landing";
 import type { WebConfig } from "~/server/actions/index";
+import type { SessionUser } from "~/server/auth";
 import { scrollToId } from "~/features/landing/utils";
 
 type LandingHeaderProps = {
   config: WebConfig;
+  user?: SessionUser | null;
 };
 
 export default function LandingHeader(props: LandingHeaderProps) {
@@ -93,12 +95,24 @@ export default function LandingHeader(props: LandingHeaderProps) {
                 </li>
               ))}
             </ul>
-            <A
-              href="/login"
-              class="hidden items-center rounded-full border border-white/70 px-6 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-white/10 lg:inline-flex"
+            <Show
+              when={props.user}
+              fallback={
+                <A
+                  href="/login"
+                  class="hidden items-center rounded-full border border-white/70 px-6 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-white/10 lg:inline-flex"
+                >
+                  Masuk
+                </A>
+              }
             >
-              Masuk
-            </A>
+              <A
+                href="/dashboard"
+                class="hidden items-center rounded-full border border-white/70 px-6 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-white/10 lg:inline-flex"
+              >
+                Dashboard
+              </A>
+            </Show>
             <a
               href="#hubungi-kami"
               class="hidden items-center rounded-full bg-neutral-800/80 px-7 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:bg-neutral-900 lg:inline-flex"
@@ -180,13 +194,26 @@ export default function LandingHeader(props: LandingHeaderProps) {
                 </a>
               </li>
               <li class="px-1 pt-1 pb-1">
-                <A
-                  href="/login"
-                  class="flex items-center justify-center rounded-xl border border-white/70 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-                  onClick={() => setMobileOpen(false)}
+                <Show
+                  when={props.user}
+                  fallback={
+                    <A
+                      href="/login"
+                      class="flex items-center justify-center rounded-xl border border-white/70 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                      onClick={() => setMobileOpen(false)}
+                    >
+                      Masuk
+                    </A>
+                  }
                 >
-                  Masuk
-                </A>
+                  <A
+                    href="/dashboard"
+                    class="flex items-center justify-center rounded-xl border border-white/70 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    Dashboard
+                  </A>
+                </Show>
               </li>
             </ul>
           </div>

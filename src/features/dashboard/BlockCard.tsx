@@ -95,6 +95,16 @@ export function BlockCard(props: {
 
   const toggleMode = async (data: LiveSprayerData) => {
     const mode = data.mode === 0 ? "MANUAL" : "AUTO";
+    const ok = await confirm({
+      title: mode === "AUTO" ? "Aktifkan Irigasi Otomatis?" : "Nonaktifkan Irigasi Otomatis?",
+      message:
+        mode === "AUTO"
+          ? `Sprayer ${data.sprayerId} akan dikendalikan otomatis berdasarkan kelembaban tanah.`
+          : `Sprayer ${data.sprayerId} akan beralih ke mode manual.`,
+      confirmLabel: mode === "AUTO" ? "Aktifkan" : "Nonaktifkan",
+      tone: mode === "AUTO" ? "primary" : "danger",
+    });
+    if (!ok) return;
     await mutateSprayer(data, mode, mode === "AUTO" ? "OFF" : data.relay === 1 ? "ON" : "OFF").then(
       () => notify({ kind: "success", title: "Mode irigasi diperbarui" }),
       () => notify({ kind: "error", title: "Gagal mengubah mode irigasi" }),

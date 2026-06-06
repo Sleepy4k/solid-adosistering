@@ -1,4 +1,4 @@
-import { A } from "@solidjs/router";
+import { A, createAsync } from "@solidjs/router";
 import { createSignal, onCleanup, Show } from "solid-js";
 import { PageMeta } from "~/components/shared/PageMeta";
 import { AuthLayout } from "~/layouts/AuthLayout";
@@ -9,10 +9,12 @@ import { debounce } from "~/lib/shared/debounce";
 import { validateEmail } from "~/lib/shared/validation";
 import { useWebConfig } from "~/lib/shared/webConfig";
 import fallbackLogo from "~/assets/logo.svg?url";
+import { redirectIfLoggedIn } from "~/server/auth";
 
-export const route = { prerender: true };
+export const route = { preload: () => redirectIfLoggedIn(), prerender: true };
 
 export default function ForgotPassword() {
+  createAsync(() => redirectIfLoggedIn());
   const config = useWebConfig();
   const [email, setEmail] = createSignal<string>("");
   const [loading, setLoading] = createSignal<boolean>(false);

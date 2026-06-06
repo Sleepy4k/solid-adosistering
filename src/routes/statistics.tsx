@@ -195,7 +195,7 @@ function smooth(values: number[]) {
 }
 
 function waterValue(reading: Reading) {
-  return Number(reading.totalVolumeLiter ?? reading.flowLmin ?? 0);
+  return Number(reading.flowLmin ?? 0);
 }
 
 function toMessage(error: unknown) {
@@ -321,7 +321,7 @@ export default function Statistik() {
           }
         >
           <div class="flex flex-wrap gap-4">
-            <StatBadge label="Total Penggunaan Air Keseluruhan" value={totalWater().toFixed(2)} sub="Liter" />
+            <StatBadge label="Rata-rata Debit Air" value={avgFlow().toFixed(2)} sub="Liter/menit" />
             <StatBadge label="Kelembaban Rata Rata Keseluruhan" value={`${avgMoisture().toFixed(2)}%`} accent />
           </div>
 
@@ -341,7 +341,7 @@ export default function Statistik() {
                 value={`${avgMoisture().toFixed(2)}%`}
                 sub={avgMoisture() <= 40 ? "Kering" : avgMoisture() >= 80 ? "Basah" : "Lembab"}
               />
-              <MiniStat label="Total Air Keluar" value={totalWater().toFixed(2)} sub="Liter" />
+              <MiniStat label="Total Debit Tercatat" value={totalWater().toFixed(2)} sub="L/mnt (jumlah pembacaan)" />
               <MiniStat label="Debit Air Rata Rata" value={avgFlow().toFixed(2)} sub="Liter/menit" />
             </div>
 
@@ -363,15 +363,15 @@ export default function Statistik() {
               </div>
               <div class="rounded-xl border border-slate-100 p-4">
                 <div class="mb-3 flex items-center justify-between gap-3">
-                  <h3 class="text-sm font-semibold text-slate-700">Penggunaan Air</h3>
+                  <h3 class="text-sm font-semibold text-slate-700">Debit Air</h3>
                   <Show when={!chartSeries().hasData}>
-                    <span class="text-xs text-slate-400">Belum ada data penggunaan air</span>
+                    <span class="text-xs text-slate-400">Belum ada data debit air</span>
                   </Show>
                 </div>
                 <LineChart
                   labels={chartSeries().labels}
                   data={chartSeries().water}
-                  label="Penggunaan Air"
+                  label="Debit Air (L/mnt)"
                   color="#3b82f6"
                   yMax={waterMax()}
                 />

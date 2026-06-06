@@ -6,9 +6,11 @@ import LandingHeader from "~/features/landing/LandingHeader";
 import { siteConfig } from "~/config/site";
 import { DEFAULT_WEB_CONFIG } from "~/constants/landing";
 import type { WebConfig } from "~/server/actions/index";
+import type { SessionUser } from "~/server/auth";
 
 type LandingLayoutProps = {
   config: WebConfig;
+  user?: SessionUser | null;
   children: JSX.Element;
 };
 
@@ -85,7 +87,7 @@ export default function LandingLayout(props: LandingLayoutProps) {
       <noscript>
         <style>{`.landing-page main.reveal-ready > *{opacity:1!important;transform:none!important}`}</style>
       </noscript>
-      <LandingHeader config={props.config} />
+      <LandingHeader config={props.config} user={props.user ?? null} />
       <main id="konten-utama" class="reveal-ready">
         {props.children}
       </main>

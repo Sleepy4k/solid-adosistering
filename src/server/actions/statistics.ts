@@ -72,7 +72,7 @@ export async function getStatistics(input: { blockId?: string; regionId?: string
       return {
         recordedAt: r.recordedAt.toISOString(),
         moisturePercent: Number(r.moisturePercent),
-        flowLmin: Number(r.flowLmin),
+        flowLmin: Number(r.flowLmin) / volumeDivider,
         totalVolumeLiter: r.totalVolumeLiter === null ? null : Number(r.totalVolumeLiter) / volumeDivider,
         moistureStatus: r.moistureStatus,
         block: { id: r.block.id, name: r.block.name, region: { name: r.block.region.name } },

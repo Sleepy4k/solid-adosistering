@@ -1,7 +1,7 @@
 "use server";
 
 import { randomBytes } from "node:crypto";
-import type { Role, Prisma } from "@prisma/client";
+import type { Prisma, Role } from "@prisma/client";
 import { ActivityAction, MoistureStatus } from "@prisma/client";
 import { redirect } from "@solidjs/router";
 import { prisma } from "../db/prisma";
@@ -41,11 +41,16 @@ export async function getUsers(filters?: { role?: Role; search?: string }) {
       : {};
   if (filters?.role && session.role === "SUPERADMIN") where.role = filters.role;
   if (filters?.search) {
-    where.OR = [
-      { name: { contains: filters.search } },
-      { email: { contains: filters.search } },
-      { profile: { whatsapp: { contains: filters.search } } },
-    ];
+    const term = `%${filters.search}%`;
+    const matchingIds = await prisma.$queryRaw<{ id: string }[]>`
+      SELECT u.id FROM \`user\` u
+      LEFT JOIN user_detail p ON p.user_id = u.id
+      WHERE u.name LIKE ${term} COLLATE utf8mb4_unicode_ci
+         OR u.email LIKE ${term} COLLATE utf8mb4_unicode_ci
+         OR p.whatsapp LIKE ${term} COLLATE utf8mb4_unicode_ci
+    `;
+    if (matchingIds.length === 0) return [];
+    where.id = { in: matchingIds.map((r) => r.id) };
   }
 
   const users = await prisma.user.findMany({

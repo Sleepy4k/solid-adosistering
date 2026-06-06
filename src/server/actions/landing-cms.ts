@@ -7,25 +7,67 @@ import { assertSuperadmin } from "../security";
 import { getSession } from "../session";
 import { logActivity } from "./_helpers";
 
-export async function getLandingTestimonials() {
-  return prisma.landingTestimonial.findMany({
-    where: { isActive: true },
-    orderBy: { sortOrder: "asc" },
-  });
+type LandingTestimonial = {
+  id: string;
+  name: string;
+  role: string;
+  quote: string;
+  imageUrl: string | null;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+type LandingLocation = {
+  id: string;
+  name: string;
+  description: string;
+  imageUrl: string | null;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+type LandingPartner = {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+export async function getLandingTestimonials(): Promise<LandingTestimonial[]> {
+  try {
+     
+    return await (prisma as any).landingTestimonial.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: "asc" },
+    });
+  } catch {
+    return [];
+  }
 }
 
-export async function getLandingLocations() {
-  return prisma.landingLocation.findMany({
-    where: { isActive: true },
-    orderBy: { sortOrder: "asc" },
-  });
+export async function getLandingLocations(): Promise<LandingLocation[]> {
+  try {
+     
+    return await (prisma as any).landingLocation.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: "asc" },
+    });
+  } catch {
+    return [];
+  }
 }
 
-export async function getLandingPartners() {
-  return prisma.landingPartner.findMany({
-    where: { isActive: true },
-    orderBy: { sortOrder: "asc" },
-  });
+export async function getLandingPartners(): Promise<LandingPartner[]> {
+  try {
+     
+    return await (prisma as any).landingPartner.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: "asc" },
+    });
+  } catch {
+    return [];
+  }
 }
 
 export async function getAllTestimonials() {

@@ -1,16 +1,18 @@
 # Adosistering
 
-Adosistering is a SolidStart web dashboard for IoT-based drip irrigation management. The application stores administration data in SQL through Prisma and uses Firebase Realtime Database for live sprayer telemetry and control.
+Adosistering is a SolidStart web dashboard for IoT-based drip irrigation management. It stores administration data in SQL through Prisma and uses Firebase Realtime Database for live sprayer telemetry and control.
 
 ## Core Features
 
 - Role-based access control: Superadmin, Admin, and User.
 - SQL-backed user, region, block, sprayer, assignment, threshold, history, and activity-log management.
-- Firebase RTDB live monitoring for blocks and sprayers.
-- Manual and automatic sprayer control.
-- Region-based dashboard, map visualization, statistics, settings, and irrigation history.
+- Firebase RTDB live monitoring for blocks and sprayers with hardware field-name aliasing.
+- Manual and automatic sprayer control with confirmation dialogs to prevent accidental actions.
+- Region-based dashboard, map visualization, statistics, settings, and irrigation history with infinite scroll.
+- Landing page with CMS-backed testimonials, locations, and partner sections.
 - Password reset email with reusable templates.
-- Responsive UI with skeleton loading, NProgress, modal confirmations, and global error handling.
+- Per-field live form validation across all forms.
+- Responsive UI with skeleton loading, NProgress, modal confirmations, toast notifications, and global error handling.
 
 ## Tech Stack
 
@@ -30,15 +32,15 @@ src/
   assets/                Internal images and SVG assets
   components/
     form/                Reusable form controls
-    shared/              App-wide components: Sidebar, Toast, Confirm, Leaflet map
-    ui/                  Dumb UI components: Button, Card, Badge, Toggle
+    shared/              App-wide components: Sidebar, Toast, Confirm, Modal, Leaflet map
+    ui/                  Dumb UI components: Button, Card, Badge, Toggle, DatePicker, SimpleSelect
   config/                Public/server-adjacent app, site, env, and theme config
   constants/             Route constants and shared error messages
-  features/              Domain UI modules, currently dashboard widgets
-  layouts/               AppLayout and AuthLayout
+  features/              Domain UI modules: dashboard widgets, landing page sections, settings panels
+  layouts/               AppLayout, AuthLayout, LandingLayout
   lib/
-    client/              Browser-only helpers: Firebase client, NProgress
-    shared/              Universal pure helpers: irrigation/Firebase path logic
+    client/              Browser-only helpers: Firebase client, NProgress, liveDate
+    shared/              Universal pure helpers: irrigation/Firebase path logic, validation
   middleware/            SolidStart middleware implementation
   routes/                File-based routes, all URLs are English
   server/
@@ -108,7 +110,7 @@ user@test.com / Password123!
 bun run dev          Start development server
 bun run build        Production build
 bun run start        Start the built Nitro Node server from .output
-bunx tsc --noEmit    Type-check only
+bunx tsc --noEmit    Type-check only (preferred over bun run check for safety)
 bunx prisma validate Validate Prisma schema
 bun run db:seed      Seed demo data
 ```

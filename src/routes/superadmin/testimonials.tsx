@@ -10,7 +10,12 @@ import { Badge } from "~/components/ui/Badge";
 import { useToast } from "~/components/shared/ToastProvider";
 import { useConfirm } from "~/components/shared/ConfirmProvider";
 import { ImageUpload } from "~/components/shared/ImageUpload";
-import { getAllTestimonials, createTestimonial, updateTestimonial, deleteTestimonial } from "~/server/actions/index";
+import {
+  getAllTestimonials,
+  createTestimonial,
+  updateTestimonial,
+  deleteTestimonial,
+} from "~/server/actions/landing-cms";
 
 type Item = Awaited<ReturnType<typeof getAllTestimonials>>[number];
 

@@ -1,7 +1,7 @@
 import { A } from "@solidjs/router";
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
 import { NAV_LINKS } from "~/constants/landing";
-import type { WebConfig } from "~/server/actions/index";
+import type { WebConfig } from "~/server/actions/web-config";
 import type { SessionUser } from "~/server/auth";
 import { scrollToId } from "~/features/landing/utils";
 

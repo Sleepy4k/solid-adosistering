@@ -1,7 +1,7 @@
 import { createMemo, createSignal, onCleanup, Show } from "solid-js";
 import { CONTACT_CARDS, CONTACT_USER_TYPES } from "~/constants/landing";
 import LandingSelect from "~/features/landing/components/LandingSelect";
-import { saveContactSubmission } from "~/server/actions/index";
+import { saveContactSubmission } from "~/server/actions/contact";
 import { debounce } from "~/lib/shared/debounce";
 import { validateEmail, validateMessage, validateName, validatePhone } from "~/lib/shared/validation";
 

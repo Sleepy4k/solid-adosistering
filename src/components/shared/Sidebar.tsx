@@ -24,8 +24,8 @@ import { For, Show } from "solid-js";
 import type { JSX } from "solid-js";
 import fallbackLogo from "~/assets/logo.svg?url";
 import { ROUTES } from "~/constants/routes";
-import { logout } from "~/server/actions/index";
-import type { SessionUser } from "~/server/session";
+import { logout } from "~/server/actions/auth";
+import type { SessionUser } from "~/server/auth/session";
 import { useWebConfig } from "~/lib/shared/webConfig";
 import { useConfirm } from "./ConfirmProvider";
 

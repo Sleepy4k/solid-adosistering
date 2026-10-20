@@ -3,15 +3,15 @@
 import type { Prisma } from "@prisma/client";
 import { redirect } from "@solidjs/router";
 import { prisma } from "../db/prisma";
-import { getSession } from "../session";
-import { getScopedBlockIds, getScopedRegionIds, refreshFirebaseCache } from "./_helpers";
+import { getSession } from "../auth/session";
+import { getScopedBlockIds, getScopedRegionIds, scheduleFirebaseRefresh } from "../domain";
 import { parseInput, statisticsSchema } from "../validation";
 
 export async function getStatistics(input: { blockId?: string; regionId?: string; range: "today" | "7d" | "30d" }) {
   const data = parseInput(statisticsSchema, input);
   const session = await getSession();
   if (!session) throw redirect("/login");
-  await refreshFirebaseCache();
+  scheduleFirebaseRefresh();
 
   const now = new Date();
   let since: Date;
@@ -45,8 +45,12 @@ export async function getStatistics(input: { blockId?: string; regionId?: string
     }
   }
 
-  const blockFilter: Prisma.SensorReadingWhereInput = scopedBlockIds ? { blockId: { in: scopedBlockIds } } : {};
-  const eventFilter: Prisma.IrrigationEventWhereInput = scopedBlockIds ? { blockId: { in: scopedBlockIds } } : {};
+  const blockFilter: Prisma.SensorReadingWhereInput = scopedBlockIds
+    ? { sprayer: { blockId: { in: scopedBlockIds } } }
+    : {};
+  const eventFilter: Prisma.IrrigationEventWhereInput = scopedBlockIds
+    ? { sprayer: { blockId: { in: scopedBlockIds } } }
+    : {};
 
   const readings = await prisma.sensorReading.findMany({
     where: { ...blockFilter, recordedAt: { gte: since } },
@@ -57,7 +61,13 @@ export async function getStatistics(input: { blockId?: string; regionId?: string
       flowLmin: true,
       totalVolumeLiter: true,
       moistureStatus: true,
-      block: { select: { id: true, name: true, region: { select: { name: true, volumeDivider: true } } } },
+      sprayer: {
+        select: {
+          block: {
+            select: { id: true, name: true, region: { select: { name: true, volumeDivider: true } } },
+          },
+        },
+      },
     },
     take: 2000,
   });
@@ -66,24 +76,33 @@ export async function getStatistics(input: { blockId?: string; regionId?: string
   const events = await prisma.irrigationEvent.findMany({
     where: { ...eventFilter, startedAt: { gte: since } },
     orderBy: { startedAt: "asc" },
-    select: { mode: true, relay: true, startedAt: true, endedAt: true, blockId: true },
+    select: {
+      mode: true,
+      relay: true,
+      startedAt: true,
+      endedAt: true,
+      sprayer: { select: { block: { select: { id: true } } } },
+    },
     take: 5000,
   });
 
   return {
     readings: readings.map((r) => {
-      const volumeDivider = Number(r.block.region.volumeDivider ?? 1);
+      const block = r.sprayer.block;
+      const volumeDivider = Number(block.region.volumeDivider ?? 1);
       return {
         recordedAt: r.recordedAt.toISOString(),
         moisturePercent: Number(r.moisturePercent),
         flowLmin: Number(r.flowLmin) / volumeDivider,
         totalVolumeLiter: r.totalVolumeLiter === null ? null : Number(r.totalVolumeLiter) / volumeDivider,
         moistureStatus: r.moistureStatus,
-        block: { id: r.block.id, name: r.block.name, region: { name: r.block.region.name } },
+        block: { id: block.id, name: block.name, region: { name: block.region.name } },
       };
     }),
     events: events.map((e) => ({
-      ...e,
+      blockId: e.sprayer.block.id,
+      mode: e.mode,
+      relay: e.relay,
       startedAt: e.startedAt.toISOString(),
       endedAt: e.endedAt?.toISOString() ?? null,
     })),

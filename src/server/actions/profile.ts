@@ -4,13 +4,13 @@ import { ActivityAction } from "@prisma/client";
 import { getRequestIP } from "@solidjs/start/http";
 import { redirect } from "@solidjs/router";
 import { prisma } from "../db/prisma";
-import { sendPasswordChangedEmail } from "../email";
-import { hashPassword, verifyPassword } from "../security";
+import { sendPasswordChangedEmail } from "../integrations/email";
+import { hashPassword, verifyPassword } from "../auth/security";
 import { serverConfig } from "../config";
-import { checkRateLimit, rateLimitResponse } from "../rateLimit";
+import { checkRateLimit, rateLimitResponse } from "../http/rateLimit";
 import { changePasswordSchema, parseInput, updateProfileSchema } from "../validation";
-import { logActivity } from "./_helpers";
-import { currentTokenHash, destroyAllUserSessions, getSession } from "../session";
+import { logActivity } from "../domain";
+import { currentTokenHash, destroyAllUserSessions, getSession } from "../auth/session";
 import type { MyProfile } from "~/types/profile";
 
 export type { MyProfile };
@@ -113,7 +113,15 @@ export async function changeMyPassword(input: { currentPassword: string; newPass
   }
 
   const newHash = await hashPassword(data.newPassword);
-  await prisma.user.update({ where: { id: session.id }, data: { passwordHash: newHash } });
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: session.id }, data: { passwordHash: newHash } });
+    // Changing the password invalidates every outstanding reset link.
+    await tx.passwordResetToken.updateMany({
+      where: { userId: session.id, usedAt: null },
+      data: { usedAt: now },
+    });
+  });
   await destroyAllUserSessions(session.id, currentTokenHash() ?? undefined);
   await logActivity({
     actorId: session.id,

@@ -1,23 +1,56 @@
 "use server";
 
 import type { MoistureStatus } from "@prisma/client";
-import { ActivityAction } from "@prisma/client";
+import { ActivityAction, SyncStatus } from "@prisma/client";
 import { redirect } from "@solidjs/router";
-import { updateRegionSettings } from "../services/firebaseSync";
+import { updateRegionSettings } from "../integrations/firebase";
 import { prisma } from "../db/prisma";
-import { getSession } from "../session";
+import { getSession } from "../auth/session";
 import { parseInput, saveRegionSafetyTimeoutSchema, saveSafetyTimeoutSchema, saveThresholdSchema } from "../validation";
 import {
   displayThresholdDefaults,
   getRegionSafetyTimeoutMap,
   getRegionThresholdMap,
   getSafetyTimeoutDefault,
-  getScopedRegionIds,
   normalizeSafetyTimeout,
   normalizePreference,
   SAFETY_TIMEOUT_KEY,
   logActivity,
-} from "./_helpers";
+  type RegionThreshold,
+} from "../domain";
+
+function requireThreshold(map: Map<string, RegionThreshold>, regionId: string) {
+  const threshold = map.get(regionId);
+  if (!threshold) throw new Error(`Threshold region ${regionId} tidak tersedia.`);
+  return threshold;
+}
+
+/**
+ * Reflect the Firebase mirror state on the relational region row. SQL stays
+ * authoritative, so a failed RTDB push only flags the row for retry.
+ *
+ * A settings-only push must never mask an existing FAILED state: a failed
+ * rename/provisioning leaves blocks orphaned under the old RTDB node, and
+ * silently marking the region SYNCED would hide that.
+ */
+async function persistRegionSyncStatus(regionId: string, status: SyncStatus) {
+  try {
+    if (status === SyncStatus.SYNCED) {
+      await prisma.region.updateMany({
+        where: { id: regionId, firebaseSyncStatus: { not: SyncStatus.FAILED } },
+        data: { firebaseSyncStatus: SyncStatus.SYNCED, firebaseSyncedAt: new Date() },
+      });
+      return;
+    }
+
+    await prisma.region.update({
+      where: { id: regionId },
+      data: { firebaseSyncStatus: SyncStatus.FAILED, firebaseSyncedAt: null },
+    });
+  } catch (error) {
+    console.error("[firebase] region sync status update failed", error);
+  }
+}
 
 export async function getMySettings() {
   const session = await getSession();
@@ -44,7 +77,7 @@ export async function getMySettings() {
         id: a.region.id,
         name: a.region.name,
         blockCount: a.region._count.blocks,
-        threshold: thresholdMap.get(a.region.id) ?? null,
+        threshold: requireThreshold(thresholdMap, a.region.id),
         safetyTimeout: safetyTimeoutMap.get(a.region.id) ?? safetyTimeout,
       })),
     };
@@ -54,10 +87,9 @@ export async function getMySettings() {
     where: { userId: session.id },
     include: { region: { include: { _count: { select: { blocks: true } } } } },
   });
-  const thresholdMap = await getRegionThresholdMap(
-    session.id,
-    assignments.map((a) => a.regionId),
-  );
+  const regionIds = assignments.map((a) => a.regionId);
+  const thresholdMap = await getRegionThresholdMap(session.id, regionIds);
+  const safetyTimeoutMap = await getRegionSafetyTimeoutMap(regionIds, safetyTimeout);
 
   return {
     role: "USER" as const,
@@ -65,7 +97,8 @@ export async function getMySettings() {
       id: a.region.id,
       name: a.region.name,
       blockCount: a.region._count.blocks,
-      threshold: thresholdMap.get(a.region.id) ?? null,
+      threshold: requireThreshold(thresholdMap, a.region.id),
+      safetyTimeout: safetyTimeoutMap.get(a.region.id) ?? safetyTimeout,
     })),
     safetyTimeout,
   };
@@ -90,54 +123,62 @@ export async function saveThreshold(input: {
   }
   const session = await getSession();
   if (!session) throw redirect("/login");
-  let regionName: string | null = null;
+  let region: { name: string; automaticMode: boolean } | null = null;
 
   if (session.role === "USER") {
     const assignment = await prisma.userRegionAssignment.findUnique({
       where: { userId_regionId: { userId: session.id, regionId: data.regionId } },
-      include: { region: { select: { name: true } } },
+      include: { region: { select: { name: true, automaticMode: true } } },
     });
     if (!assignment) throw new Response("Region tidak berada di hak akses user.", { status: 403 });
-    regionName = assignment.region.name;
+    region = assignment.region;
   } else if (session.role === "ADMIN") {
     const assignment = await prisma.adminRegionAssignment.findUnique({
       where: { adminId_regionId: { adminId: session.id, regionId: data.regionId } },
-      include: { region: { select: { name: true } } },
+      include: { region: { select: { name: true, automaticMode: true } } },
     });
     if (!assignment) throw new Response("Region tidak berada di hak akses admin.", { status: 403 });
-    regionName = assignment.region.name;
+    region = assignment.region;
   } else {
     throw new Response("Pengaturan region hanya tersedia untuk Admin atau User.", { status: 403 });
   }
 
-  await prisma.indicatorThreshold.upsert({
-    where: { userId_regionId: { userId: session.id, regionId: data.regionId } },
-    create: {
-      userId: session.id,
-      regionId: data.regionId,
-      dryMaxPercent: data.dryMaxPercent,
-      wetMinPercent: data.wetMinPercent,
-      ...displayThresholds,
-      landPreference: normalizePreference(data.landPreference),
-    },
-    update: {
-      dryMaxPercent: data.dryMaxPercent,
-      wetMinPercent: data.wetMinPercent,
-      ...displayThresholds,
-      landPreference: normalizePreference(data.landPreference),
-    },
-  });
-
-  if (regionName) {
-    try {
-      await updateRegionSettings({
-        regionName,
+  const landPreference = normalizePreference(data.landPreference);
+  await prisma.$transaction([
+    prisma.region.update({
+      where: { id: data.regionId },
+      data: {
         dryMaxPercent: data.dryMaxPercent,
         wetMinPercent: data.wetMinPercent,
-      });
-    } catch (error) {
-      console.error("[firebase] updateRegionSettings", error);
-    }
+        updatedById: session.id,
+      },
+    }),
+    prisma.indicatorThreshold.upsert({
+      where: { userId_regionId: { userId: session.id, regionId: data.regionId } },
+      create: {
+        userId: session.id,
+        regionId: data.regionId,
+        ...displayThresholds,
+        landPreference,
+      },
+      update: {
+        ...displayThresholds,
+        landPreference,
+      },
+    }),
+  ]);
+
+  try {
+    await updateRegionSettings({
+      regionName: region.name,
+      dryMaxPercent: data.dryMaxPercent,
+      wetMinPercent: data.wetMinPercent,
+      automaticMode: region.automaticMode,
+    });
+    await persistRegionSyncStatus(data.regionId, SyncStatus.SYNCED);
+  } catch (error) {
+    console.error("[firebase] updateRegionSettings", error);
+    await persistRegionSyncStatus(data.regionId, SyncStatus.FAILED);
   }
 
   await logActivity({
@@ -146,7 +187,12 @@ export async function saveThreshold(input: {
     action: ActivityAction.UPDATE,
     entityType: "IndicatorThreshold",
     entityId: data.regionId,
-    metadata: { dryMaxPercent: data.dryMaxPercent, wetMinPercent: data.wetMinPercent },
+    metadata: {
+      dryMaxPercent: data.dryMaxPercent,
+      wetMinPercent: data.wetMinPercent,
+      ...displayThresholds,
+      landPreference,
+    },
   });
   return { ok: true };
 }
@@ -179,26 +225,53 @@ export async function saveRegionSafetyTimeout(input: { regionId: string; min: nu
   if (!session) throw redirect("/login");
   if (session.role === "USER") throw new Response("Pengaturan region hanya tersedia untuk Admin.", { status: 403 });
 
+  const { min, max } = normalizeSafetyTimeout(data);
+  const regionSelect = {
+    name: true,
+    dryMaxPercent: true,
+    wetMinPercent: true,
+    automaticMode: true,
+  } as const;
+
+  let region: {
+    name: string;
+    dryMaxPercent: number;
+    wetMinPercent: number;
+    automaticMode: boolean;
+  } | null = null;
+
   if (session.role === "ADMIN") {
     const assignment = await prisma.adminRegionAssignment.findUnique({
       where: { adminId_regionId: { adminId: session.id, regionId: data.regionId } },
+      include: { region: { select: regionSelect } },
     });
     if (!assignment) throw new Response("Region tidak berada di hak akses admin.", { status: 403 });
-  }
-
-  const { min, max } = normalizeSafetyTimeout(data);
-  const key = `${SAFETY_TIMEOUT_KEY}:${data.regionId}`;
-
-  if (session.role === "SUPERADMIN") {
-    const region = await prisma.region.findUnique({ where: { id: data.regionId }, select: { id: true } });
+    region = assignment.region;
+  } else {
+    region = await prisma.region.findUnique({ where: { id: data.regionId }, select: regionSelect });
     if (!region) throw new Response("Region tidak ditemukan.", { status: 404 });
   }
 
-  await prisma.systemSetting.upsert({
-    where: { key },
-    create: { key, value: { min, max } },
-    update: { value: { min, max } },
+  await prisma.region.update({
+    where: { id: data.regionId },
+    data: { safetyTimeoutMin: min, safetyTimeoutMax: max, updatedById: session.id },
   });
+
+  try {
+    await updateRegionSettings({
+      regionName: region.name,
+      dryMaxPercent: region.dryMaxPercent,
+      wetMinPercent: region.wetMinPercent,
+      automaticMode: region.automaticMode,
+      safetyTimeoutMin: min,
+      safetyTimeoutMax: max,
+    });
+    await persistRegionSyncStatus(data.regionId, SyncStatus.SYNCED);
+  } catch (error) {
+    console.error("[firebase] updateRegionSettings", error);
+    await persistRegionSyncStatus(data.regionId, SyncStatus.FAILED);
+  }
+
   await logActivity({
     actorId: session.id,
     regionId: data.regionId,

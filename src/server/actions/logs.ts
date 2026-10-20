@@ -4,8 +4,8 @@ import type { Prisma } from "@prisma/client";
 import { ActivityAction } from "@prisma/client";
 import { redirect } from "@solidjs/router";
 import { prisma } from "../db/prisma";
-import { getSession } from "../session";
-import { getScopedRegionIds } from "./_helpers";
+import { getSession } from "../auth/session";
+import { getScopedRegionIds } from "../domain";
 import { activityLogFiltersSchema, parseInput } from "../validation";
 import type { ActivityLogItem } from "~/types/logs";
 

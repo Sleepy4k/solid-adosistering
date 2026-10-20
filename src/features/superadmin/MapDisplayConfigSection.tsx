@@ -3,7 +3,7 @@ import { createSignal, Show, Suspense } from "solid-js";
 import { Card, CardHeader } from "~/components/ui/Card";
 import { Button } from "~/components/ui/Button";
 import { useToast } from "~/components/shared/ToastProvider";
-import { saveMapDisplayConfig } from "~/server/actions/index";
+import { saveMapDisplayConfig } from "~/server/actions/map";
 import { loadMapDisplayConfig } from "./loaders";
 import type { MapDisplayConfig } from "~/types/map";
 

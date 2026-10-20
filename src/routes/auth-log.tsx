@@ -7,7 +7,7 @@ import { SkTableRow } from "~/components/shared/Skeleton";
 import { SelectSearch } from "~/components/ui/SelectSearch";
 import { PageSizeSelect, TablePagination } from "~/components/ui/TablePagination";
 import ActionBadge from "~/features/logs/ActionBadge";
-import { getActivityLogs, type ActivityLogItem } from "~/server/actions/index";
+import { getActivityLogs, type ActivityLogItem } from "~/server/actions/logs";
 import { ACTION_LABELS, AUTH_ACTIONS } from "~/constants/activity-log";
 
 type ActivityLogResult = Awaited<ReturnType<typeof getActivityLogs>>;

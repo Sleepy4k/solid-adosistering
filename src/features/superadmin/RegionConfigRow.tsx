@@ -1,8 +1,8 @@
 import { createSignal } from "solid-js";
 import { Button } from "~/components/ui/Button";
 import { useToast } from "~/components/shared/ToastProvider";
-import type { getRegionsForConfig } from "~/server/actions/index";
-import { updateRegionConfig } from "~/server/actions/index";
+import type { getRegionsForConfig } from "~/server/actions/regions";
+import { updateRegionConfig } from "~/server/actions/regions";
 
 type RegionRow = Awaited<ReturnType<typeof getRegionsForConfig>>[number];
 

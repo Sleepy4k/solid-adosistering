@@ -4,7 +4,7 @@ import { query, createAsync } from "@solidjs/router";
 import { Card, CardHeader } from "~/components/ui/Card";
 import { LeafletMap, type LeafletPolygon, type LeafletRegionMarker } from "~/components/shared/LeafletMap";
 import { subscribeToBlock } from "~/lib/client/firebaseClient";
-import { getMapDisplayConfig } from "~/server/actions/index";
+import { getMapDisplayConfig } from "~/server/actions/map";
 import type { DashboardRegion } from "./DashboardTypes";
 import { colorForIndex, colorForStatus, pointsFromGeojson } from "./helpers";
 

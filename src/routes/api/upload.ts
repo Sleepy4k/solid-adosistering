@@ -3,9 +3,9 @@ import { randomBytes } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import { serverConfig } from "~/server/config";
-import { checkRateLimit, rateLimitResponse } from "~/server/rateLimit";
-import { assertSuperadmin } from "~/server/security";
-import { getSession } from "~/server/session";
+import { checkRateLimit, rateLimitResponse } from "~/server/http/rateLimit";
+import { assertSuperadmin } from "~/server/auth/security";
+import { getSession } from "~/server/auth/session";
 
 const MAX_SIZE = serverConfig.uploads.maxBytes;
 
@@ -48,7 +48,23 @@ export async function POST(event: APIEvent): Promise<Response> {
   const limit = checkRateLimit(`upload:${session.id}`, 20, 60 * 60_000);
   if (!limit.allowed) return rateLimitResponse(limit);
 
-  const contentLength = Number(event.request.headers.get("content-length") ?? 0);
+  // Require an explicit Content-Length and reject chunked/unknown-length bodies:
+  // without it the multipart parser can buffer an unbounded request in memory.
+  // Deployment proxies should still enforce their own request body limit.
+  const contentLengthHeader = event.request.headers.get("content-length");
+  if (contentLengthHeader === null) {
+    return new Response("Header Content-Length wajib disertakan.", { status: 411 });
+  }
+  const contentLengthValue = contentLengthHeader.trim();
+  const contentLength = Number(contentLengthValue);
+  if (
+    !/^\d+$/.test(contentLengthValue) ||
+    !Number.isFinite(contentLength) ||
+    !Number.isInteger(contentLength) ||
+    contentLength < 0
+  ) {
+    return new Response("Header Content-Length tidak valid.", { status: 400 });
+  }
   if (contentLength > MAX_SIZE + 64 * 1024) {
     return new Response("Ukuran file melebihi batas 2MB.", { status: 413 });
   }

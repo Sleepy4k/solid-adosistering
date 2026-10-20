@@ -3,7 +3,7 @@ import { createEffect, createMemo, createSignal, For, lazy, Show, Suspense } fro
 import { Plus, RotateCcw } from "lucide-solid";
 import { PageMeta } from "~/components/shared/PageMeta";
 import { PageSizeSelect, TablePagination } from "~/components/ui/TablePagination";
-import { deleteUser, getUserFormOptions, getUsers, setUserActive } from "~/server/actions/index";
+import { deleteUser, getUserFormOptions, getUsers, setUserActive } from "~/server/actions/users";
 import { SkTableRow } from "~/components/shared/Skeleton";
 import { useToast } from "~/components/shared/ToastProvider";
 import { useConfirm } from "~/components/shared/ConfirmProvider";

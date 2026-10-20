@@ -1,5 +1,5 @@
 import { DEFAULT_WEB_CONFIG } from "~/constants/landing";
-import type { WebConfig } from "~/server/actions/index";
+import type { WebConfig } from "~/server/actions/web-config";
 
 type HeroSectionProps = {
   config: WebConfig;

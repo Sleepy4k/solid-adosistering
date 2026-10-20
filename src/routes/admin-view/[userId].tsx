@@ -5,7 +5,7 @@ import { PageMeta } from "~/components/shared/PageMeta";
 import { Card } from "~/components/ui/Card";
 import { PageHeader } from "~/components/ui/PageHeader";
 import { SkCard } from "~/components/shared/Skeleton";
-import { getUserDashboardView } from "~/server/actions/index";
+import { getUserDashboardView } from "~/server/actions/admin-view";
 import { RegionSection } from "~/features/dashboard/RegionSection";
 import { MapCard } from "~/features/dashboard/MapCard";
 import { ROUTES } from "~/constants/routes";

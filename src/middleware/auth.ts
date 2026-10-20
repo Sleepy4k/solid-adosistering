@@ -11,7 +11,7 @@ import {
   serverConfig,
 } from "~/server/config";
 import { prisma } from "~/server/db/prisma";
-import { hashToken } from "~/server/security";
+import { hashToken } from "~/server/auth/security";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS", "TRACE"]);
 const ASSET_PREFIXES = [
@@ -20,7 +20,9 @@ const ASSET_PREFIXES = [
   "/landing/",
   "/uploads/",
   "/icons/",
+  "/fonts/",
   "/favicon",
+  "/logo.svg",
   "/og-image",
   "/apple-touch-icon",
   "/site.webmanifest",
@@ -30,7 +32,6 @@ const ASSET_PREFIXES = [
   "/llms-full.txt",
   "/.well-known/",
 ];
-const ASSET_EXTENSIONS = /\.(?:js|mjs|css|map|png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|eot|txt|xml|webmanifest)$/i;
 
 const SUPERADMIN_ROUTES = [
   ROUTES.regionManagement,
@@ -63,7 +64,7 @@ function parseCookieHeader(header: string, name: string): string | null {
 }
 
 function isAssetPath(pathname: string) {
-  return ASSET_PREFIXES.some((prefix) => pathname.startsWith(prefix)) || ASSET_EXTENSIONS.test(pathname);
+  return ASSET_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
 function isPublicPath(pathname: string) {

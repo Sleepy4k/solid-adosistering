@@ -3,21 +3,27 @@
 import { IrrigationMode, Prisma, RelayState } from "@prisma/client";
 import { redirect } from "@solidjs/router";
 import { prisma } from "../db/prisma";
-import { getSession } from "../session";
+import { getSession } from "../auth/session";
 import { historyFiltersSchema, parseInput } from "../validation";
 import {
   displayMoistureStatus,
   getRegionThresholdMap,
   getScopedBlockIds,
   getScopedRegionIds,
-  refreshFirebaseCache,
-} from "./_helpers";
+  scheduleFirebaseRefresh,
+} from "../domain";
 import type { HistoryFilters } from "~/types/history";
 
 export type { HistoryFilters };
 
 const MAX_PAGE_SIZE = 85;
 const DEFAULT_PAGE_SIZE = 10;
+const MAX_CURSOR_LENGTH = 256;
+
+type HistoryCursor = {
+  startedAt: string;
+  id: string;
+};
 
 type EventSensorReading = {
   eventId: string;
@@ -27,11 +33,44 @@ type EventSensorReading = {
   moistureStatus: string | null;
 };
 
+/**
+ * Opaque compound cursor for stable keyset pagination.
+ * Encoded as base64url(JSON({ startedAt: ISO-8601, id })).
+ */
+function encodeHistoryCursor(startedAt: Date, id: string) {
+  return Buffer.from(JSON.stringify({ startedAt: startedAt.toISOString(), id }), "utf8").toString("base64url");
+}
+
+function decodeHistoryCursor(value: string): HistoryCursor {
+  if (value.length > MAX_CURSOR_LENGTH) throw new Response("Cursor riwayat tidak valid.", { status: 400 });
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
+  } catch {
+    throw new Response("Cursor riwayat tidak valid.", { status: 400 });
+  }
+
+  if (typeof parsed !== "object" || parsed === null) {
+    throw new Response("Cursor riwayat tidak valid.", { status: 400 });
+  }
+  const record = parsed as { startedAt?: unknown; id?: unknown };
+  if (typeof record.startedAt !== "string" || typeof record.id !== "string") {
+    throw new Response("Cursor riwayat tidak valid.", { status: 400 });
+  }
+  if (!record.id || record.id.length > 191) throw new Response("Cursor riwayat tidak valid.", { status: 400 });
+
+  const startedAt = new Date(record.startedAt);
+  if (Number.isNaN(startedAt.getTime())) throw new Response("Cursor riwayat tidak valid.", { status: 400 });
+
+  return { startedAt: startedAt.toISOString(), id: record.id };
+}
+
 export async function getIrrigationHistory(filters: HistoryFilters = {}) {
   const data = parseInput(historyFiltersSchema, filters);
   const session = await getSession();
   if (!session) throw redirect("/login");
-  await refreshFirebaseCache();
+  scheduleFirebaseRefresh();
 
   const where: Prisma.IrrigationEventWhereInput = {};
 
@@ -58,7 +97,7 @@ export async function getIrrigationHistory(filters: HistoryFilters = {}) {
         scopedBlockIds = scopedBlockIds.filter((id) => regionBlocks.has(id));
       }
     }
-    where.blockId = { in: scopedBlockIds };
+    where.sprayer = { blockId: { in: scopedBlockIds } };
   }
 
   if (data.status) where.relay = data.status === "ON" ? RelayState.ON : RelayState.OFF;
@@ -74,13 +113,16 @@ export async function getIrrigationHistory(filters: HistoryFilters = {}) {
   if (startedAtFilter.gte || startedAtFilter.lt) where.startedAt = startedAtFilter;
 
   const limit = Math.min(data.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
-  const cursor = data.cursor;
+  const cursor = data.cursor ? decodeHistoryCursor(data.cursor) : null;
+  if (cursor) {
+    const cursorStartedAt = new Date(cursor.startedAt);
+    where.OR = [{ startedAt: { lt: cursorStartedAt } }, { startedAt: cursorStartedAt, id: { lt: cursor.id } }];
+  }
 
   const events = await prisma.irrigationEvent.findMany({
     where,
-    orderBy: { startedAt: "desc" },
+    orderBy: [{ startedAt: "desc" }, { id: "desc" }],
     take: limit + 1,
-    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     select: {
       id: true,
       mode: true,
@@ -89,25 +131,34 @@ export async function getIrrigationHistory(filters: HistoryFilters = {}) {
       endedAt: true,
       durationSeconds: true,
       totalVolumeLiter: true,
-      block: {
-        select: { id: true, name: true, region: { select: { id: true, name: true, volumeDivider: true } } },
+      sprayer: {
+        select: {
+          id: true,
+          displayName: true,
+          hardwareId: true,
+          block: {
+            select: {
+              id: true,
+              name: true,
+              region: { select: { id: true, name: true, volumeDivider: true } },
+            },
+          },
+        },
       },
-      sprayer: { select: { id: true, displayName: true, hardwareId: true } },
       actor: { select: { id: true, name: true } },
     },
   });
 
   const hasMore = events.length > limit;
-  if (hasMore) events.pop();
+  const page = hasMore ? events.slice(0, limit) : events;
 
-  const thresholdMap =
-    session.role === "USER"
-      ? await getRegionThresholdMap(session.id, [...new Set(events.map((e) => e.block.region.id))])
-      : new Map<string, Awaited<ReturnType<typeof getRegionThresholdMap>> extends Map<string, infer T> ? T : never>();
+  const thresholdMap = await getRegionThresholdMap(session.id, [
+    ...new Set(page.map((event) => event.sprayer.block.region.id)),
+  ]);
 
   // One correlated query instead of one query per event (the previous N+1).
   const readingRows: EventSensorReading[] =
-    events.length > 0
+    page.length > 0
       ? await prisma.$queryRaw<EventSensorReading[]>`
           SELECT e.id AS eventId,
                  sr.moisture_percent AS moisturePercent,
@@ -118,22 +169,22 @@ export async function getIrrigationHistory(filters: HistoryFilters = {}) {
           LEFT JOIN sensor_reading sr ON sr.id = (
             SELECT sr2.id
             FROM sensor_reading sr2
-            WHERE sr2.block_id = e.block_id
-              AND sr2.sprayer_id = e.sprayer_id
+            WHERE sr2.sprayer_id = e.sprayer_id
               AND sr2.recorded_at <= e.started_at
-            ORDER BY sr2.recorded_at DESC
+            ORDER BY sr2.recorded_at DESC, sr2.id DESC
             LIMIT 1
           )
-          WHERE e.id IN (${Prisma.join(events.map((event) => event.id))})
+          WHERE e.id IN (${Prisma.join(page.map((event) => event.id))})
         `
       : [];
   const readingsByEvent = new Map(readingRows.map((row) => [row.eventId, row]));
 
-  const items = events.map((event) => {
+  const items = page.map((event) => {
     const reading = readingsByEvent.get(event.id);
     const moisturePercent = reading?.moisturePercent == null ? null : Number(reading.moisturePercent);
-    const threshold = thresholdMap.get(event.block.region.id) ?? null;
-    const volumeDivider = Number(event.block.region.volumeDivider ?? 1);
+    const block = event.sprayer.block;
+    const threshold = thresholdMap.get(block.region.id) ?? null;
+    const volumeDivider = Number(block.region.volumeDivider ?? 1);
 
     const rawVolume =
       event.totalVolumeLiter === null
@@ -155,11 +206,15 @@ export async function getIrrigationHistory(filters: HistoryFilters = {}) {
       durationSeconds,
       totalVolumeLiter: rawVolume === null ? null : rawVolume / volumeDivider,
       block: {
-        id: event.block.id,
-        name: event.block.name,
-        region: { id: event.block.region.id, name: event.block.region.name },
+        id: block.id,
+        name: block.name,
+        region: { id: block.region.id, name: block.region.name },
       },
-      sprayer: event.sprayer,
+      sprayer: {
+        id: event.sprayer.id,
+        displayName: event.sprayer.displayName,
+        hardwareId: event.sprayer.hardwareId,
+      },
       actor: event.actor,
       sensor: reading
         ? {
@@ -174,9 +229,11 @@ export async function getIrrigationHistory(filters: HistoryFilters = {}) {
     };
   });
 
+  const lastEvent = page[page.length - 1];
+
   return {
     items,
-    nextCursor: hasMore ? (events[events.length - 1]?.id ?? null) : null,
+    nextCursor: hasMore && lastEvent ? encodeHistoryCursor(lastEvent.startedAt, lastEvent.id) : null,
   };
 }
 

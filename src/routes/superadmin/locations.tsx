@@ -10,7 +10,7 @@ import { Badge } from "~/components/ui/Badge";
 import { useToast } from "~/components/shared/ToastProvider";
 import { useConfirm } from "~/components/shared/ConfirmProvider";
 import { ImageUpload } from "~/components/shared/ImageUpload";
-import { getAllLocations, createLocation, updateLocation, deleteLocation } from "~/server/actions/index";
+import { getAllLocations, createLocation, updateLocation, deleteLocation } from "~/server/actions/landing-cms";
 
 type Item = Awaited<ReturnType<typeof getAllLocations>>[number];
 

@@ -1,6 +1,6 @@
 import { query, createAsync } from "@solidjs/router";
 import { For, Show } from "solid-js";
-import { getLandingPartners } from "~/server/actions/index";
+import { getLandingPartners } from "~/server/actions/landing-cms";
 import { PARTNERS } from "~/constants/landing";
 
 const loadPartners = query(() => getLandingPartners(), "landing-partners");

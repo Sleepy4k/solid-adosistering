@@ -3,7 +3,7 @@ import { PageMeta } from "~/components/shared/PageMeta";
 import { SkCard } from "~/components/shared/Skeleton";
 import { PageHeader } from "~/components/ui/PageHeader";
 import { ErrorBoundary, lazy, Show, Suspense } from "solid-js";
-import { getMyDashboard } from "~/server/actions/index";
+import { getMyDashboard } from "~/server/actions/dashboard";
 import type { AdminUserCard, DashboardRegion, SuperadminSummary } from "~/types/dashboard";
 import { useLiveDate } from "~/lib/client/liveDate";
 

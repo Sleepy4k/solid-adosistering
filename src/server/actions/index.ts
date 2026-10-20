@@ -1,3 +1,4 @@
+// Compatibility barrel: new imports should target the domain module directly (e.g. "~/server/actions/auth").
 export * from "./auth";
 export * from "./dashboard";
 export * from "./profile";

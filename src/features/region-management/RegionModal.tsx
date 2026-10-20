@@ -1,8 +1,8 @@
 import { createSignal } from "solid-js";
 import { ModalFrame } from "~/components/shared/ModalFrame";
 import { useToast } from "~/components/shared/ToastProvider";
-import type { getRegions } from "~/server/actions/index";
-import { createRegion, updateRegion } from "~/server/actions/index";
+import type { getRegions } from "~/server/actions/regions";
+import { createRegion, updateRegion } from "~/server/actions/regions";
 
 type RegionRow = Awaited<ReturnType<typeof getRegions>>[number];
 

@@ -3,7 +3,7 @@ import type { JSX } from "solid-js";
 import { onCleanup, onMount } from "solid-js";
 import LandingFooter from "~/features/landing/LandingFooter";
 import LandingHeader from "~/features/landing/LandingHeader";
-import type { WebConfig } from "~/server/actions/index";
+import type { WebConfig } from "~/server/actions/web-config";
 import type { SessionUser } from "~/server/auth";
 
 type LandingLayoutProps = {

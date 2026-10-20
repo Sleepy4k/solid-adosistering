@@ -4,7 +4,7 @@ import { redirectIfLoggedIn } from "~/server/auth";
 
 export const route = { preload: () => redirectIfLoggedIn() };
 import { PageMeta } from "~/components/shared/PageMeta";
-import { completePasswordReset } from "~/server/actions/index";
+import { completePasswordReset } from "~/server/actions/auth";
 import { debounce } from "~/lib/shared/debounce";
 import { validateNewPassword, validatePasswordConfirm } from "~/lib/shared/validation";
 import { Eye, EyeOff } from "lucide-solid";

@@ -1,10 +1,15 @@
 "use server";
 
-import { Prisma } from "@prisma/client";
+import { MoistureStatus } from "@prisma/client";
 import { redirect } from "@solidjs/router";
 import { prisma } from "../db/prisma";
-import { getSession } from "../session";
-import { getScopedRegionIds, getRegionThresholdMap, refreshFirebaseCache } from "./_helpers";
+import { getSession } from "../auth/session";
+import {
+  getScopedRegionIds,
+  getRegionThresholdMap,
+  displayThresholdDefaults,
+  scheduleFirebaseRefresh,
+} from "../domain";
 import type { DashboardRegion, AdminUserCard, SuperadminSummary } from "~/types/dashboard";
 
 export type { DashboardRegion, AdminUserCard, SuperadminSummary };
@@ -16,14 +21,14 @@ export async function getMyDashboard(): Promise<
 > {
   const session = await getSession();
   if (!session) throw redirect("/login");
-  await refreshFirebaseCache();
+  scheduleFirebaseRefresh();
 
   if (session.role === "SUPERADMIN") {
     const [totalRegions, totalBlocks, totalAdmins, totalUsers, regions] = await Promise.all([
       prisma.region.count(),
       prisma.block.count(),
-      prisma.user.count({ where: { role: "ADMIN", isActive: true } }),
-      prisma.user.count({ where: { role: "USER", isActive: true } }),
+      prisma.user.count({ where: { role: "ADMIN", isActive: true, deletedAt: null } }),
+      prisma.user.count({ where: { role: "USER", isActive: true, deletedAt: null } }),
       prisma.region.findMany({
         orderBy: { name: "asc" },
         select: {
@@ -129,10 +134,14 @@ export async function getMyDashboard(): Promise<
       },
     },
   });
+  // Materialize the region/block/sprayer tree once; user cards below reference
+  // these blocks instead of re-querying them per assignment.
+  const blocksByRegion = new Map(adminRegions.map((region) => [region.id, region.blocks]));
 
   const users = await prisma.user.findMany({
     where: {
       role: "USER",
+      deletedAt: null,
       ...(adminRegionIds ? { assignedRegions: { some: { regionId: { in: adminRegionIds } } } } : {}),
     },
     orderBy: { name: "asc" },
@@ -149,10 +158,8 @@ export async function getMyDashboard(): Promise<
               id: true,
               name: true,
               volumeDivider: true,
-              blocks: {
-                orderBy: { name: "asc" },
-                include: { sprayers: { where: { isActive: true }, orderBy: { createdAt: "asc" } } },
-              },
+              dryMaxPercent: true,
+              wetMinPercent: true,
             },
           },
         },
@@ -169,8 +176,6 @@ export async function getMyDashboard(): Promise<
           select: {
             userId: true,
             regionId: true,
-            dryMaxPercent: true,
-            wetMinPercent: true,
             displayDryMaxPercent: true,
             displayMoistMaxPercent: true,
             displayWetMinPercent: true,
@@ -178,6 +183,7 @@ export async function getMyDashboard(): Promise<
         })
       : [];
   const thresholdMap = new Map(allThresholds.map((t) => [`${t.userId}:${t.regionId}`, t]));
+  const defaultDisplay = displayThresholdDefaults();
 
   return {
     type: "admin",
@@ -190,7 +196,12 @@ export async function getMyDashboard(): Promise<
       volumeDivider: Number(r.volumeDivider ?? 1),
       showWindDirection: r.showWindDirection,
       showAutoIrrigation: r.showAutoIrrigation,
-      threshold: null,
+      threshold: {
+        dryMaxPercent: r.dryMaxPercent,
+        wetMinPercent: r.wetMinPercent,
+        ...defaultDisplay,
+        landPreference: MoistureStatus.LEMBAB,
+      },
       blocks: r.blocks.map((block) => ({
         id: block.id,
         name: block.name,
@@ -206,18 +217,23 @@ export async function getMyDashboard(): Promise<
       city: u.profile?.city ?? null,
       domicile: u.profile?.domicile ?? null,
       regions: u.assignedRegions.map((a) => ({ id: a.region.id, name: a.region.name })),
-      sprayersByBlock: u.assignedRegions.flatMap((a) =>
-        a.region.blocks.flatMap((block) =>
+      sprayersByBlock: u.assignedRegions.flatMap((a) => {
+        const display = displayThresholdDefaults(thresholdMap.get(`${u.id}:${a.regionId}`));
+        return (blocksByRegion.get(a.regionId) ?? []).flatMap((block) =>
           block.sprayers.map((sprayer) => ({
             regionName: a.region.name,
             blockName: block.name,
             hardwareId: sprayer.hardwareId,
             sprayerId: sprayer.id,
             volumeDivider: Number(a.region.volumeDivider ?? 1),
-            threshold: thresholdMap.get(`${u.id}:${a.regionId}`) ?? null,
+            threshold: {
+              dryMaxPercent: a.region.dryMaxPercent,
+              wetMinPercent: a.region.wetMinPercent,
+              ...display,
+            },
           })),
-        ),
-      ),
+        );
+      }),
     })),
   };
 }

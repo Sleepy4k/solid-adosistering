@@ -1,14 +1,14 @@
 "use server";
 
 import { ActivityAction, SyncStatus } from "@prisma/client";
+import type { Region } from "@prisma/client";
 import { redirect } from "@solidjs/router";
 import { firebaseSegment } from "~/lib/shared/irrigation";
 import { prisma } from "../db/prisma";
-import { firebaseAdminDb } from "../services/firebaseAdmin";
-import { provisionRegionNode, renameRegionNode } from "../services/firebaseSync";
-import { assertSuperadmin } from "../security";
-import { getSession } from "../session";
-import { decimalCoordinate, getScopedRegionIds, logActivity, type CoordinateInput } from "./_helpers";
+import { firebaseAdminDb, provisionRegionNode, renameRegionNode } from "../integrations/firebase";
+import { assertSuperadmin } from "../auth/security";
+import { getSession } from "../auth/session";
+import { decimalCoordinate, getScopedRegionIds, logActivity, type CoordinateInput } from "../domain";
 import {
   assignAdminSchema,
   createRegionSchema,
@@ -75,34 +75,44 @@ export async function createRegion(input: {
       firebaseSyncStatus: SyncStatus.PENDING,
     },
   });
+
+  // Firebase provisioning runs outside any database transaction, then the
+  // sync status is persisted. The audit write runs after both paths so an
+  // audit failure can neither flip a synced region to FAILED nor duplicate
+  // the audit row.
+  let regionAfterSync: Region;
   try {
-    await provisionRegionNode(region);
-    const synced = await prisma.region.update({
+    await provisionRegionNode({
+      name: region.name,
+      dryMaxPercent: region.dryMaxPercent,
+      wetMinPercent: region.wetMinPercent,
+      automaticMode: region.automaticMode,
+      safetyTimeoutMin: region.safetyTimeoutMin,
+      safetyTimeoutMax: region.safetyTimeoutMax,
+    });
+    regionAfterSync = await prisma.region.update({
       where: { id: region.id },
       data: { firebaseSyncStatus: SyncStatus.SYNCED, firebaseSyncedAt: new Date() },
     });
-    await logActivity({
-      actorId: actor.id,
-      regionId: region.id,
-      action: ActivityAction.CREATE,
-      entityType: "Region",
-      entityId: region.id,
-    });
-    return synced;
-  } catch {
-    const failed = await prisma.region.update({
+  } catch (error) {
+    console.error(`[firebase] provisionRegionNode failed (${region.name}):`, error);
+    regionAfterSync = await prisma.region.update({
       where: { id: region.id },
       data: { firebaseSyncStatus: SyncStatus.FAILED },
     });
-    await logActivity({
-      actorId: actor.id,
-      regionId: region.id,
-      action: ActivityAction.CREATE,
-      entityType: "Region",
-      entityId: region.id,
-    }).catch(() => undefined);
-    return failed;
   }
+
+  await logActivity({
+    actorId: actor.id,
+    regionId: region.id,
+    action: ActivityAction.CREATE,
+    entityType: "Region",
+    entityId: region.id,
+  }).catch((error: unknown) => {
+    console.error("[activity] createRegion audit failed:", error);
+  });
+
+  return regionAfterSync;
 }
 
 export async function updateRegion(input: {
@@ -117,6 +127,7 @@ export async function updateRegion(input: {
   if (!session) throw redirect("/login");
   const actor = assertSuperadmin(session);
   const existing = await prisma.region.findUniqueOrThrow({ where: { id: data.id } });
+  const nameChanged = existing.name !== data.name;
   const updated = await prisma.region.update({
     where: { id: data.id },
     data: {
@@ -125,11 +136,13 @@ export async function updateRegion(input: {
       latitude: decimalCoordinate(data.latitude, "Latitude"),
       longitude: decimalCoordinate(data.longitude, "Longitude"),
       updatedById: actor.id,
-      firebaseSyncStatus: SyncStatus.PENDING,
+      ...(nameChanged ? { firebaseSyncStatus: SyncStatus.PENDING } : {}),
     },
   });
-  try {
-    await renameRegionNode(existing.name, updated);
+
+  // Description/coordinate-only edits are SQL-only: the Firebase node does not
+  // change, so it must not be renamed or marked as a sync failure (F-01).
+  if (!nameChanged) {
     await logActivity({
       actorId: actor.id,
       regionId: updated.id,
@@ -137,24 +150,46 @@ export async function updateRegion(input: {
       entityType: "Region",
       entityId: updated.id,
     });
-    return prisma.region.update({
+    return updated;
+  }
+
+  // Firebase rename runs outside any database transaction, then the sync
+  // status is persisted. The audit write runs after both paths so an audit
+  // failure can neither flip a synced region to FAILED nor duplicate the
+  // audit row.
+  let regionAfterSync: Region;
+  try {
+    await renameRegionNode(existing.name, {
+      name: updated.name,
+      dryMaxPercent: updated.dryMaxPercent,
+      wetMinPercent: updated.wetMinPercent,
+      automaticMode: updated.automaticMode,
+      safetyTimeoutMin: updated.safetyTimeoutMin,
+      safetyTimeoutMax: updated.safetyTimeoutMax,
+    });
+    regionAfterSync = await prisma.region.update({
       where: { id: updated.id },
       data: { firebaseSyncStatus: SyncStatus.SYNCED, firebaseSyncedAt: new Date() },
     });
-  } catch {
-    const failed = await prisma.region.update({
+  } catch (error) {
+    console.error(`[firebase] renameRegionNode failed (${updated.name}):`, error);
+    regionAfterSync = await prisma.region.update({
       where: { id: updated.id },
       data: { firebaseSyncStatus: SyncStatus.FAILED },
     });
-    await logActivity({
-      actorId: actor.id,
-      regionId: updated.id,
-      action: ActivityAction.UPDATE,
-      entityType: "Region",
-      entityId: updated.id,
-    }).catch(() => undefined);
-    return failed;
   }
+
+  await logActivity({
+    actorId: actor.id,
+    regionId: updated.id,
+    action: ActivityAction.UPDATE,
+    entityType: "Region",
+    entityId: updated.id,
+  }).catch((error: unknown) => {
+    console.error("[activity] updateRegion audit failed:", error);
+  });
+
+  return regionAfterSync;
 }
 
 export async function deleteRegion(input: { id: string }) {
@@ -164,12 +199,18 @@ export async function deleteRegion(input: { id: string }) {
   assertSuperadmin(session);
 
   const region = await prisma.region.findUniqueOrThrow({ where: { id: data.id } });
-  await prisma.region.delete({ where: { id: data.id } });
-  await logActivity({ actorId: session.id, action: ActivityAction.DELETE, entityType: "Region", entityId: data.id });
 
+  // Remove the RTDB node first: if the SQL row disappeared while the node
+  // survived, reusing the region name could resurrect old blocks.
   try {
     await firebaseAdminDb().ref(firebaseSegment(region.name)).remove();
-  } catch {}
+  } catch (error) {
+    console.error(`[firebase] deleteRegion node removal failed (${region.name}):`, error);
+    throw new Response("Gagal menghapus node Firebase region.", { status: 502 });
+  }
+
+  await prisma.region.delete({ where: { id: data.id } });
+  await logActivity({ actorId: session.id, action: ActivityAction.DELETE, entityType: "Region", entityId: data.id });
 
   return { ok: true };
 }

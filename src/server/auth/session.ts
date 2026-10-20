@@ -6,8 +6,8 @@ import {
   SESSION_IDLE_SECONDS,
   SESSION_RENEW_WINDOW_SECONDS,
   serverConfig,
-} from "./config";
-import { prisma } from "./db/prisma";
+} from "../config";
+import { prisma } from "../db/prisma";
 import { hashToken, newOpaqueToken } from "./security";
 import type { Role } from "~/lib/shared/irrigation";
 
@@ -28,6 +28,15 @@ const cookieOptions = () => ({
   sameSite: "lax" as const,
   path: "/",
 });
+
+/** Cookie mutation is best-effort: request handling must not fail because it is unavailable. */
+function clearSessionCookie() {
+  try {
+    deleteCookie(serverConfig.sessionCookieName, { ...cookieOptions(), maxAge: 0 });
+  } catch {
+    // Ignore: the browser may still drop the expired cookie via maxAge on the next response.
+  }
+}
 
 function requestMetadata() {
   try {
@@ -53,23 +62,28 @@ export async function getSession(): Promise<SessionUser | null> {
       absoluteExpiresAt: true,
       createdAt: true,
       lastSeenAt: true,
-      user: { select: { id: true, email: true, name: true, role: true, isActive: true } },
+      user: { select: { id: true, email: true, name: true, role: true, isActive: true, deletedAt: true } },
     },
   });
 
   const now = new Date();
-  if (!session || session.expiresAt < now || !session.user.isActive) return null;
+  if (!session || session.expiresAt < now || !session.user.isActive || session.user.deletedAt) {
+    clearSessionCookie();
+    return null;
+  }
 
   const absoluteExpiry =
     session.absoluteExpiresAt ?? new Date(session.createdAt.getTime() + SESSION_ABSOLUTE_SECONDS * 1000);
   if (absoluteExpiry < now) {
     await prisma.session.deleteMany({ where: { id: session.id } }).catch(() => undefined);
+    clearSessionCookie();
     return null;
   }
 
   const idleCutoff = new Date(now.getTime() - SESSION_IDLE_SECONDS * 1000);
   if (session.lastSeenAt < idleCutoff) {
     await prisma.session.deleteMany({ where: { id: session.id } }).catch(() => undefined);
+    clearSessionCookie();
     return null;
   }
 
@@ -77,7 +91,7 @@ export async function getSession(): Promise<SessionUser | null> {
   const shouldTouch = now.getTime() - session.lastSeenAt.getTime() > LAST_SEEN_WRITE_INTERVAL_MS;
   if (shouldRenew || shouldTouch) {
     const metadata = shouldTouch ? requestMetadata() : {};
-    await prisma.session
+    const updated = await prisma.session
       .updateMany({
         where: { id: session.id },
         data: {
@@ -86,7 +100,16 @@ export async function getSession(): Promise<SessionUser | null> {
           ...metadata,
         },
       })
-      .catch(() => undefined);
+      .catch(() => null);
+
+    // Keep the browser cookie alive as long as the renewed database session.
+    if (shouldRenew && updated && updated.count > 0) {
+      try {
+        setCookie(serverConfig.sessionCookieName, token, { ...cookieOptions(), maxAge: SESSION_MAX_AGE });
+      } catch {
+        // Ignore: the existing cookie still carries the previous (shorter) expiry.
+      }
+    }
   }
 
   return {

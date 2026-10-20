@@ -1,6 +1,6 @@
 import { query, createAsync } from "@solidjs/router";
 import { For } from "solid-js";
-import { getLandingTestimonials } from "~/server/actions/index";
+import { getLandingTestimonials } from "~/server/actions/landing-cms";
 import { TESTIMONIALS } from "~/constants/landing";
 
 const loadTestimonials = query(() => getLandingTestimonials(), "landing-testimonials");

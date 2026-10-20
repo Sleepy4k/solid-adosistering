@@ -1,6 +1,6 @@
 import { query, createAsync } from "@solidjs/router";
 import { For, Show } from "solid-js";
-import { getLandingLocations } from "~/server/actions/index";
+import { getLandingLocations } from "~/server/actions/landing-cms";
 import { LOCATIONS } from "~/constants/landing";
 
 const loadLocations = query(() => getLandingLocations(), "landing-locations");

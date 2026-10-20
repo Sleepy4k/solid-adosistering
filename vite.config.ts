@@ -50,7 +50,7 @@ export default defineConfig({
         mode: "json",
       },
       serverFunctions: {
-        onError: "./src/server/server-function-error.ts",
+        onError: "./src/server/http/server-function-error.ts",
       },
     }),
     tailwindcss(),

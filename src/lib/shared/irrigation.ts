@@ -9,6 +9,14 @@ export function calculateMoistureStatus(moisturePercent: number, threshold: Thre
   return "Lembab";
 }
 
+/**
+ * Sanitizes a value into a Firebase RTDB path segment.
+ *
+ * Callers must validate region/block names and hardware IDs at the input
+ * boundary before reaching this helper; sanitizing is defence-in-depth for
+ * legacy rows, not a substitute for validation. Existing data is rewritten
+ * rather than rejected here so historical records stay reachable.
+ */
 export function firebaseSegment(value: string) {
   return value.trim().replace(/[.#$/\[\]]/g, "-");
 }

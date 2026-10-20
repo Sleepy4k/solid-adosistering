@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js";
 import { CONTACT_INFO, FOOTER_LINKS, LANDING_DESCRIPTION, SOCIAL_LINKS } from "~/constants/landing";
-import { subscribeNewsletter } from "~/server/actions/index";
-import type { WebConfig } from "~/server/actions/index";
+import { subscribeNewsletter } from "~/server/actions/newsletter";
+import type { WebConfig } from "~/server/actions/web-config";
 
 type LandingFooterProps = {
   config: WebConfig;

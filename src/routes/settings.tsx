@@ -2,7 +2,7 @@ import { query, createAsync } from "@solidjs/router";
 import { lazy, Show, Suspense } from "solid-js";
 import { PageMeta } from "~/components/shared/PageMeta";
 import { SkCard } from "~/components/shared/Skeleton";
-import { getMySettings } from "~/server/actions/index";
+import { getMySettings } from "~/server/actions/settings";
 import type { AdminSettingsData, UserSettingsData } from "~/features/settings/types";
 import { useLiveDate } from "~/lib/client/liveDate";
 

@@ -1,5 +1,5 @@
 import { createEffect, createSignal, For, on, Show } from "solid-js";
-import { saveThreshold } from "~/server/actions/index";
+import { saveThreshold } from "~/server/actions/settings";
 import { useToast } from "~/components/shared/ToastProvider";
 import { DualRange } from "~/components/ui/DualRange";
 import { EditButton } from "~/components/ui/EditButton";

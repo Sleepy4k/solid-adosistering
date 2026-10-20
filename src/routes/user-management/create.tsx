@@ -1,7 +1,7 @@
 import { query, createAsync, useNavigate } from "@solidjs/router";
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, Suspense } from "solid-js";
 import { PageMeta } from "~/components/shared/PageMeta";
-import { createUserWithProfile, getUserFormOptions } from "~/server/actions/index";
+import { createUserWithProfile, getUserFormOptions } from "~/server/actions/users";
 import { useToast } from "~/components/shared/ToastProvider";
 import { SkCard } from "~/components/shared/Skeleton";
 import { SelectSearch } from "~/components/ui/SelectSearch";

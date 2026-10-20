@@ -1,4 +1,4 @@
-import type { WebConfig } from "~/server/actions/index";
+import type { WebConfig } from "~/server/actions/web-config";
 
 export const DEFAULT_WEB_CONFIG: WebConfig = {
   projectName: "Adosistering",

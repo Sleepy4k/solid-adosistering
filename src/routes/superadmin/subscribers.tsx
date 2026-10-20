@@ -7,7 +7,7 @@ import { Card, CardHeader } from "~/components/ui/Card";
 import { Badge } from "~/components/ui/Badge";
 import { useToast } from "~/components/shared/ToastProvider";
 import { useConfirm } from "~/components/shared/ConfirmProvider";
-import { getAllSubscribers, deleteSubscriber, sendBulkEmail } from "~/server/actions/index";
+import { getAllSubscribers, deleteSubscriber, sendBulkEmail } from "~/server/actions/newsletter";
 import { newsletterPreviewHtml } from "~/templates/email/newsletter";
 import { useWebConfig } from "~/lib/shared/webConfig";
 

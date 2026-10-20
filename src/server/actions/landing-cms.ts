@@ -3,8 +3,8 @@
 import { ActivityAction } from "@prisma/client";
 import { redirect } from "@solidjs/router";
 import { prisma } from "../db/prisma";
-import { assertSuperadmin, sanitizeImageUrl } from "../security";
-import { getSession } from "../session";
+import { assertSuperadmin, sanitizeImageUrl } from "../auth/security";
+import { getSession } from "../auth/session";
 import {
   idInputSchema,
   landingLocationSchema,
@@ -12,7 +12,7 @@ import {
   landingTestimonialSchema,
   parseInput,
 } from "../validation";
-import { logActivity } from "./_helpers";
+import { logActivity } from "../domain";
 
 async function requireSuperadmin() {
   const session = await getSession();

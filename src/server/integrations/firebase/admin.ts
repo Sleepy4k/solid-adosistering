@@ -1,7 +1,7 @@
 import "server-only";
 import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
 import { getDatabase } from "firebase-admin/database";
-import { serverConfig } from "../config";
+import { serverConfig } from "../../config";
 
 let adminApp: App | undefined;
 

@@ -4,9 +4,9 @@ import type { Prisma } from "@prisma/client";
 import { ActivityAction } from "@prisma/client";
 import { redirect } from "@solidjs/router";
 import { prisma } from "../db/prisma";
-import { assertSuperadmin, sanitizeImageUrl } from "../security";
-import { getSession } from "../session";
-import { logActivity } from "./_helpers";
+import { assertSuperadmin, sanitizeImageUrl } from "../auth/security";
+import { getSession } from "../auth/session";
+import { logActivity } from "../domain";
 import { parseInput, webConfigSchema } from "../validation";
 import type { WebConfig } from "~/types/web-config";
 

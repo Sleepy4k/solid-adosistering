@@ -3,7 +3,7 @@ import { query, createAsync, revalidate } from "@solidjs/router";
 import { createSignal, For, Show, Suspense } from "solid-js";
 import ContactRow from "~/features/superadmin/ContactRow";
 import { Card, CardHeader } from "~/components/ui/Card";
-import { getContactSubmissions } from "~/server/actions/index";
+import { getContactSubmissions } from "~/server/actions/contact";
 
 type ContactRowData = Awaited<ReturnType<typeof getContactSubmissions>>[number];
 

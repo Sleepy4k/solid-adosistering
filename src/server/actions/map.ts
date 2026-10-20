@@ -3,9 +3,9 @@
 import { ActivityAction, Prisma } from "@prisma/client";
 import { redirect } from "@solidjs/router";
 import { prisma } from "../db/prisma";
-import { assertSuperadmin } from "../security";
-import { getSession } from "../session";
-import { logActivity, pointsToPolygonGeojson } from "./_helpers";
+import { assertSuperadmin } from "../auth/security";
+import { getSession } from "../auth/session";
+import { logActivity, pointsToPolygonGeojson } from "../domain";
 import type { MapPoint, MapConfig, MapDisplayConfig, MapWorkspace } from "~/types/map";
 import { blockGeometrySchema, mapConfigSchema, mapDisplaySchema, parseInput } from "../validation";
 
@@ -119,7 +119,6 @@ export async function saveBlockMapGeometry(input: { blockId: string; points: Map
   await logActivity({
     actorId: session.id,
     regionId: block.regionId,
-    blockId: block.id,
     action: ActivityAction.UPDATE,
     entityType: "BlockMapGeometry",
     entityId: block.id,

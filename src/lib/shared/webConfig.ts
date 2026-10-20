@@ -1,6 +1,6 @@
 import { query, createAsync } from "@solidjs/router";
 import { DEFAULT_WEB_CONFIG } from "~/constants/landing";
-import { getWebConfig, type WebConfig } from "~/server/actions/index";
+import { getWebConfig, type WebConfig } from "~/server/actions/web-config";
 
 export const WEB_CONFIG_KEY = "web-config";
 

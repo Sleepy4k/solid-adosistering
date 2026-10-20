@@ -3,8 +3,8 @@ import { createSignal, For, Show, Suspense } from "solid-js";
 import { ModalFrame } from "~/components/shared/ModalFrame";
 import { SelectSearch } from "~/components/ui/SelectSearch";
 import { useToast } from "~/components/shared/ToastProvider";
-import type { getRegions } from "~/server/actions/index";
-import { getAdmins, assignAdminToRegion, removeAdminFromRegion } from "~/server/actions/index";
+import type { getRegions } from "~/server/actions/regions";
+import { getAdmins, assignAdminToRegion, removeAdminFromRegion } from "~/server/actions/regions";
 
 type RegionRow = Awaited<ReturnType<typeof getRegions>>[number];
 

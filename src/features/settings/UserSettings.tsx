@@ -1,5 +1,4 @@
 import { createMemo, Show } from "solid-js";
-import { saveSafetyTimeout } from "~/server/actions/index";
 import { IrrigationControl } from "./IrrigationControl";
 import { SafetyTimeoutPanel } from "./SafetyTimeoutPanel";
 import type { UserSettingsData } from "./types";
@@ -20,9 +19,10 @@ export function UserSettings(props: { settings: UserSettingsData }) {
         <>
           <IrrigationControl region={region()} />
           <SafetyTimeoutPanel
-            initialMin={props.settings.safetyTimeout.min}
-            initialMax={props.settings.safetyTimeout.max}
-            onSave={(min, max) => saveSafetyTimeout({ min, max })}
+            initialMin={region().safetyTimeout.min}
+            initialMax={region().safetyTimeout.max}
+            readOnly
+            note="Pengaturan ini dikelola oleh Admin/operator region dan dikirim ke Firebase jika didukung."
           />
         </>
       )}

@@ -6,7 +6,7 @@ import { Card, CardHeader } from "~/components/ui/Card";
 import type { MoistureStatus } from "@prisma/client";
 import { subscribeToBlock, isFirebaseConfigured } from "~/lib/client/firebaseClient";
 import type { LiveSprayerData, Threshold } from "~/lib/shared/irrigation";
-import { overridePump } from "~/server/actions/index";
+import { overridePump } from "~/server/actions/blocks";
 import { useConfirm } from "~/components/shared/ConfirmProvider";
 import { InlineError } from "~/components/shared/AppErrorBoundary";
 import { useToast } from "~/components/shared/ToastProvider";

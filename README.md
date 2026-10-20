@@ -2,6 +2,12 @@
 
 Adosistering is an IoT smart-irrigation dashboard for monitoring soil moisture, controlling sprayers, and reviewing irrigation history across regions and blocks. This repository is the SolidStart v2 application that consolidates the former `references/` codebase into the root project.
 
+## Documentation
+
+- [docs/normalization.md](./docs/normalization.md) — BCNF model changes, migration order, and post-migration verification.
+- [docs/deployment.md](./docs/deployment.md) — production release, migration, and rollback planning.
+- [SECURITY.md](./SECURITY.md) — security controls, deployment checklist, and vulnerability reporting.
+
 ## Stack
 
 - **SolidStart 2** (`@solidjs/start`), SolidJS, Vite 8, Nitro 3
@@ -29,7 +35,7 @@ bun run db:deploy
 bun run db:seed
 ```
 
-The seed script creates demo accounts and core region/block data. It refuses to run with the built-in demo passwords when `NODE_ENV=production`; set `SEED_PASSWORD` (or `SEED_SUPERADMIN_PASSWORD`, `SEED_ADMIN_PASSWORD`, `SEED_USER_PASSWORD`) first. Change all seeded passwords immediately in any shared environment.
+The seed script creates demo accounts and core region/block data. It has no default password: set `SEED_PASSWORD` (or `SEED_SUPERADMIN_PASSWORD`, `SEED_ADMIN_PASSWORD`, `SEED_USER_PASSWORD`) before running it. `SEED_ALLOW_DEMO=true` opts into the built-in demo passwords and is only for local or demo environments. Change all seeded passwords immediately in any shared environment.
 
 ### Environment
 
@@ -74,13 +80,27 @@ bun run start      # node .output/server/index.mjs
 
 The server requires `DATABASE_URL` and, in production, a valid HTTPS `APP_ORIGIN`. Configuration is validated on the first non-static request.
 
-Nitro keeps `firebase-admin` external because bundling its CommonJS internals is unsafe. Deploy `.output` together with production `node_modules` (for example `bun install --production` on the target host), or configure your bundler to package that dependency. Do not copy `.env` or `.data` into the public web root.
+Nitro keeps `firebase-admin` external because bundling its CommonJS internals is unsafe. Deploy `.output` together with production `node_modules` (for example `bun install --frozen-lockfile --production` on the target host), or configure your bundler to package that dependency. Do not copy `.env` or `.data` into the public web root.
+
+Schema migrations are forward-only. Read [docs/deployment.md](./docs/deployment.md) before applying them to a production database; the BCNF migration requires a backup and a maintenance window.
+
+## Data model
+
+The affected relations are normalized to BCNF so control settings, display preferences, and scope are stored once.
+
+- `Region` owns `dryMaxPercent`, `wetMinPercent`, `automaticMode`, and `safetyTimeoutMin`/`safetyTimeoutMax`. The Firebase `region_settings` node is a downstream mirror written by the app, not a second source of truth.
+- `IndicatorThreshold` keeps only per-user display fields (`displayDryMaxPercent`, `displayMoistMaxPercent`, `displayWetMinPercent`) plus `landPreference`.
+- `SensorReading`, `IrrigationEvent`, and `ActivityLog` no longer store `blockId`. Block scope is derived through `Sprayer -> Block`, and `SensorReading` is keyed by `(sprayerId, sourceKey)` so repeated same-second payloads are not discarded.
+- `AlertNotificationTarget` stores at most one normalized target (`REGION`, `BLOCK`, or `SPRAYER`) per alert instead of three nullable scope columns.
+- User deletion is a soft delete plus anonymization. Activity, irrigation, email, and alert rows keep their historical references instead of being orphaned or destroyed.
+
+See [docs/normalization.md](./docs/normalization.md) for the functional dependencies removed, the expand/backfill/contract sequence, and verification SQL.
 
 ## Security model
 
 - **Passwords:** Argon2id with per-password salts and transparent rehashing when parameters change.
 - **Sessions:** opaque tokens stored as SHA-256 hashes, `HttpOnly` + `Secure` + `SameSite=Lax` cookies, idle and absolute expiry, rotation on login.
-- **Login protection:** per-IP and per-email throttling backed by a Prisma table with an in-memory fallback; successful login clears the counters.
+- **Login protection:** per-email attempts use a persistent atomic reservation in `login_throttle` (a MariaDB row lock via `INSERT IGNORE` plus `SELECT ... FOR UPDATE`), so replicas share one failure counter and cooldown ladder. A separate in-memory per-IP brake allows 100 attempts per 15 minutes and never escalates; client IPs that resolve to `"unknown"` are not used as a blocking key. A successful login clears only the per-email reservation, and blocked attempts do not extend an active cooldown.
 - **Reset tokens:** single-use, hashed, expire quickly, and invalidate existing sessions after a successful reset.
 - **Server actions:** Zod input validation, role checks, rate limits, generic error responses, and audit logging.
 - **CSRF:** same-origin `Origin`/`Referer` validation for unsafe methods, plus custom `X-Server-Id` headers used by SolidStart server functions.
@@ -110,17 +130,33 @@ Fonts are self-hosted under `public/fonts`; no request is made to Google Fonts a
 ```text
 src/
   components/        shared UI, map, SEO, error boundary
+  config/            public/client configuration
+  constants/         shared constants
   features/          landing/dashboard feature components
   layouts/           landing and app shells
+  lib/               client Firebase and shared utilities
   middleware/        security headers, CSP, CSRF, route guards
   routes/            pages, API routes, sitemap/robots/llms
-  server/            actions, auth, session, validation, services
+  server/
+    actions/         server functions grouped by feature
+    auth/            Argon2id, sessions, login throttling
+    db/              Prisma client
+    domain/          access control, audit, thresholds, Firebase cache
+    http/            rate limiting and server-function error handling
+    integrations/
+      firebase/      Admin SDK, Realtime Database sync
+      email/         Nodemailer transport and delivery
+    validation/      Zod schemas for every trust boundary
+    config.ts        environment parsing and fail-closed validation
   templates/         transactional email templates
 prisma/
   schema.prisma      data model
   migrations/        ordered SQL migrations
-  seed.ts            demo seed data
+  seed.ts            repeatable, non-destructive demo seed data
+docs/                normalization and deployment guides
 public/              static assets, icons, fonts, SEO files
 ```
+
+Server code is layered so server functions stay thin: `actions` orchestrate `domain`, `db`, `auth`, `http`, and `integrations`; `validation` owns the Zod schemas; and `config.ts` fails closed when required environment values are missing.
 
 The legacy `references/` directory is intentionally not part of the build and is ignored by formatting, linting, and Git. It remains only as migration reference material.

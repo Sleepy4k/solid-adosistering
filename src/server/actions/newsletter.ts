@@ -5,12 +5,12 @@ import { getRequestIP } from "@solidjs/start/http";
 import { redirect } from "@solidjs/router";
 import { prisma } from "../db/prisma";
 import { serverConfig } from "../config";
-import { checkRateLimit, rateLimitResponse } from "../rateLimit";
-import { assertSuperadmin } from "../security";
-import { getSession } from "../session";
-import { createSmtpTransporter, getEmailBrandConfig, sendTransactionalEmail } from "../email";
+import { checkRateLimit, rateLimitResponse } from "../http/rateLimit";
+import { assertSuperadmin } from "../auth/security";
+import { getSession } from "../auth/session";
+import { createSmtpTransporter, getEmailBrandConfig, sendTransactionalEmail } from "../integrations/email";
 import { bulkEmailSchema, idInputSchema, newsletterSchema, parseInput } from "../validation";
-import { logActivity } from "./_helpers";
+import { logActivity } from "../domain";
 import { newsletterTemplate } from "~/templates/email/newsletter";
 
 function clientIp() {

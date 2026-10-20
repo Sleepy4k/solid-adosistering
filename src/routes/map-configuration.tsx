@@ -7,7 +7,7 @@ import {
   saveMapConfig,
   type MapPoint,
   type MapWorkspace,
-} from "~/server/actions/index";
+} from "~/server/actions/map";
 import { SkCard } from "~/components/shared/Skeleton";
 import { useToast } from "~/components/shared/ToastProvider";
 import { LeafletMap, type LeafletPolygon, type LeafletRegionMarker } from "~/components/shared/LeafletMap";

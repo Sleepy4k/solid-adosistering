@@ -1,13 +1,13 @@
 import "server-only";
 import nodemailer from "nodemailer";
-import { serverConfig } from "../config";
-import { prisma } from "../db/prisma";
+import { serverConfig } from "../../config";
+import { prisma } from "../../db/prisma";
 import { loginBlockedTemplate } from "~/templates/email/loginBlocked";
 import { passwordChangedTemplate } from "~/templates/email/passwordChanged";
 import { passwordResetTemplate } from "~/templates/email/passwordReset";
 import { welcomeUserTemplate } from "~/templates/email/welcomeUser";
 import type { EmailBrandConfig } from "~/templates/email/base";
-import { sanitizeImageUrl } from "../security";
+import { sanitizeImageUrl } from "../../auth/security";
 
 type WebConfigValue = {
   projectName?: string;

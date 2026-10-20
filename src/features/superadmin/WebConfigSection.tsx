@@ -5,7 +5,7 @@ import { Button } from "~/components/ui/Button";
 import { ErrorBoundary } from "solid-js";
 import { ImageUpload } from "~/components/shared/ImageUpload";
 import { useToast } from "~/components/shared/ToastProvider";
-import { saveWebConfig } from "~/server/actions/index";
+import { saveWebConfig } from "~/server/actions/web-config";
 import { loadWebConfig, WEB_CONFIG_KEY } from "~/lib/shared/webConfig";
 import type { WebConfig } from "~/types/web-config";
 

@@ -1,7 +1,7 @@
 import { createSignal, Show } from "solid-js";
 import { useToast } from "~/components/shared/ToastProvider";
-import type { getContactSubmissions } from "~/server/actions/index";
-import { markContactRead } from "~/server/actions/index";
+import type { getContactSubmissions } from "~/server/actions/contact";
+import { markContactRead } from "~/server/actions/contact";
 
 type ContactRowData = Awaited<ReturnType<typeof getContactSubmissions>>[number];
 

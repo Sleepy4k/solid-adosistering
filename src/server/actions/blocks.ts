@@ -1,6 +1,6 @@
 "use server";
 
-import { ActivityAction, IrrigationMode, RelayState, SyncStatus } from "@prisma/client";
+import { ActivityAction, IrrigationMode, RelayState, SyncStatus, type IrrigationEvent } from "@prisma/client";
 import { redirect } from "@solidjs/router";
 import { prisma } from "../db/prisma";
 import {
@@ -8,11 +8,11 @@ import {
   provisionSprayerNode,
   renameBlockNode,
   updateSprayerControl,
-} from "../services/firebaseSync";
-import { assertAdminOrHigher } from "../security";
-import { getSession } from "../session";
-import { checkRateLimit, rateLimitResponse } from "../rateLimit";
-import { getScopedRegionIds, logActivity } from "./_helpers";
+} from "../integrations/firebase";
+import { assertAdminOrHigher } from "../auth/security";
+import { getSession } from "../auth/session";
+import { checkRateLimit, rateLimitResponse } from "../http/rateLimit";
+import { getScopedRegionIds, logActivity } from "../domain";
 import {
   createBlockSchema,
   createSprayerSchema,
@@ -20,6 +20,35 @@ import {
   parseInput,
   updateBlockSchema,
 } from "../validation";
+
+/**
+ * Per-sprayer promise tails used to serialize pump control inside this process.
+ * The row lock inside the event transaction still guards the database across
+ * instances; this tail additionally keeps the hardware command and the event
+ * recording for one sprayer from interleaving (for example an ON and an OFF
+ * crossing each other). Keys are sprayer ids, so unrelated sprayers never
+ * block one another.
+ */
+const pumpControlTails = new Map<string, Promise<void>>();
+
+async function withPumpControlLock<T>(sprayerId: string, fn: () => Promise<T>): Promise<T> {
+  const previous = pumpControlTails.get(sprayerId) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const tail = previous.then(() => current);
+  pumpControlTails.set(sprayerId, tail);
+
+  await previous;
+
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (pumpControlTails.get(sprayerId) === tail) pumpControlTails.delete(sprayerId);
+  }
+}
 
 export async function createBlock(input: {
   regionId: string;
@@ -45,32 +74,34 @@ export async function createBlock(input: {
       firebaseSyncStatus: SyncStatus.PENDING,
     },
   });
+
+  let synced = false;
   try {
     await provisionBlockNode({ regionName: region.name, blockName: block.name });
-    await logActivity({
-      actorId: actor.id,
-      regionId: region.id,
-      blockId: block.id,
-      action: ActivityAction.CREATE,
-      entityType: "Block",
-      entityId: block.id,
-    });
-    return prisma.block.update({
-      where: { id: block.id },
-      data: { firebaseSyncStatus: SyncStatus.SYNCED, firebaseSyncedAt: new Date() },
-    });
+    synced = true;
   } catch {
-    await prisma.block.update({ where: { id: block.id }, data: { firebaseSyncStatus: SyncStatus.FAILED } });
-    await logActivity({
-      actorId: actor.id,
-      regionId: region.id,
-      blockId: block.id,
-      action: ActivityAction.CREATE,
-      entityType: "Block",
-      entityId: block.id,
-    }).catch(() => undefined);
-    return prisma.block.findUniqueOrThrow({ where: { id: block.id } });
+    synced = false;
   }
+
+  const result = synced
+    ? await prisma.block.update({
+        where: { id: block.id },
+        data: { firebaseSyncStatus: SyncStatus.SYNCED, firebaseSyncedAt: new Date() },
+      })
+    : await prisma.block.update({ where: { id: block.id }, data: { firebaseSyncStatus: SyncStatus.FAILED } });
+
+  // Audit once, outside the Firebase try/catch: a successful provision must not
+  // be reported as FAILED because the audit insert failed, and a failed
+  // provision must not produce a second audit row.
+  await logActivity({
+    actorId: actor.id,
+    regionId: region.id,
+    action: ActivityAction.CREATE,
+    entityType: "Block",
+    entityId: block.id,
+  }).catch(() => undefined);
+
+  return result;
 }
 
 export async function updateBlock(input: { id: string; name: string; areaHectare?: string }) {
@@ -92,32 +123,31 @@ export async function updateBlock(input: { id: string; name: string; areaHectare
       firebaseSyncStatus: SyncStatus.PENDING,
     },
   });
+
+  let synced = false;
   try {
     await renameBlockNode(existing.name, { regionName: existing.region.name, blockName: updated.name });
-    await logActivity({
-      actorId: actor.id,
-      regionId: existing.regionId,
-      blockId: updated.id,
-      action: ActivityAction.UPDATE,
-      entityType: "Block",
-      entityId: updated.id,
-    });
-    return prisma.block.update({
-      where: { id: updated.id },
-      data: { firebaseSyncStatus: SyncStatus.SYNCED, firebaseSyncedAt: new Date() },
-    });
+    synced = true;
   } catch {
-    await prisma.block.update({ where: { id: updated.id }, data: { firebaseSyncStatus: SyncStatus.FAILED } });
-    await logActivity({
-      actorId: actor.id,
-      regionId: existing.regionId,
-      blockId: updated.id,
-      action: ActivityAction.UPDATE,
-      entityType: "Block",
-      entityId: updated.id,
-    }).catch(() => undefined);
-    return prisma.block.findUniqueOrThrow({ where: { id: updated.id } });
+    synced = false;
   }
+
+  const result = synced
+    ? await prisma.block.update({
+        where: { id: updated.id },
+        data: { firebaseSyncStatus: SyncStatus.SYNCED, firebaseSyncedAt: new Date() },
+      })
+    : await prisma.block.update({ where: { id: updated.id }, data: { firebaseSyncStatus: SyncStatus.FAILED } });
+
+  await logActivity({
+    actorId: actor.id,
+    regionId: existing.regionId,
+    action: ActivityAction.UPDATE,
+    entityType: "Block",
+    entityId: updated.id,
+  }).catch(() => undefined);
+
+  return result;
 }
 
 export async function createSprayer(input: {
@@ -139,46 +169,67 @@ export async function createSprayer(input: {
     const scoped = await getScopedRegionIds(session);
     if (!scoped?.includes(block.regionId)) throw new Response("Forbidden", { status: 403 });
   }
-  const sprayer = await prisma.sprayer.create({
-    data: {
-      blockId: block.id,
-      hardwareId: data.hardwareId,
-      displayName: data.displayName,
-      firebaseSyncStatus: SyncStatus.PENDING,
-    },
+
+  // Region-level thresholds are authoritative once the region has sprayers.
+  // Only the first sprayer in a region may initialize them from the submitted
+  // values; later sprayers inherit the existing region configuration.
+  const sprayersInRegion = await prisma.sprayer.count({ where: { block: { regionId: block.regionId } } });
+  const initializesRegion = sprayersInRegion === 0;
+  const dryMaxPercent = initializesRegion ? data.dryMaxPercent : block.region.dryMaxPercent;
+  const wetMinPercent = initializesRegion ? data.wetMinPercent : block.region.wetMinPercent;
+
+  const sprayer = await prisma.$transaction(async (tx) => {
+    const created = await tx.sprayer.create({
+      data: {
+        blockId: block.id,
+        hardwareId: data.hardwareId,
+        displayName: data.displayName,
+        firebaseSyncStatus: SyncStatus.PENDING,
+      },
+    });
+    if (initializesRegion) {
+      await tx.region.update({
+        where: { id: block.regionId },
+        data: {
+          dryMaxPercent,
+          wetMinPercent,
+          updatedById: actor.id,
+        },
+      });
+    }
+    return created;
   });
+
+  let synced = false;
   try {
     await provisionSprayerNode({
       regionName: block.region.name,
       blockName: block.name,
       hardwareId: sprayer.hardwareId,
-      dryMaxPercent: data.dryMaxPercent,
-      wetMinPercent: data.wetMinPercent,
+      dryMaxPercent,
+      wetMinPercent,
     });
-    await logActivity({
-      actorId: actor.id,
-      regionId: block.regionId,
-      blockId: block.id,
-      action: ActivityAction.CREATE,
-      entityType: "Sprayer",
-      entityId: sprayer.id,
-    });
-    return prisma.sprayer.update({
-      where: { id: sprayer.id },
-      data: { firebaseSyncStatus: SyncStatus.SYNCED, firebaseSyncedAt: new Date() },
-    });
+    synced = true;
   } catch {
-    await prisma.sprayer.update({ where: { id: sprayer.id }, data: { firebaseSyncStatus: SyncStatus.FAILED } });
-    await logActivity({
-      actorId: actor.id,
-      regionId: block.regionId,
-      blockId: block.id,
-      action: ActivityAction.CREATE,
-      entityType: "Sprayer",
-      entityId: sprayer.id,
-    }).catch(() => undefined);
-    return prisma.sprayer.findUniqueOrThrow({ where: { id: sprayer.id } });
+    synced = false;
   }
+
+  const result = synced
+    ? await prisma.sprayer.update({
+        where: { id: sprayer.id },
+        data: { firebaseSyncStatus: SyncStatus.SYNCED, firebaseSyncedAt: new Date() },
+      })
+    : await prisma.sprayer.update({ where: { id: sprayer.id }, data: { firebaseSyncStatus: SyncStatus.FAILED } });
+
+  await logActivity({
+    actorId: actor.id,
+    regionId: block.regionId,
+    action: ActivityAction.CREATE,
+    entityType: "Sprayer",
+    entityId: sprayer.id,
+  }).catch(() => undefined);
+
+  return result;
 }
 
 export async function overridePump(input: { sprayerId: string; mode: "AUTO" | "MANUAL"; relay: "OFF" | "ON" }) {
@@ -200,51 +251,115 @@ export async function overridePump(input: { sprayerId: string; mode: "AUTO" | "M
     const regionIds = await getScopedRegionIds(session);
     if (!regionIds?.includes(sprayer.block.regionId)) throw new Response("Forbidden", { status: 403 });
   }
+  if (!sprayer.isActive) throw new Response("Sprayer tidak aktif.", { status: 409 });
 
-  await updateSprayerControl({
-    regionName: sprayer.block.region.name,
-    blockName: sprayer.block.name,
-    hardwareId: sprayer.hardwareId,
-    mode: data.mode,
-    relay: data.relay,
-  });
+  return withPumpControlLock(sprayer.id, async () => {
+    const hardware = {
+      regionName: sprayer.block.region.name,
+      blockName: sprayer.block.name,
+      hardwareId: sprayer.hardwareId,
+      mode: data.mode,
+    } as const;
 
-  let event;
-  if (data.relay === "ON") {
-    event = await prisma.irrigationEvent.create({
-      data: {
-        blockId: sprayer.blockId,
-        sprayerId: sprayer.id,
-        actorId: session.id,
-        mode: data.mode === "AUTO" ? IrrigationMode.AUTO : IrrigationMode.MANUAL,
-        relay: RelayState.ON,
-        reason: "Manual dashboard override",
-        startedAt: new Date(),
-      },
-    });
-  } else {
-    const openEvent = await prisma.irrigationEvent.findFirst({
-      where: { sprayerId: sprayer.id, relay: RelayState.ON, endedAt: null },
-      orderBy: { startedAt: "desc" },
-    });
-    if (openEvent) {
-      const endedAt = new Date();
-      const durationSeconds = Math.round((endedAt.getTime() - openEvent.startedAt.getTime()) / 1000);
-      event = await prisma.irrigationEvent.update({
-        where: { id: openEvent.id },
-        data: { endedAt, durationSeconds },
+    let event: IrrigationEvent | null;
+
+    if (data.relay === "ON") {
+      // Record intent first without holding the transaction across the network
+      // call, so a created event can be compensated if the relay never acks.
+      const onResult = await prisma.$transaction(async (tx): Promise<{ event: IrrigationEvent; created: boolean }> => {
+        // Lock the sprayer row so two concurrent overrides cannot both
+        // create an open ON event.
+        await tx.$queryRaw`SELECT id FROM sprayer WHERE id = ${sprayer.id} FOR UPDATE`;
+
+        const existing = await tx.irrigationEvent.findFirst({
+          where: { sprayerId: sprayer.id, relay: RelayState.ON, endedAt: null },
+          orderBy: [{ startedAt: "desc" }, { id: "desc" }],
+        });
+        if (existing) return { event: existing, created: false };
+
+        const created = await tx.irrigationEvent.create({
+          data: {
+            sprayerId: sprayer.id,
+            actorId: session.id,
+            mode: data.mode === "AUTO" ? IrrigationMode.AUTO : IrrigationMode.MANUAL,
+            relay: RelayState.ON,
+            reason: "Manual dashboard override",
+            startedAt: new Date(),
+          },
+        });
+        return { event: created, created: true };
       });
+
+      try {
+        await updateSprayerControl({ ...hardware, relay: "ON" });
+      } catch (error) {
+        console.error("[pump] ON command failed", error);
+        if (onResult.created) {
+          // The relay never acknowledged ON: close the optimistic event and
+          // make a best-effort attempt to leave the pump off.
+          await prisma.irrigationEvent
+            .update({
+              where: { id: onResult.event.id },
+              data: { endedAt: new Date(), durationSeconds: 0 },
+            })
+            .catch((rollbackError: unknown) =>
+              console.error("[pump] failed to close event after ON command failure", rollbackError),
+            );
+          await updateSprayerControl({ ...hardware, relay: "OFF" }).catch((offError: unknown) =>
+            console.error("[pump] failed to send compensating OFF command", offError),
+          );
+        }
+        throw new Response("Perintah menyalakan pompa gagal dikirim ke perangkat.", { status: 502 });
+      }
+
+      event = onResult.event;
+    } else {
+      // OFF is the safe direction: stop the hardware before touching the DB.
+      try {
+        await updateSprayerControl({ ...hardware, relay: "OFF" });
+      } catch (error) {
+        console.error("[pump] OFF command failed", error);
+        throw new Response("Perintah mematikan pompa gagal dikirim ke perangkat.", { status: 502 });
+      }
+
+      try {
+        event = await prisma.$transaction(async (tx): Promise<IrrigationEvent | null> => {
+          // Lock the sprayer row so two concurrent overrides cannot close the
+          // same event twice.
+          await tx.$queryRaw`SELECT id FROM sprayer WHERE id = ${sprayer.id} FOR UPDATE`;
+
+          const openEvent = await tx.irrigationEvent.findFirst({
+            where: { sprayerId: sprayer.id, relay: RelayState.ON, endedAt: null },
+            orderBy: [{ startedAt: "desc" }, { id: "desc" }],
+          });
+          if (!openEvent) return null;
+
+          const endedAt = new Date();
+          const durationSeconds = Math.max(0, Math.round((endedAt.getTime() - openEvent.startedAt.getTime()) / 1000));
+          return tx.irrigationEvent.update({
+            where: { id: openEvent.id },
+            data: { endedAt, durationSeconds },
+          });
+        });
+      } catch (error) {
+        // Hardware is already off; never re-enable it just because the event
+        // record could not be closed.
+        console.error("[pump] failed to record OFF event", error);
+        throw new Response("Pompa sudah dimatikan, tetapi event irigasi gagal diperbarui.", {
+          status: 502,
+        });
+      }
     }
-  }
 
-  await logActivity({
-    actorId: session.id,
-    regionId: sprayer.block.regionId,
-    blockId: sprayer.blockId,
-    action: ActivityAction.CONTROL_OVERRIDE,
-    entityType: "Sprayer",
-    entityId: sprayer.id,
+    // Only a fully successful request is audited.
+    await logActivity({
+      actorId: session.id,
+      regionId: sprayer.block.regionId,
+      action: ActivityAction.CONTROL_OVERRIDE,
+      entityType: "Sprayer",
+      entityId: sprayer.id,
+    });
+
+    return event;
   });
-
-  return event ?? null;
 }

@@ -3,8 +3,8 @@ import type { Role } from "@prisma/client";
 import { ModalFrame } from "~/components/shared/ModalFrame";
 import { SelectSearch } from "~/components/ui/SelectSearch";
 import { useToast } from "~/components/shared/ToastProvider";
-import type { getUserFormOptions } from "~/server/actions/index";
-import { updateUserById } from "~/server/actions/index";
+import type { getUserFormOptions } from "~/server/actions/users";
+import { updateUserById } from "~/server/actions/users";
 import type { UserListItem } from "~/types/users";
 
 type UserFormOptions = Awaited<ReturnType<typeof getUserFormOptions>>;

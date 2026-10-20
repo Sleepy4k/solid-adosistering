@@ -60,7 +60,7 @@ export function baseEmailTemplate(input: {
 
   const logoCell = cfg.logoUrl
     ? `<td style="width:52px;padding-right:14px;vertical-align:middle">
-        <img src="${escAttr(cfg.logoUrl)}" alt="${escHtml(cfg.projectName)}" style="display:block;height:44px;width:44px;object-fit:contain;border-radius:6px" />
+        <img src="${escAttr(cfg.logoUrl)}" alt="${escAttr(cfg.projectName)}" style="display:block;height:44px;width:44px;object-fit:contain;border-radius:6px" />
        </td>`
     : "";
 
@@ -94,7 +94,7 @@ export function baseEmailTemplate(input: {
         <p style="margin:0 0 4px;font-size:12px;color:#6b7280">
           ⚠️ Email ini dikirim secara otomatis oleh sistem ${escHtml(cfg.projectName)} - <strong>mohon tidak membalas</strong> email ini.
           Jika Anda memiliki pertanyaan atau membutuhkan bantuan, silakan hubungi kami di
-          <a href="mailto:${REPLY_EMAIL}" style="color:${cfg.primaryColor};text-decoration:none">${REPLY_EMAIL}</a>.
+          <a href="mailto:${escAttr(REPLY_EMAIL)}" style="color:${cfg.primaryColor};text-decoration:none">${REPLY_EMAIL}</a>.
         </p>
       </div>
 

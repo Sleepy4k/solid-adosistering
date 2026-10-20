@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { ActivityAction, MoistureStatus, Role, SyncStatus } from "@prisma/client";
 import { prisma } from "../src/server/db/prisma";
-import { hashPassword } from "../src/server/security";
+import { hashPassword } from "../src/server/auth/security";
 
 const MAOS_REGION = {
   name: "MAOS",
@@ -107,15 +107,7 @@ const MAOS_BLOCKS = Object.keys(MAOS_BLOCK_POLYGONS).map((name, index) => ({
 }));
 
 const seedPassword = process.env.SEED_PASSWORD?.trim();
-const seededRoles = ["SUPERADMIN", "ADMIN", "USER"] as const;
-const missingProductionPasswords = seededRoles.filter(
-  (role) => !seedPassword && !process.env[`SEED_${role}_PASSWORD`]?.trim(),
-);
-if (process.env.NODE_ENV === "production" && missingProductionPasswords.length > 0) {
-  throw new Error(
-    `Set SEED_PASSWORD or a role-specific password for ${missingProductionPasswords.join(", ")} before seeding production.`,
-  );
-}
+const allowDemo = process.env.SEED_ALLOW_DEMO === "true";
 
 const USERS = [
   { email: "superadmin@test.com", name: "Super Administrator", password: "Password123!", role: Role.SUPERADMIN },
@@ -185,61 +177,96 @@ function polygonGeojson(blockName: string) {
   return { type: "Polygon", coordinates: MAOS_BLOCK_POLYGONS[blockName] };
 }
 
+type SeedAccount = (typeof USERS)[number];
+
+/**
+ * Resolve a password for a NEW account only. Existing accounts are never
+ * re-hashed or have their credentials overwritten by a seed run.
+ */
+function resolveSeedPassword(account: SeedAccount): { password: string; demo: boolean } {
+  const roleSpecific = process.env[`SEED_${account.role}_PASSWORD`]?.trim();
+  if (roleSpecific) return { password: roleSpecific, demo: false };
+
+  if (seedPassword) return { password: seedPassword, demo: false };
+
+  if (allowDemo) return { password: account.password, demo: true };
+
+  throw new Error(
+    `Missing seed password for ${account.email} (${account.role}). ` +
+      `Set SEED_${account.role}_PASSWORD or SEED_PASSWORD, ` +
+      `or explicitly set SEED_ALLOW_DEMO=true to use the demo password.`,
+  );
+}
+
 async function seedUsers() {
   const userMap: Record<string, string> = {};
+  const createdAccounts: Array<{ email: string; role: Role }> = [];
+  let demoPasswordUsed = false;
+
   for (const input of USERS) {
-    const password = process.env[`SEED_${input.role}_PASSWORD`]?.trim() || seedPassword || input.password;
+    // Never take over an existing account: a rerun must not reset passwords,
+    // roles, active state, soft-delete state, or profile data.
+    const existing = await prisma.user.findUnique({ where: { email: input.email }, select: { id: true } });
+    if (existing) {
+      userMap[input.email] = existing.id;
+      continue;
+    }
+
+    const { password, demo } = resolveSeedPassword(input);
+    if (demo) demoPasswordUsed = true;
+
     const passwordHash = await hashPassword(password);
-    const user = await prisma.user.upsert({
-      where: { email: input.email },
-      update: { name: input.name, role: input.role, passwordHash, isActive: true },
-      create: {
+    const user = await prisma.user.create({
+      data: {
         email: input.email,
         name: input.name,
         passwordHash,
         role: input.role,
         isActive: true,
       },
+      select: { id: true },
     });
 
     userMap[input.email] = user.id;
+    createdAccounts.push({ email: input.email, role: input.role });
+
     const profile = PROFILES[input.email];
     if (profile) {
       await prisma.userProfile.upsert({
         where: { userId: user.id },
-        update: profile,
+        update: {},
         create: { userId: user.id, ...profile },
       });
     }
   }
 
-  return userMap;
+  return { userMap, createdAccounts, demoPasswordUsed };
 }
 
 async function main() {
   console.warn("Seeding Adosistering core data...");
 
-  const users = await seedUsers();
+  const { userMap: users, createdAccounts, demoPasswordUsed } = await seedUsers();
   const superadminId = users["superadmin@test.com"];
   const adminId = users["admin@test.com"];
   const farmerIds = ["user@test.com", "kawistamaos@adosistering.labgo.id"].map((email) => users[email]);
 
-  const region = await prisma.region.upsert({
-    where: { name: MAOS_REGION.name },
-    update: {
-      description: MAOS_REGION.description,
-      latitude: MAOS_REGION.latitude,
-      longitude: MAOS_REGION.longitude,
-      firebaseSyncStatus: SyncStatus.SYNCED,
-      firebaseSyncedAt: new Date(),
-    },
-    create: {
-      ...MAOS_REGION,
-      createdById: superadminId,
-      firebaseSyncStatus: SyncStatus.SYNCED,
-      firebaseSyncedAt: new Date(),
-    },
-  });
+  const existingRegion = await prisma.region.findUnique({ where: { name: MAOS_REGION.name } });
+  const region =
+    existingRegion ??
+    (await prisma.region.create({
+      data: {
+        ...MAOS_REGION,
+        dryMaxPercent: 40,
+        wetMinPercent: 80,
+        automaticMode: false,
+        safetyTimeoutMin: 2,
+        safetyTimeoutMax: 8,
+        createdById: superadminId,
+        firebaseSyncStatus: SyncStatus.SYNCED,
+        firebaseSyncedAt: new Date(),
+      },
+    }));
 
   await prisma.adminRegionAssignment.upsert({
     where: { adminId_regionId: { adminId, regionId: region.id } },
@@ -256,19 +283,10 @@ async function main() {
 
     await prisma.indicatorThreshold.upsert({
       where: { userId_regionId: { userId: farmerId, regionId: region.id } },
-      update: {
-        dryMaxPercent: 40,
-        wetMinPercent: 80,
-        displayDryMaxPercent: 40,
-        displayMoistMaxPercent: 70,
-        displayWetMinPercent: 80,
-        landPreference: MoistureStatus.LEMBAB,
-      },
+      update: {},
       create: {
         userId: farmerId,
         regionId: region.id,
-        dryMaxPercent: 40,
-        wetMinPercent: 80,
         displayDryMaxPercent: 40,
         displayMoistMaxPercent: 70,
         displayWetMinPercent: 80,
@@ -280,12 +298,7 @@ async function main() {
   for (const blockInput of MAOS_BLOCKS) {
     const block = await prisma.block.upsert({
       where: { regionId_name: { regionId: region.id, name: blockInput.name } },
-      update: {
-        areaHectare: blockInput.areaHectare,
-        polygonGeojson: polygonGeojson(blockInput.name),
-        firebaseSyncStatus: SyncStatus.SYNCED,
-        firebaseSyncedAt: new Date(),
-      },
+      update: {},
       create: {
         regionId: region.id,
         name: blockInput.name,
@@ -299,12 +312,7 @@ async function main() {
 
     await prisma.sprayer.upsert({
       where: { blockId_hardwareId: { blockId: block.id, hardwareId: blockInput.hardwareId } },
-      update: {
-        displayName: blockInput.displayName,
-        isActive: true,
-        firebaseSyncStatus: SyncStatus.SYNCED,
-        firebaseSyncedAt: new Date(),
-      },
+      update: {},
       create: {
         blockId: block.id,
         hardwareId: blockInput.hardwareId,
@@ -317,30 +325,21 @@ async function main() {
   }
 
   await prisma.systemSetting.upsert({
-    where: { key: `region_settings:${MAOS_REGION.name}` },
-    update: { value: { batas_basah: 80, batas_kering: 40, mode_otomatis: false } },
-    create: {
-      key: `region_settings:${MAOS_REGION.name}`,
-      value: { batas_basah: 80, batas_kering: 40, mode_otomatis: false },
-    },
-  });
-
-  await prisma.systemSetting.upsert({
     where: { key: "safetyTimeout" },
-    update: { value: { min: 2, max: 8 } },
+    update: {},
     create: { key: "safetyTimeout", value: { min: 2, max: 8 } },
   });
 
   await prisma.systemSetting.upsert({
     where: { key: "mapConfig" },
-    update: { value: { lat: -7.611479, lng: 109.17736, zoom: 18 } },
+    update: {},
     create: { key: "mapConfig", value: { lat: -7.611479, lng: 109.17736, zoom: 18 } },
   });
 
   await prisma.systemSetting.upsert({
     where: { key: "seed.version" },
-    update: { value: { version: 6, source: "core-seed", seededAt: new Date().toISOString() } },
-    create: { key: "seed.version", value: { version: 6, source: "core-seed", seededAt: new Date().toISOString() } },
+    update: { value: { version: 7, source: "core-seed", seededAt: new Date().toISOString() } },
+    create: { key: "seed.version", value: { version: 7, source: "core-seed", seededAt: new Date().toISOString() } },
   });
 
   await prisma.activityLog.create({
@@ -349,14 +348,19 @@ async function main() {
       regionId: region.id,
       action: ActivityAction.CREATE,
       entityType: "Seed",
-      metadata: { source: "core-seed", version: 6 },
+      metadata: { source: "core-seed", version: 7 },
     },
   });
 
-  console.warn("Seed complete. Accounts:");
-  for (const user of USERS) console.warn(`- ${user.email} (${user.role})`);
-  if (!seedPassword) {
-    console.warn("Demo passwords are defined in prisma/seed.ts. Change them before sharing this environment.");
+  console.warn("Seed complete.");
+  if (createdAccounts.length > 0) {
+    console.warn("Created accounts:");
+    for (const account of createdAccounts) console.warn(`- ${account.email} (${account.role})`);
+  }
+  if (demoPasswordUsed) {
+    console.warn(
+      "SEED_ALLOW_DEMO=true was used: newly created accounts have demo passwords. Change them before sharing this environment.",
+    );
   }
 }
 

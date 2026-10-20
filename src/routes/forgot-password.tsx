@@ -4,7 +4,7 @@ import { PageMeta } from "~/components/shared/PageMeta";
 import { AuthLayout } from "~/layouts/AuthLayout";
 import { Field, TextInput } from "~/components/form/Form";
 import { Button } from "~/components/ui/Button";
-import { requestPasswordReset } from "~/server/actions/index";
+import { requestPasswordReset } from "~/server/actions/auth";
 import { debounce } from "~/lib/shared/debounce";
 import { validateEmail } from "~/lib/shared/validation";
 import { useWebConfig } from "~/lib/shared/webConfig";

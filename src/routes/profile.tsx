@@ -2,7 +2,7 @@ import { query, createAsync, revalidate } from "@solidjs/router";
 import { createSignal, Show, Suspense } from "solid-js";
 import { PageMeta } from "~/components/shared/PageMeta";
 import { ModalFrame } from "~/components/shared/ModalFrame";
-import { getMyProfile, updateMyProfile, changeMyPassword, type MyProfile } from "~/server/actions/index";
+import { getMyProfile, updateMyProfile, changeMyPassword, type MyProfile } from "~/server/actions/profile";
 import { SkCard } from "~/components/shared/Skeleton";
 import { useToast } from "~/components/shared/ToastProvider";
 import { SelectSearch } from "~/components/ui/SelectSearch";

@@ -19,7 +19,7 @@ export const PROBLEMS = [
   {
     title: "Penyiraman Dilakukan Hanya Berdasarkan Perkiraan",
     desc: "Padahal, setiap tanaman membutuhkan jumlah air yang dan frekuensi irigasi yang berbeda.",
-    img: "/landing/problem-feature-1.png",
+    img: "/landing/problem-feature-1.webp",
     width: 2183,
     height: 1935,
     alt: "Petani menyiram tanaman berdasarkan perkiraan",
@@ -27,7 +27,7 @@ export const PROBLEMS = [
   {
     title: "Penggunaan Air Tidak Efisien",
     desc: "Irigasi yang dilakukan hanya berdasarkan perkiraan, mengakibatkan penggunaan air yang tidak efisien.",
-    img: "/landing/problem-feature-2.png",
+    img: "/landing/problem-feature-2.webp",
     width: 2183,
     height: 1935,
     alt: "Sistem irigasi konvensional berbasis jadwal tetap",
@@ -35,7 +35,7 @@ export const PROBLEMS = [
   {
     title: "Sulitnya Memantau Kondisi Lahan",
     desc: "Belum ada parameter yang dapat mengukur kondisi lahan supaya irigasi dapat lebih optimal.",
-    img: "/landing/problem-feature-3.png",
+    img: "/landing/problem-feature-3.webp",
     width: 2183,
     height: 1935,
     alt: "Kesulitan memantau kondisi lahan pertanian",
@@ -43,7 +43,7 @@ export const PROBLEMS = [
   {
     title: "Risiko Tanaman Mengalami Kekurangan atau Kelebihan Air",
     desc: "Tanaman yang mengalami kekurangan atau kelebihan air, tentunya akan berdampak pada hasil panen.",
-    img: "/landing/problem-feature-4.png",
+    img: "/landing/problem-feature-4.webp",
     width: 2183,
     height: 1935,
     alt: "Penyiraman manual yang tidak efisien",
@@ -56,7 +56,7 @@ export const TESTIMONIALS = [
     role: "Sekretaris Desa Dawuhan, Banyumas",
     quote:
       "Keterbatasan air tetap menjadi masalah petani di Desa Dawuhan. Selain itu, irigasi menggunakan pompa berbahan bakar fosil sangat boros terutama bagi petani",
-    img: "/landing/profile-sukirno.png",
+    img: "/landing/profile-sukirno.webp",
     width: 336,
     height: 336,
   },
@@ -65,7 +65,7 @@ export const TESTIMONIALS = [
     role: "Ketua Harja Tani, KedungBenda",
     quote:
       "Setiap musim kemarau, persediaan air pasti habis. Sebagai petani kita harus bisa irigasi dengan jumlah air yang sedikit",
-    img: "/landing/profile-muctharom.png",
+    img: "/landing/profile-muctharom.webp",
     width: 336,
     height: 336,
   },
@@ -74,7 +74,7 @@ export const TESTIMONIALS = [
     role: "Pengelola Kawista Emji Mernek, Cilacap",
     quote:
       "Beberapa hari sekali, petani harus menyiram pupuk ke lahan. Aktivitas ini sangat memakan waktu dan tenaga. Kami harap ada solusi yang lebih efektif",
-    img: "/landing/profile-suyitno.png",
+    img: "/landing/profile-suyitno.webp",
     width: 336,
     height: 336,
   },
@@ -107,7 +107,7 @@ export const FEATURES = [
   {
     title: "Energi Terbarukan Berbasis Panel Surya",
     desc: "ADOSISTERING memanfaatkan panel surya sebagai sumber energi utama untuk mendukung operasional sistem irigasi. Dengan pendekatan ini, sistem dapat berjalan secara mandiri, efisien, dan ramah lingkungan, khususnya pada wilayah lahan yang terbatas akses listrik.",
-    img: "/landing/feature-image-1.png",
+    img: "/landing/feature-image-1.webp",
     width: 2480,
     height: 1812,
     alt: "Panel surya sebagai sumber energi sistem irigasi pintar ADOSISTERING",
@@ -127,7 +127,7 @@ export const FEATURES = [
   {
     title: "Kontrol Irigasi",
     desc: "Pengelolaan sistem irigasi secara real-time melalui integrasi sensor dan kontrol pompa berbasis IoT.",
-    img: "/landing/feature-image-2.png",
+    img: "/landing/feature-image-2.webp",
     width: 2480,
     height: 1825,
     alt: "Dashboard kontrol irigasi ADOSISTERING",
@@ -147,7 +147,7 @@ export const FEATURES = [
   {
     title: "Sensor Kelembaban Tanah",
     desc: "Sistem membaca tingkat kelembaban tanah secara berkala untuk menentukan kebutuhan irigasi yang optimal. Data ini menjadi dasar dalam mengatur ambang batas penyiraman agar penggunaan air lebih efisien.",
-    img: "/landing/feature-image-3.png",
+    img: "/landing/feature-image-3.webp",
     width: 2480,
     height: 1814,
     alt: "Tampilan data sensor kelembaban tanah pada dashboard ADOSISTERING",
@@ -167,7 +167,7 @@ export const FEATURES = [
   {
     title: "Riwayat Irigasi",
     desc: "ADOSISTERING menyediakan rekam jejak aktivitas irigasi yang mencakup kelembaban tanah, debit aliran, volume air, serta status penyiraman untuk setiap blok lahan.",
-    img: "/landing/feature-image-4.png",
+    img: "/landing/feature-image-4.webp",
     width: 2888,
     height: 1814,
     alt: "Tabel riwayat irigasi pada platform ADOSISTERING",
@@ -196,21 +196,21 @@ export const STATS = [
 export const LOCATIONS = [
   {
     name: "Desa KedungBenda, Purbalingga",
-    img: "/landing/implement-kedungbenda.png",
+    img: "/landing/implement-kedungbenda.webp",
     width: 596,
     height: 364,
     desc: "ADOSISTERING mengintegrasikan sensor, kontrol pompa, dan dashboard monitoring untuk membantu petani mengambil keputusan irigasi yang tepat.",
   },
   {
     name: "Kawista Emji Mernek Jenek, Cilacap",
-    img: "/landing/implement-mernek_jenek.png",
+    img: "/landing/implement-mernek_jenek.webp",
     width: 596,
     height: 364,
     desc: "ADOSISTERING mengintegrasikan sensor, kontrol pompa, dan dashboard monitoring untuk membantu petani mengambil keputusan irigasi yang tepat.",
   },
   {
     name: "Desa Dawuhan, Banyumas",
-    img: "/landing/implement-dawuhan.png",
+    img: "/landing/implement-dawuhan.webp",
     width: 596,
     height: 364,
     desc: "ADOSISTERING mengintegrasikan sensor, kontrol pompa, dan dashboard monitoring untuk membantu petani mengambil keputusan irigasi yang tepat.",
@@ -248,20 +248,20 @@ export const DIRECTOR_PROFILE = {
   role: "Direktur",
   quote:
     "Pemanfaatan teknologi berbasis data dalam sistem irigasi menjadi langkah penting untuk meningkatkan efisiensi dan keberlanjutan pertanian.",
-  img: "/landing/direktur-image.png",
+  img: "/landing/direktur-image.webp",
   width: 1588,
   height: 2424,
 } as const;
 
 export const PARTNERS = [
   {
-    src: "/landing/telkom-university-logo.png",
+    src: "/landing/telkom-university-logo.webp",
     width: 746,
     height: 331,
     alt: "Telkom University - Mitra ADOSISTERING",
   },
-  { src: "/landing/pertamina-logo.png", width: 3840, height: 894, alt: "Pertamina - Mitra ADOSISTERING" },
-  { src: "/landing/mernek_jenek-logo.png", width: 345, height: 345, alt: "MernekJenek - Mitra ADOSISTERING" },
+  { src: "/landing/pertamina-logo.webp", width: 3840, height: 894, alt: "Pertamina - Mitra ADOSISTERING" },
+  { src: "/landing/mernek_jenek-logo.webp", width: 345, height: 345, alt: "MernekJenek - Mitra ADOSISTERING" },
 ] as const;
 
 export const COLAB_CONTENT = {

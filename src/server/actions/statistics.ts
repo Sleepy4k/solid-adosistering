@@ -5,38 +5,40 @@ import { redirect } from "@solidjs/router";
 import { prisma } from "../db/prisma";
 import { getSession } from "../session";
 import { getScopedBlockIds, getScopedRegionIds, refreshFirebaseCache } from "./_helpers";
+import { parseInput, statisticsSchema } from "../validation";
 
 export async function getStatistics(input: { blockId?: string; regionId?: string; range: "today" | "7d" | "30d" }) {
+  const data = parseInput(statisticsSchema, input);
   const session = await getSession();
   if (!session) throw redirect("/login");
   await refreshFirebaseCache();
 
   const now = new Date();
   let since: Date;
-  if (input.range === "today") {
+  if (data.range === "today") {
     since = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  } else if (input.range === "7d") {
+  } else if (data.range === "7d") {
     since = new Date(Date.now() - 7 * 86400_000);
   } else {
     since = new Date(Date.now() - 30 * 86400_000);
   }
 
   let scopedBlockIds: string[] | null = null;
-  if (input.blockId || input.regionId || session.role !== "SUPERADMIN") {
-    if (input.regionId && !input.blockId) {
+  if (data.blockId || data.regionId || session.role !== "SUPERADMIN") {
+    if (data.regionId && !data.blockId) {
       const scopedRegionIds = await getScopedRegionIds(session);
-      const allowed = scopedRegionIds ? scopedRegionIds.includes(input.regionId) : true;
+      const allowed = scopedRegionIds ? scopedRegionIds.includes(data.regionId) : true;
       if (!allowed) {
         scopedBlockIds = [];
       } else {
-        const blocks = await prisma.block.findMany({ where: { regionId: input.regionId }, select: { id: true } });
+        const blocks = await prisma.block.findMany({ where: { regionId: data.regionId }, select: { id: true } });
         scopedBlockIds = blocks.map((b) => b.id);
       }
     } else {
-      scopedBlockIds = await getScopedBlockIds(session, input.blockId);
-      if (input.regionId) {
+      scopedBlockIds = await getScopedBlockIds(session, data.blockId);
+      if (data.regionId) {
         const regionBlocks = new Set(
-          (await prisma.block.findMany({ where: { regionId: input.regionId }, select: { id: true } })).map((b) => b.id),
+          (await prisma.block.findMany({ where: { regionId: data.regionId }, select: { id: true } })).map((b) => b.id),
         );
         scopedBlockIds = scopedBlockIds.filter((id) => regionBlocks.has(id));
       }
@@ -48,7 +50,7 @@ export async function getStatistics(input: { blockId?: string; regionId?: string
 
   const readings = await prisma.sensorReading.findMany({
     where: { ...blockFilter, recordedAt: { gte: since } },
-    orderBy: { recordedAt: "asc" },
+    orderBy: { recordedAt: "desc" },
     select: {
       recordedAt: true,
       moisturePercent: true,
@@ -59,11 +61,13 @@ export async function getStatistics(input: { blockId?: string; regionId?: string
     },
     take: 2000,
   });
+  readings.reverse();
 
   const events = await prisma.irrigationEvent.findMany({
     where: { ...eventFilter, startedAt: { gte: since } },
     orderBy: { startedAt: "asc" },
     select: { mode: true, relay: true, startedAt: true, endedAt: true, blockId: true },
+    take: 5000,
   });
 
   return {

@@ -6,9 +6,17 @@ import { firebaseSegment } from "~/lib/shared/irrigation";
 import { prisma } from "../db/prisma";
 import { firebaseAdminDb } from "../services/firebaseAdmin";
 import { provisionRegionNode, renameRegionNode } from "../services/firebaseSync";
-import { assertSuperadmin, type SessionUser } from "../security";
+import { assertSuperadmin } from "../security";
 import { getSession } from "../session";
 import { decimalCoordinate, getScopedRegionIds, logActivity, type CoordinateInput } from "./_helpers";
+import {
+  assignAdminSchema,
+  createRegionSchema,
+  idInputSchema,
+  parseInput,
+  updateRegionConfigSchema,
+  updateRegionSchema,
+} from "../validation";
 
 export async function getRegions() {
   const session = await getSession();
@@ -48,20 +56,21 @@ export async function getRegions() {
 }
 
 export async function createRegion(input: {
-  actor?: SessionUser;
   name: string;
   description?: string;
   latitude?: CoordinateInput;
   longitude?: CoordinateInput;
 }) {
+  const data = parseInput(createRegionSchema, input);
   const session = await getSession();
-  const actor = assertSuperadmin(input.actor ?? session);
+  if (!session) throw redirect("/login");
+  const actor = assertSuperadmin(session);
   const region = await prisma.region.create({
     data: {
-      name: input.name.trim(),
-      description: input.description?.trim(),
-      latitude: decimalCoordinate(input.latitude, "Latitude"),
-      longitude: decimalCoordinate(input.longitude, "Longitude"),
+      name: data.name,
+      description: data.description,
+      latitude: decimalCoordinate(data.latitude, "Latitude"),
+      longitude: decimalCoordinate(data.longitude, "Longitude"),
       createdById: actor.id,
       firebaseSyncStatus: SyncStatus.PENDING,
     },
@@ -97,23 +106,24 @@ export async function createRegion(input: {
 }
 
 export async function updateRegion(input: {
-  actor?: SessionUser;
   id: string;
   name: string;
   description?: string;
   latitude?: CoordinateInput;
   longitude?: CoordinateInput;
 }) {
+  const data = parseInput(updateRegionSchema, input);
   const session = await getSession();
-  const actor = assertSuperadmin(input.actor ?? session);
-  const existing = await prisma.region.findUniqueOrThrow({ where: { id: input.id } });
+  if (!session) throw redirect("/login");
+  const actor = assertSuperadmin(session);
+  const existing = await prisma.region.findUniqueOrThrow({ where: { id: data.id } });
   const updated = await prisma.region.update({
-    where: { id: input.id },
+    where: { id: data.id },
     data: {
-      name: input.name.trim(),
-      description: input.description?.trim(),
-      latitude: decimalCoordinate(input.latitude, "Latitude"),
-      longitude: decimalCoordinate(input.longitude, "Longitude"),
+      name: data.name,
+      description: data.description,
+      latitude: decimalCoordinate(data.latitude, "Latitude"),
+      longitude: decimalCoordinate(data.longitude, "Longitude"),
       updatedById: actor.id,
       firebaseSyncStatus: SyncStatus.PENDING,
     },
@@ -148,13 +158,14 @@ export async function updateRegion(input: {
 }
 
 export async function deleteRegion(input: { id: string }) {
+  const data = parseInput(idInputSchema, input);
   const session = await getSession();
   if (!session) throw redirect("/login");
   assertSuperadmin(session);
 
-  const region = await prisma.region.findUniqueOrThrow({ where: { id: input.id } });
-  await prisma.region.delete({ where: { id: input.id } });
-  await logActivity({ actorId: session.id, action: ActivityAction.DELETE, entityType: "Region", entityId: input.id });
+  const region = await prisma.region.findUniqueOrThrow({ where: { id: data.id } });
+  await prisma.region.delete({ where: { id: data.id } });
+  await logActivity({ actorId: session.id, action: ActivityAction.DELETE, entityType: "Region", entityId: data.id });
 
   try {
     await firebaseAdminDb().ref(firebaseSegment(region.name)).remove();
@@ -176,39 +187,48 @@ export async function getAdmins() {
 }
 
 export async function assignAdminToRegion(input: { adminId: string; regionId: string }) {
+  const data = parseInput(assignAdminSchema, input);
   const session = await getSession();
   if (!session) throw redirect("/login");
   assertSuperadmin(session);
 
+  const [admin, region] = await Promise.all([
+    prisma.user.findFirst({ where: { id: data.adminId, role: "ADMIN", isActive: true }, select: { id: true } }),
+    prisma.region.findUnique({ where: { id: data.regionId }, select: { id: true } }),
+  ]);
+  if (!admin) throw new Response("Admin tidak ditemukan atau tidak aktif.", { status: 404 });
+  if (!region) throw new Response("Region tidak ditemukan.", { status: 404 });
+
   await prisma.adminRegionAssignment.upsert({
-    where: { adminId_regionId: { adminId: input.adminId, regionId: input.regionId } },
+    where: { adminId_regionId: { adminId: data.adminId, regionId: data.regionId } },
     update: {},
-    create: { adminId: input.adminId, regionId: input.regionId, assignedById: session.id },
+    create: { adminId: data.adminId, regionId: data.regionId, assignedById: session.id },
   });
   await logActivity({
     actorId: session.id,
-    regionId: input.regionId,
+    regionId: data.regionId,
     action: ActivityAction.ASSIGN,
     entityType: "AdminRegion",
-    entityId: input.adminId,
+    entityId: data.adminId,
   });
   return { ok: true };
 }
 
 export async function removeAdminFromRegion(input: { adminId: string; regionId: string }) {
+  const data = parseInput(assignAdminSchema, input);
   const session = await getSession();
   if (!session) throw redirect("/login");
   assertSuperadmin(session);
 
   await prisma.adminRegionAssignment.deleteMany({
-    where: { adminId: input.adminId, regionId: input.regionId },
+    where: { adminId: data.adminId, regionId: data.regionId },
   });
   await logActivity({
     actorId: session.id,
-    regionId: input.regionId,
+    regionId: data.regionId,
     action: ActivityAction.UNASSIGN,
     entityType: "AdminRegion",
-    entityId: input.adminId,
+    entityId: data.adminId,
   });
   return { ok: true };
 }
@@ -226,8 +246,8 @@ export async function getMyRegions() {
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
-    latitude: r.latitude ? Number(r.latitude) : null,
-    longitude: r.longitude ? Number(r.longitude) : null,
+    latitude: r.latitude === null ? null : Number(r.latitude),
+    longitude: r.longitude === null ? null : Number(r.longitude),
   }));
 }
 
@@ -237,33 +257,30 @@ export async function updateRegionConfig(input: {
   showWindDirection: boolean;
   showAutoIrrigation: boolean;
 }) {
+  const data = parseInput(updateRegionConfigSchema, input);
   const session = await getSession();
   if (!session) throw redirect("/login");
   assertSuperadmin(session);
 
-  if (!Number.isFinite(input.volumeDivider) || input.volumeDivider <= 0) {
-    throw new Response("Volume divider harus berupa angka positif.", { status: 400 });
-  }
-
   await prisma.region.update({
-    where: { id: input.id },
+    where: { id: data.id },
     data: {
-      volumeDivider: input.volumeDivider,
-      showWindDirection: input.showWindDirection,
-      showAutoIrrigation: input.showAutoIrrigation,
+      volumeDivider: data.volumeDivider,
+      showWindDirection: data.showWindDirection,
+      showAutoIrrigation: data.showAutoIrrigation,
       updatedById: session.id,
     },
   });
   await logActivity({
     actorId: session.id,
-    regionId: input.id,
+    regionId: data.id,
     action: ActivityAction.UPDATE,
     entityType: "RegionConfig",
-    entityId: input.id,
+    entityId: data.id,
     metadata: {
-      volumeDivider: input.volumeDivider,
-      showWindDirection: input.showWindDirection,
-      showAutoIrrigation: input.showAutoIrrigation,
+      volumeDivider: data.volumeDivider,
+      showWindDirection: data.showWindDirection,
+      showAutoIrrigation: data.showAutoIrrigation,
     },
   });
   return { ok: true };

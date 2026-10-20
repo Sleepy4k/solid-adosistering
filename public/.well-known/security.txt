@@ -1,0 +1,5 @@
+Contact: mailto:adosisteringteam@gmail.com
+Expires: 2027-12-31T23:59:59.000Z
+Preferred-Languages: id, en
+Canonical: https://adosistering.labgo.id/.well-known/security.txt
+Policy: https://github.com/Sleepy4k/solid-adosistering/blob/main/SECURITY.md

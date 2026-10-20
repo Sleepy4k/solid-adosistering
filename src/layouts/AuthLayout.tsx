@@ -2,9 +2,9 @@ import { createSignal, onMount, type JSX } from "solid-js";
 import { finishProgress } from "~/lib/client/progress";
 
 const backgroundLoaders = [
-  () => import("~/assets/images/bg-login-1.jpg"),
-  () => import("~/assets/images/bg-login-2.jpg"),
-  () => import("~/assets/images/bg-login-3.jpg"),
+  () => import("~/assets/images/bg-login-1.webp"),
+  () => import("~/assets/images/bg-login-2.webp"),
+  () => import("~/assets/images/bg-login-3.webp"),
 ];
 
 export function AuthLayout(props: { children: JSX.Element }) {

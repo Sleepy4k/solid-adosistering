@@ -1,4 +1,4 @@
-import { A, useLocation, useNavigate } from "@solidjs/router";
+import { A, useLocation } from "@solidjs/router";
 import {
   Building2,
   ChartBar,
@@ -114,7 +114,6 @@ type SidebarProps = {
 export default function Sidebar(props: SidebarProps) {
   const isCollapsed = () => !props.mobile && (props.collapsed ?? false);
   const location = useLocation();
-  const navigate = useNavigate();
   const confirm = useConfirm();
 
   const isActive = (href: string) => {
@@ -143,7 +142,9 @@ export default function Sidebar(props: SidebarProps) {
     });
     if (!ok) return;
     await logout().catch(() => undefined);
-    navigate(ROUTES.login, { replace: true });
+    // A full navigation clears router query caches that may still hold the
+    // previous user's session data (for example the cached `current-user` query).
+    window.location.assign(ROUTES.login);
   };
 
   return (

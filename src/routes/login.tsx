@@ -1,4 +1,4 @@
-import { A, query, createAsync, redirect, useNavigate, useSearchParams } from "@solidjs/router";
+import { A, query, createAsync, redirect, useSearchParams } from "@solidjs/router";
 import { Eye, EyeOff } from "lucide-solid";
 import { createSignal, onCleanup, onMount, Show } from "solid-js";
 import { PageMeta } from "~/components/shared/PageMeta";
@@ -35,7 +35,6 @@ export default function Login() {
   const [cooldownUntil, setCooldownUntil] = createSignal<number>(0);
   const [nowTs, setNowTs] = createSignal<number>(Date.now());
   const [params] = useSearchParams();
-  const navigate = useNavigate();
 
   onMount(() => {
     const id = setInterval(() => setNowTs(Date.now()), 1000);
@@ -87,7 +86,8 @@ export default function Login() {
     setLoading(true);
     try {
       await login({ email: email(), password: password() });
-      navigate("/dashboard");
+      // Full navigation avoids reusing a cached user query from a previous session.
+      window.location.assign("/dashboard");
     } catch (err) {
       if (err instanceof Response) {
         setError(await err.text());

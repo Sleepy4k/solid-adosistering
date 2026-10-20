@@ -199,7 +199,8 @@ function waterValue(reading: Reading) {
 }
 
 function toMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Data statistik belum bisa dimuat.";
+  if (!import.meta.env.PROD && error instanceof Error) return error.message;
+  return "Data statistik belum bisa dimuat.";
 }
 
 export default function Statistik() {

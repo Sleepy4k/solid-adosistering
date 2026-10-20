@@ -1,5 +1,5 @@
 import { query, createAsync } from "@solidjs/router";
-import { For } from "solid-js";
+import { For, Show } from "solid-js";
 import { getLandingLocations } from "~/server/actions/index";
 import { LOCATIONS } from "~/constants/landing";
 
@@ -27,7 +27,7 @@ export default function UseCasesSection() {
         <div class="relative flex min-h-[600px] items-center pb-20 pt-4 md:min-h-[700px] md:pb-28 lg:min-h-[800px] lg:pb-36">
           <div class="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden="true">
             <img
-              src="/landing/map-background.png"
+              src="/landing/map-background.webp"
               alt=""
               class="object-cover"
               loading="lazy"
@@ -42,16 +42,25 @@ export default function UseCasesSection() {
               {(loc) => (
                 <div class="rounded-2xl border border-neutral-100 bg-white p-4 shadow-lg sm:p-5">
                   <div class="mb-5 overflow-hidden rounded-xl">
-                    <img
-                      src={loc.imageUrl ?? ""}
-                      alt={`Lokasi implementasi ADOSISTERING di ${loc.name}`}
-                      class="h-auto w-full object-cover"
-                      loading="lazy"
-                      decoding="async"
-                      fetchpriority="low"
-                      width={596}
-                      height={364}
-                    />
+                    <Show
+                      when={loc.imageUrl}
+                      fallback={
+                        <div class="grid h-44 place-items-center bg-gradient-to-br from-emerald-50 to-lime-100 text-3xl font-extrabold text-emerald-700">
+                          {loc.name.slice(0, 1).toUpperCase()}
+                        </div>
+                      }
+                    >
+                      <img
+                        src={loc.imageUrl ?? undefined}
+                        alt={`Lokasi implementasi ADOSISTERING di ${loc.name}`}
+                        class="h-auto w-full object-cover"
+                        loading="lazy"
+                        decoding="async"
+                        fetchpriority="low"
+                        width={596}
+                        height={364}
+                      />
+                    </Show>
                   </div>
                   <h3 class="mb-2 text-lg font-bold leading-snug text-neutral-900 sm:text-xl">{loc.name}</h3>
                   <p class="text-sm leading-relaxed text-slate-500 sm:text-base">{loc.description}</p>

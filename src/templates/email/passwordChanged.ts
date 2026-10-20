@@ -1,4 +1,4 @@
-import { baseEmailTemplate, type EmailBrandConfig } from "./base";
+import { baseEmailTemplate, escHtml, type EmailBrandConfig } from "./base";
 
 export function passwordChangedTemplate(userName: string, config?: Partial<EmailBrandConfig>) {
   const subject = "Password Akun Anda Berhasil Diubah";
@@ -8,7 +8,7 @@ export function passwordChangedTemplate(userName: string, config?: Partial<Email
     timeZone: "Asia/Jakarta",
   });
   const bodyHtml = `
-    <p style="margin:0 0 16px;font-size:15px;color:#374151">Halo, <strong>${userName}</strong>,</p>
+    <p style="margin:0 0 16px;font-size:15px;color:#374151">Halo, <strong>${escHtml(userName)}</strong>,</p>
     <p style="margin:0 0 16px;font-size:15px;color:#374151">
       Password akun Adosistering Anda telah berhasil diubah pada:
     </p>

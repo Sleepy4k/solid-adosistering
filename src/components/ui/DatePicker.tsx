@@ -123,7 +123,6 @@ export function DatePicker(props: { value: string; placeholder?: string; onChang
 
   createEffect(() => {
     const handler = (e: MouseEvent) => {
-
       if (!e.composedPath().includes(containerRef as EventTarget)) {
         setOpen(false);
         setShowYearPicker(false);

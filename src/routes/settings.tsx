@@ -29,7 +29,14 @@ export default function Pengaturan() {
         <div class="rounded-2xl border border-[#C2C2C2] bg-white px-4 py-5 sm:px-6 lg:px-8">
           <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h1 class="text-xl font-bold text-[#4F4F4F] sm:text-2xl">Pengaturan</h1>
-            <p class="text-xs text-gray-500 sm:text-sm">{liveDate().toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</p>
+            <p class="text-xs text-gray-500 sm:text-sm">
+              {liveDate().toLocaleDateString("id-ID", {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              })}
+            </p>
           </div>
         </div>
 

@@ -1,3 +1,4 @@
+import "server-only";
 import nodemailer from "nodemailer";
 import { serverConfig } from "../config";
 import { prisma } from "../db/prisma";
@@ -6,6 +7,7 @@ import { passwordChangedTemplate } from "~/templates/email/passwordChanged";
 import { passwordResetTemplate } from "~/templates/email/passwordReset";
 import { welcomeUserTemplate } from "~/templates/email/welcomeUser";
 import type { EmailBrandConfig } from "~/templates/email/base";
+import { sanitizeImageUrl } from "../security";
 
 type WebConfigValue = {
   projectName?: string;
@@ -15,9 +17,14 @@ type WebConfigValue = {
 };
 
 function resolveLogoUrl(logoUrl: string | null | undefined): string | null {
-  if (!logoUrl) return null;
-  if (logoUrl.startsWith("http://") || logoUrl.startsWith("https://")) return logoUrl;
-  return `${serverConfig.appOrigin}${logoUrl}`;
+  const safe = sanitizeImageUrl(logoUrl);
+  if (!safe) return null;
+  if (/^https?:\/\//i.test(safe)) return safe;
+  return `${serverConfig.appOrigin}${safe}`;
+}
+
+function safeColor(value: string | undefined): string | undefined {
+  return value && /^#[0-9a-fA-F]{6}$/.test(value) ? value : undefined;
 }
 
 export async function getEmailBrandConfig(): Promise<Partial<EmailBrandConfig>> {
@@ -28,16 +35,12 @@ export async function getEmailBrandConfig(): Promise<Partial<EmailBrandConfig>> 
     projectName: val.projectName ?? undefined,
     tagline: val.tagline ?? undefined,
     logoUrl: resolveLogoUrl(val.logoUrl),
-    primaryColor: val.primaryColor ?? undefined,
+    primaryColor: safeColor(val.primaryColor),
   };
 }
 
 export function createSmtpTransporter() {
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT ?? "587");
-  const secure = process.env.SMTP_SECURE === "true";
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+  const { host, port, secure, user, pass } = serverConfig.smtp;
 
   if (!host || !user || !pass) {
     const missing = [!host && "SMTP_HOST", !user && "SMTP_USER", !pass && "SMTP_PASS"].filter(Boolean);
@@ -52,14 +55,14 @@ export function createSmtpTransporter() {
     connectionTimeout: 10_000,
     greetingTimeout: 10_000,
     socketTimeout: 15_000,
-    tls: { rejectUnauthorized: false },
+    tls: { rejectUnauthorized: process.env.SMTP_TLS_REJECT_UNAUTHORIZED !== "false" },
   });
 }
 
 function resolveFrom(): string {
-  const from = process.env.EMAIL_FROM;
+  const from = serverConfig.smtp.from;
   if (from) return from;
-  return `Adosistering <${process.env.SMTP_USER}>`;
+  return `Adosistering <${serverConfig.smtp.user}>`;
 }
 
 export async function sendTransactionalEmail(

@@ -15,13 +15,13 @@ import LandingLayout from "~/layouts/LandingLayout";
 import { getOptionalUser } from "~/server/auth";
 import { loadWebConfig, useWebConfig } from "~/lib/shared/webConfig";
 import { createAsync } from "@solidjs/router";
+import { PageMeta } from "~/components/shared/PageMeta";
 
 export const route = {
   preload: () => {
     void getOptionalUser();
     return loadWebConfig();
   },
-  prerender: true,
 };
 
 export default function LandingRoute() {
@@ -30,6 +30,7 @@ export default function LandingRoute() {
 
   return (
     <LandingLayout config={webConfig()} user={user() ?? null}>
+      <PageMeta page="landing" indexable />
       <HeroSection config={webConfig()} />
       <PreviewSection />
       <ProblemsSection />

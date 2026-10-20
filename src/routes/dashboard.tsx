@@ -32,7 +32,16 @@ export default function Beranda() {
       <div class="space-y-5">
         <PageHeader
           title="Beranda"
-          actions={<p class="text-sm font-medium capitalize text-slate-500">{new Intl.DateTimeFormat("id-ID", { weekday: "long", day: "2-digit", month: "long", year: "numeric" }).format(liveDate())}</p>}
+          actions={
+            <p class="text-sm font-medium capitalize text-slate-500">
+              {new Intl.DateTimeFormat("id-ID", {
+                weekday: "long",
+                day: "2-digit",
+                month: "long",
+                year: "numeric",
+              }).format(liveDate())}
+            </p>
+          }
         />
 
         <ErrorBoundary

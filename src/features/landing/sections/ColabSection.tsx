@@ -8,7 +8,7 @@ export default function ColabSection() {
       aria-labelledby="colab-heading"
     >
       <img
-        src="/landing/colab-bg.png"
+        src="/landing/colab-bg.webp"
         alt=""
         class="absolute inset-0 h-full w-full object-cover"
         loading="lazy"

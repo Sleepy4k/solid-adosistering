@@ -26,3 +26,25 @@ export const ROUTES = {
 } as const;
 
 export const PUBLIC_ROUTES = [ROUTES.landing, ROUTES.login, ROUTES.forgotPassword, ROUTES.resetPassword] as const;
+
+/**
+ * Prefixes that require an authenticated session. Unknown paths deliberately
+ * fall through to the catch-all 404 route instead of being redirected to login,
+ * which keeps broken URLs out of the auth flow and lets crawlers see a real 404.
+ */
+export const PROTECTED_ROUTE_PREFIXES = [
+  ROUTES.dashboard,
+  ROUTES.irrigationHistory,
+  ROUTES.statistics,
+  ROUTES.userManagement,
+  ROUTES.regionManagement,
+  ROUTES.mapConfiguration,
+  ROUTES.systemLog,
+  ROUTES.authLog,
+  ROUTES.contactSubmissions,
+  ROUTES.settings,
+  ROUTES.profile,
+  ROUTES.helpCenter,
+  ROUTES.superadmin,
+  ROUTES.adminView,
+] as const;

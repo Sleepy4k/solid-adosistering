@@ -6,6 +6,7 @@ import { redirect } from "@solidjs/router";
 import { prisma } from "../db/prisma";
 import { getSession } from "../session";
 import { getScopedRegionIds } from "./_helpers";
+import { activityLogFiltersSchema, parseInput } from "../validation";
 import type { ActivityLogItem } from "~/types/logs";
 
 export type { ActivityLogItem };
@@ -16,6 +17,7 @@ export async function getActivityLogs(input?: {
   limit?: number;
   offset?: number;
 }) {
+  const data = input ? parseInput(activityLogFiltersSchema, input) : {};
   const session = await getSession();
   if (!session) throw redirect("/login");
   if (session.role === "USER") return { logs: [], total: 0, forbidden: true };
@@ -26,11 +28,11 @@ export async function getActivityLogs(input?: {
     ActivityAction.AUTH_PASSWORD_RESET_REQUEST,
     ActivityAction.AUTH_PASSWORD_RESET_COMPLETE,
   ];
-  const baseWhere: Prisma.ActivityLogWhereInput = input?.action
-    ? { action: input.action as ActivityAction }
-    : input?.category === "auth"
+  const baseWhere: Prisma.ActivityLogWhereInput = data.action
+    ? { action: data.action as ActivityAction }
+    : data.category === "auth"
       ? { action: { in: authActions } }
-      : input?.category === "system"
+      : data.category === "system"
         ? { action: { notIn: authActions } }
         : {};
 
@@ -60,8 +62,8 @@ export async function getActivityLogs(input?: {
     prisma.activityLog.findMany({
       where,
       orderBy: { createdAt: "desc" },
-      take: input?.limit ?? 50,
-      skip: input?.offset ?? 0,
+      take: data.limit ?? 50,
+      skip: data.offset ?? 0,
       select: {
         id: true,
         action: true,

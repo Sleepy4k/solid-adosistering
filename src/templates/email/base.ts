@@ -15,12 +15,19 @@ const DEFAULT_BRAND: EmailBrandConfig = {
   primaryColor: "#186D3C",
 };
 
+export function escAttr(value: string | null | undefined): string {
+  return escHtml(value).replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
 function mergeConfig(partial?: Partial<EmailBrandConfig>): EmailBrandConfig {
   return {
     projectName: partial?.projectName ?? DEFAULT_BRAND.projectName,
     tagline: partial?.tagline ?? DEFAULT_BRAND.tagline,
     logoUrl: partial?.logoUrl !== undefined ? partial.logoUrl : DEFAULT_BRAND.logoUrl,
-    primaryColor: partial?.primaryColor ?? DEFAULT_BRAND.primaryColor,
+    primaryColor:
+      partial?.primaryColor && /^#[0-9a-fA-F]{6}$/.test(partial.primaryColor)
+        ? partial.primaryColor
+        : DEFAULT_BRAND.primaryColor,
   };
 }
 
@@ -53,7 +60,7 @@ export function baseEmailTemplate(input: {
 
   const logoCell = cfg.logoUrl
     ? `<td style="width:52px;padding-right:14px;vertical-align:middle">
-        <img src="${cfg.logoUrl}" alt="${escHtml(cfg.projectName)}" style="display:block;height:44px;width:44px;object-fit:contain;border-radius:6px" />
+        <img src="${escAttr(cfg.logoUrl)}" alt="${escHtml(cfg.projectName)}" style="display:block;height:44px;width:44px;object-fit:contain;border-radius:6px" />
        </td>`
     : "";
 

@@ -1,7 +1,8 @@
-import { baseEmailTemplate, type EmailBrandConfig } from "./base";
+import { baseEmailTemplate, escAttr, escHtml, type EmailBrandConfig } from "./base";
 
 export function passwordResetTemplate(resetUrl: string, config?: Partial<EmailBrandConfig>) {
-  const primaryColor = config?.primaryColor ?? "#186D3C";
+  const configuredColor = config?.primaryColor;
+  const primaryColor = configuredColor && /^#[0-9a-fA-F]{6}$/.test(configuredColor) ? configuredColor : "#186D3C";
   const subject = "Reset Password Adosistering";
   const bodyHtml = `
     <p style="margin:0 0 16px;font-size:15px;color:#374151">Halo,</p>
@@ -10,7 +11,7 @@ export function passwordResetTemplate(resetUrl: string, config?: Partial<EmailBr
       Klik tombol di bawah untuk membuat password baru.
     </p>
     <div style="text-align:center;margin:28px 0">
-      <a href="${resetUrl}"
+      <a href="${escAttr(resetUrl)}"
          style="display:inline-block;background:${primaryColor};color:#fff;text-decoration:none;padding:14px 32px;border-radius:8px;font-weight:700;font-size:15px">
         Reset Password
       </a>
@@ -18,7 +19,7 @@ export function passwordResetTemplate(resetUrl: string, config?: Partial<EmailBr
     <p style="margin:0 0 8px;font-size:13px;color:#6b7280">
       Atau salin tautan berikut ke browser Anda:
     </p>
-    <p style="margin:0 0 16px;font-size:12px;color:${primaryColor};word-break:break-all">${resetUrl}</p>
+    <p style="margin:0 0 16px;font-size:12px;color:${primaryColor};word-break:break-all">${escHtml(resetUrl)}</p>
     <p style="margin:0;font-size:13px;color:#6b7280">
       Tautan ini berlaku selama <strong>30 menit</strong>. Abaikan email ini jika Anda tidak meminta reset password.
     </p>

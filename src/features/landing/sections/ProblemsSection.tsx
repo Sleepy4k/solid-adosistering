@@ -6,7 +6,7 @@ export default function ProblemsSection() {
       <div class="container mx-auto max-w-screen-xl px-4 sm:px-8 lg:px-16">
         <div class="mb-20 flex justify-center md:mb-28">
           <img
-            src="/landing/problem-title.png"
+            src="/landing/problem-title.webp"
             alt="Masalah Umum Irigasi"
             class="h-auto w-auto max-w-[280px] sm:max-w-[380px] md:max-w-[480px] lg:max-w-[560px]"
             loading="lazy"

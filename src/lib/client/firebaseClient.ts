@@ -1,4 +1,5 @@
 import { initializeApp, type FirebaseApp } from "firebase/app";
+import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 import { getDatabase, onValue, ref, type Database } from "firebase/database";
 import {
   calculateMoistureStatus,
@@ -11,6 +12,7 @@ import {
 
 let app: FirebaseApp | undefined;
 let database: Database | undefined;
+let appCheckInitialized = false;
 type FirebaseErrorHandler = (error: Error) => void;
 
 function firebaseConfig() {
@@ -31,11 +33,27 @@ function firebaseConfig() {
   };
 }
 
+function initializeAppCheckIfConfigured(firebaseApp: FirebaseApp) {
+  const siteKey = import.meta.env.VITE_FIREBASE_APP_CHECK_SITE_KEY?.trim();
+  if (!siteKey || appCheckInitialized) return;
+  try {
+    initializeAppCheck(firebaseApp, {
+      provider: new ReCaptchaV3Provider(siteKey),
+      isTokenAutoRefreshEnabled: true,
+    });
+    appCheckInitialized = true;
+  } catch (error) {
+    // App Check is optional; a failure must not break the dashboard.
+    console.error("[firebase] App Check initialization failed", error);
+  }
+}
+
 function clientDb(): Database | null {
   const config = firebaseConfig();
   if (!config) return null;
   try {
     app ??= initializeApp(config);
+    initializeAppCheckIfConfigured(app);
     database ??= getDatabase(app);
     return database;
   } catch {

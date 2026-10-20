@@ -106,6 +106,17 @@ const MAOS_BLOCKS = Object.keys(MAOS_BLOCK_POLYGONS).map((name, index) => ({
   displayName: `Sprayer ${index + 1}`,
 }));
 
+const seedPassword = process.env.SEED_PASSWORD?.trim();
+const seededRoles = ["SUPERADMIN", "ADMIN", "USER"] as const;
+const missingProductionPasswords = seededRoles.filter(
+  (role) => !seedPassword && !process.env[`SEED_${role}_PASSWORD`]?.trim(),
+);
+if (process.env.NODE_ENV === "production" && missingProductionPasswords.length > 0) {
+  throw new Error(
+    `Set SEED_PASSWORD or a role-specific password for ${missingProductionPasswords.join(", ")} before seeding production.`,
+  );
+}
+
 const USERS = [
   { email: "superadmin@test.com", name: "Super Administrator", password: "Password123!", role: Role.SUPERADMIN },
   { email: "admin@test.com", name: "Admin MAOS", password: "Password123!", role: Role.ADMIN },
@@ -177,7 +188,8 @@ function polygonGeojson(blockName: string) {
 async function seedUsers() {
   const userMap: Record<string, string> = {};
   for (const input of USERS) {
-    const passwordHash = await hashPassword(input.password);
+    const password = process.env[`SEED_${input.role}_PASSWORD`]?.trim() || seedPassword || input.password;
+    const passwordHash = await hashPassword(password);
     const user = await prisma.user.upsert({
       where: { email: input.email },
       update: { name: input.name, role: input.role, passwordHash, isActive: true },
@@ -341,11 +353,11 @@ async function main() {
     },
   });
 
-  console.warn("Seed complete.");
-  console.warn("superadmin@test.com / Password123!");
-  console.warn("admin@test.com / Password123!");
-  console.warn("user@test.com / Password123!");
-  console.warn("kawistamaos@adosistering.labgo.id / mernek123");
+  console.warn("Seed complete. Accounts:");
+  for (const user of USERS) console.warn(`- ${user.email} (${user.role})`);
+  if (!seedPassword) {
+    console.warn("Demo passwords are defined in prisma/seed.ts. Change them before sharing this environment.");
+  }
 }
 
 main()

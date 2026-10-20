@@ -13,7 +13,7 @@ export default function HeroSection(props: HeroSectionProps) {
       aria-label="Hero"
     >
       <img
-        src="/landing/hero-background.jpg"
+        src="/landing/hero-background.webp"
         alt="Lahan pertanian irigasi pintar ADOSISTERING"
         class="absolute inset-0 h-full w-full object-cover"
         loading="eager"

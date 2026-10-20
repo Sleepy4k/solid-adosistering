@@ -1,4 +1,4 @@
-import { baseEmailTemplate, type EmailBrandConfig } from "./base";
+import { baseEmailTemplate, escHtml, type EmailBrandConfig } from "./base";
 
 export function loginBlockedTemplate(userName: string, cooldownMinutes: number, config?: Partial<EmailBrandConfig>) {
   const subject = "Peringatan: Percobaan Login Gagal Berulang";
@@ -8,7 +8,7 @@ export function loginBlockedTemplate(userName: string, cooldownMinutes: number, 
     timeZone: "Asia/Jakarta",
   });
   const bodyHtml = `
-    <p style="margin:0 0 16px;font-size:15px;color:#374151">Halo, <strong>${userName}</strong>,</p>
+    <p style="margin:0 0 16px;font-size:15px;color:#374151">Halo, <strong>${escHtml(userName)}</strong>,</p>
     <p style="margin:0 0 16px;font-size:15px;color:#374151">
       Sistem mendeteksi beberapa percobaan login yang gagal pada akun Adosistering Anda.
     </p>

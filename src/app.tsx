@@ -8,22 +8,19 @@ import { ConfirmProvider } from "~/components/shared/ConfirmProvider";
 import { DefaultMeta } from "~/components/shared/DefaultMeta";
 import { PageSkeleton } from "~/components/shared/PageSkeleton";
 import { ToastProvider } from "~/components/shared/ToastProvider";
-import { PUBLIC_ROUTES } from "~/constants/routes";
+import { PROTECTED_ROUTE_PREFIXES } from "~/constants/routes";
 import AppShell from "~/layouts/AppLayout";
 import "./app.css";
 
 function RootLayout(props: { children: JSX.Element }) {
   const location = useLocation();
 
-  const isPublic = () =>
-    PUBLIC_ROUTES.some((r) => {
-      if (r === "/") return location.pathname === "/";
-      return location.pathname === r || location.pathname.startsWith(r + "/");
-    });
+  const isProtected = () =>
+    PROTECTED_ROUTE_PREFIXES.some((route) => location.pathname === route || location.pathname.startsWith(route + "/"));
 
   return (
     <Show
-      when={!isPublic()}
+      when={isProtected()}
       fallback={
         <ErrorBoundary fallback={(error, reset) => <AppErrorFallback error={error} reset={reset} />}>
           <Suspense fallback={<PageSkeleton />}>{props.children}</Suspense>

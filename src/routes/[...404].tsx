@@ -1,9 +1,11 @@
 import { A } from "@solidjs/router";
+import { HttpStatusCode } from "@solidjs/start";
 import { PageMeta } from "~/components/shared/PageMeta";
 
 export default function NotFound() {
   return (
     <>
+      <HttpStatusCode code={404} />
       <PageMeta page="notFound" />
       <main class="mx-auto grid min-h-[70vh] max-w-md place-items-center px-4 py-20 text-center text-slate-950">
         <section class="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">

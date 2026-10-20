@@ -1,6 +1,14 @@
 import { ROUTES } from "./routes";
 
 export const PAGE_META = {
+  landing: {
+    title: "Irigasi Tetes Cerdas Berbasis IoT untuk Lahan Kering",
+    description:
+      "Adosistering membantu petani dan pengelola lahan menghemat air dengan monitoring kelembapan tanah real-time, kontrol sprayer otomatis, riwayat irigasi, dan dashboard berbasis peran.",
+    path: ROUTES.landing,
+    keywords:
+      "irigasi tetes, irigasi cerdas, IoT pertanian, monitoring kelembapan tanah, kontrol sprayer, lahan kering, smart farming Indonesia, Adosistering",
+  },
   home: {
     title: "Beranda",
     description:

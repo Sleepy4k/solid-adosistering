@@ -223,7 +223,7 @@ export default function ContactSection() {
 
           <div class="flex items-start justify-center lg:justify-end">
             <img
-              src="/landing/contact-feature.png"
+              src="/landing/contact-feature.webp"
               alt="Tim ADOSISTERING"
               class="h-auto w-full max-w-lg"
               loading="lazy"

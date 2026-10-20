@@ -44,7 +44,7 @@ export default function ManajemenRegion() {
     try {
       return await loadRegions();
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "Data region belum bisa dimuat.");
+      setLoadError(!import.meta.env.PROD && error instanceof Error ? error.message : "Data region belum bisa dimuat.");
       return [];
     }
   });

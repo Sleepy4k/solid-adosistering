@@ -6,7 +6,7 @@ export default function FeaturesGrid() {
       <div class="container mx-auto max-w-screen-xl px-4 sm:px-6 lg:px-12 xl:px-16">
         <div class="mb-16 flex justify-center md:mb-20">
           <img
-            src="/landing/feature-title.png"
+            src="/landing/feature-title.webp"
             alt="Fitur"
             class="h-auto w-full max-w-[260px] sm:max-w-[360px] md:max-w-[460px] lg:max-w-[560px]"
             loading="lazy"

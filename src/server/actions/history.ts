@@ -1,10 +1,10 @@
 "use server";
 
-import type { Prisma } from "@prisma/client";
-import { IrrigationMode, RelayState } from "@prisma/client";
+import { IrrigationMode, Prisma, RelayState } from "@prisma/client";
 import { redirect } from "@solidjs/router";
 import { prisma } from "../db/prisma";
 import { getSession } from "../session";
+import { historyFiltersSchema, parseInput } from "../validation";
 import {
   displayMoistureStatus,
   getRegionThresholdMap,
@@ -19,34 +19,41 @@ export type { HistoryFilters };
 const MAX_PAGE_SIZE = 85;
 const DEFAULT_PAGE_SIZE = 10;
 
-export async function getIrrigationHistory(filters: HistoryFilters) {
+type EventSensorReading = {
+  eventId: string;
+  moisturePercent: string | number | null;
+  flowLmin: string | number | null;
+  totalVolumeLiter: string | number | null;
+  moistureStatus: string | null;
+};
+
+export async function getIrrigationHistory(filters: HistoryFilters = {}) {
+  const data = parseInput(historyFiltersSchema, filters);
   const session = await getSession();
   if (!session) throw redirect("/login");
   await refreshFirebaseCache();
 
   const where: Prisma.IrrigationEventWhereInput = {};
 
-  if (session.role !== "SUPERADMIN" || filters.blockId || filters.regionId) {
+  if (session.role !== "SUPERADMIN" || data.blockId || data.regionId) {
     let scopedBlockIds: string[];
-    if (filters.regionId && !filters.blockId) {
+    if (data.regionId && !data.blockId) {
       const scopedRegionIds = await getScopedRegionIds(session);
-      const allowed = scopedRegionIds ? scopedRegionIds.includes(filters.regionId) : true;
+      const allowed = scopedRegionIds ? scopedRegionIds.includes(data.regionId) : true;
       if (!allowed) {
         scopedBlockIds = [];
       } else {
         const blocks = await prisma.block.findMany({
-          where: { regionId: filters.regionId },
+          where: { regionId: data.regionId },
           select: { id: true },
         });
         scopedBlockIds = blocks.map((b) => b.id);
       }
     } else {
-      scopedBlockIds = await getScopedBlockIds(session, filters.blockId);
-      if (filters.regionId) {
+      scopedBlockIds = await getScopedBlockIds(session, data.blockId);
+      if (data.regionId) {
         const regionBlocks = new Set(
-          (await prisma.block.findMany({ where: { regionId: filters.regionId }, select: { id: true } })).map(
-            (b) => b.id,
-          ),
+          (await prisma.block.findMany({ where: { regionId: data.regionId }, select: { id: true } })).map((b) => b.id),
         );
         scopedBlockIds = scopedBlockIds.filter((id) => regionBlocks.has(id));
       }
@@ -54,20 +61,20 @@ export async function getIrrigationHistory(filters: HistoryFilters) {
     where.blockId = { in: scopedBlockIds };
   }
 
-  if (filters.status) where.relay = filters.status === "ON" ? RelayState.ON : RelayState.OFF;
-  if (filters.mode) where.mode = filters.mode === "AUTO" ? IrrigationMode.AUTO : IrrigationMode.MANUAL;
+  if (data.status) where.relay = data.status === "ON" ? RelayState.ON : RelayState.OFF;
+  if (data.mode) where.mode = data.mode === "AUTO" ? IrrigationMode.AUTO : IrrigationMode.MANUAL;
 
   const startedAtFilter: { gte?: Date; lt?: Date } = {};
-  if (filters.dateFrom) startedAtFilter.gte = new Date(filters.dateFrom);
-  if (filters.dateTo) {
-    const d = new Date(filters.dateTo);
+  if (data.dateFrom) startedAtFilter.gte = new Date(data.dateFrom);
+  if (data.dateTo) {
+    const d = new Date(data.dateTo);
     d.setDate(d.getDate() + 1);
     startedAtFilter.lt = d;
   }
   if (startedAtFilter.gte || startedAtFilter.lt) where.startedAt = startedAtFilter;
 
-  const limit = Math.min(filters.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
-  const cursor = filters.cursor;
+  const limit = Math.min(data.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+  const cursor = data.cursor;
 
   const events = await prisma.irrigationEvent.findMany({
     where,
@@ -98,28 +105,33 @@ export async function getIrrigationHistory(filters: HistoryFilters) {
       ? await getRegionThresholdMap(session.id, [...new Set(events.map((e) => e.block.region.id))])
       : new Map<string, Awaited<ReturnType<typeof getRegionThresholdMap>> extends Map<string, infer T> ? T : never>();
 
-  const readings = await Promise.all(
-    events.map((event) =>
-      prisma.sensorReading.findFirst({
-        where: {
-          blockId: event.block.id,
-          sprayerId: event.sprayer.id,
-          recordedAt: { lte: event.startedAt },
-        },
-        orderBy: { recordedAt: "desc" },
-        select: {
-          moisturePercent: true,
-          flowLmin: true,
-          totalVolumeLiter: true,
-          moistureStatus: true,
-        },
-      }),
-    ),
-  );
+  // One correlated query instead of one query per event (the previous N+1).
+  const readingRows: EventSensorReading[] =
+    events.length > 0
+      ? await prisma.$queryRaw<EventSensorReading[]>`
+          SELECT e.id AS eventId,
+                 sr.moisture_percent AS moisturePercent,
+                 sr.flow_lmin AS flowLmin,
+                 sr.total_volume_liter AS totalVolumeLiter,
+                 sr.moisture_status AS moistureStatus
+          FROM irrigation_event e
+          LEFT JOIN sensor_reading sr ON sr.id = (
+            SELECT sr2.id
+            FROM sensor_reading sr2
+            WHERE sr2.block_id = e.block_id
+              AND sr2.sprayer_id = e.sprayer_id
+              AND sr2.recorded_at <= e.started_at
+            ORDER BY sr2.recorded_at DESC
+            LIMIT 1
+          )
+          WHERE e.id IN (${Prisma.join(events.map((event) => event.id))})
+        `
+      : [];
+  const readingsByEvent = new Map(readingRows.map((row) => [row.eventId, row]));
 
-  const items = events.map((event, index) => {
-    const reading = readings[index];
-    const moisturePercent = reading ? Number(reading.moisturePercent) : null;
+  const items = events.map((event) => {
+    const reading = readingsByEvent.get(event.id);
+    const moisturePercent = reading?.moisturePercent == null ? null : Number(reading.moisturePercent);
     const threshold = thresholdMap.get(event.block.region.id) ?? null;
     const volumeDivider = Number(event.block.region.volumeDivider ?? 1);
 
@@ -132,9 +144,7 @@ export async function getIrrigationHistory(filters: HistoryFilters) {
 
     const durationSeconds =
       event.durationSeconds ??
-      (event.endedAt
-        ? Math.round((event.endedAt.getTime() - event.startedAt.getTime()) / 1000)
-        : null);
+      (event.endedAt ? Math.round((event.endedAt.getTime() - event.startedAt.getTime()) / 1000) : null);
 
     return {
       id: event.id,
@@ -156,7 +166,9 @@ export async function getIrrigationHistory(filters: HistoryFilters) {
             moisturePercent,
             flowLmin: Number(reading.flowLmin) / volumeDivider,
             moistureStatus:
-              moisturePercent === null ? reading.moistureStatus : displayMoistureStatus(moisturePercent, threshold),
+              moisturePercent === null
+                ? (reading.moistureStatus ?? "KERING")
+                : displayMoistureStatus(moisturePercent, threshold),
           }
         : null,
     };

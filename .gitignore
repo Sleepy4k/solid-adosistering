@@ -3,9 +3,14 @@ dist
 .output
 .vercel
 .netlify
-.nitro
 .vinxi
 app.config.timestamp_*.js
+
+# Runtime data (uploads, caches)
+.data
+
+# Legacy reference-only app (not part of the migrated project)
+references
 
 # Environment
 .env
@@ -20,16 +25,9 @@ app.config.timestamp_*.js
 .classpath
 *.launch
 .settings/
-.vscode/
 
 # Temp
 gitignore
-*.log
-*.tmp
-*.temp
-*.bak
-*.swp
-*.swo
 
 # System Files
 .DS_Store

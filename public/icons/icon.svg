@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Adosistering">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7CCB52"/>
+      <stop offset="1" stop-color="#4A9A2E"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="url(#g)"/>
+  <path d="M32 9c-6.8 8.8-13 16.2-13 23.7a13 13 0 0 0 26 0C45 25.2 38.8 17.8 32 9Z" fill="#fff"/>
+  <path d="M32 20c-2.6 4-5 7.4-5 10.6a5 5 0 0 0 10 0C37 27.4 34.6 24 32 20Z" fill="#67B744"/>
+</svg>

@@ -1,5 +1,5 @@
 import { query, createAsync } from "@solidjs/router";
-import { For } from "solid-js";
+import { For, Show } from "solid-js";
 import { getLandingPartners } from "~/server/actions/index";
 import { PARTNERS } from "~/constants/landing";
 
@@ -21,7 +21,7 @@ export default function MitraSection() {
       <div class="container mx-auto max-w-screen-xl px-4 sm:px-6 lg:px-12 xl:px-16">
         <div class="mb-16 flex justify-center md:mb-20">
           <img
-            src="/landing/mitra-title.png"
+            src="/landing/mitra-title.webp"
             alt="Mitra Kami"
             class="h-auto w-auto max-w-[220px] sm:max-w-[300px] md:max-w-[380px] lg:max-w-[440px]"
             loading="lazy"
@@ -35,16 +35,21 @@ export default function MitraSection() {
           <For each={items()}>
             {(partner) => (
               <div class="group flex h-32 w-full items-center justify-center rounded-2xl bg-neutral-100 px-8 py-8 transition-all duration-300 hover:shadow-md sm:w-72 md:h-36 md:w-80 md:px-12 md:py-10 lg:h-40 lg:w-[340px]">
-                <img
-                  src={partner.logoUrl ?? ""}
-                  alt={partner.name}
-                  class="max-h-16 w-auto object-contain grayscale transition-all duration-500 group-hover:grayscale-0 md:max-h-20 lg:max-h-24"
-                  loading="lazy"
-                  decoding="async"
-                  fetchpriority="low"
-                  width={200}
-                  height={80}
-                />
+                <Show
+                  when={partner.logoUrl}
+                  fallback={<span class="text-center text-sm font-bold text-neutral-500">{partner.name}</span>}
+                >
+                  <img
+                    src={partner.logoUrl ?? undefined}
+                    alt={partner.name}
+                    class="max-h-16 w-auto object-contain grayscale transition-all duration-500 group-hover:grayscale-0 md:max-h-20 lg:max-h-24"
+                    loading="lazy"
+                    decoding="async"
+                    fetchpriority="low"
+                    width={200}
+                    height={80}
+                  />
+                </Show>
               </div>
             )}
           </For>

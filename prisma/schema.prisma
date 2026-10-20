@@ -87,15 +87,21 @@ model User {
 }
 
 model Session {
-  id        String   @id @default(cuid())
-  userId    String   @map("user_id")
-  tokenHash String   @unique @map("token_hash")
-  expiresAt DateTime @map("expires_at")
-  createdAt DateTime @default(now()) @map("created_at")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                String    @id @default(cuid())
+  userId            String    @map("user_id")
+  tokenHash         String    @unique @map("token_hash")
+  expiresAt         DateTime  @map("expires_at")
+  absoluteExpiresAt DateTime? @map("absolute_expires_at")
+  lastSeenAt        DateTime  @default(now()) @map("last_seen_at")
+  ipAddress         String?   @map("ip_address") @db.VarChar(64)
+  userAgent         String?   @map("user_agent") @db.VarChar(512)
+  createdAt         DateTime  @default(now()) @map("created_at")
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
+  @@index([absoluteExpiresAt])
+  @@index([lastSeenAt])
   @@map("session")
 }
 
@@ -155,6 +161,7 @@ model ContactSubmission {
 
   @@index([createdAt])
   @@index([isRead])
+  @@index([isRead, createdAt])
   @@map("contact_submission")
 }
 
@@ -202,6 +209,7 @@ model Sprayer {
 
   @@unique([blockId, hardwareId])
   @@index([blockId])
+  @@index([blockId, isActive])
   @@map("sprayer")
 }
 
@@ -270,8 +278,10 @@ model SensorReading {
   block            Block          @relation(fields: [blockId], references: [id], onDelete: Cascade)
   sprayer          Sprayer        @relation(fields: [sprayerId], references: [id], onDelete: Cascade)
 
+  @@unique([sprayerId, recordedAt])
   @@index([blockId, recordedAt])
   @@index([sprayerId, recordedAt])
+  @@index([recordedAt])
   @@map("sensor_reading")
 }
 
@@ -296,6 +306,10 @@ model IrrigationEvent {
 
   @@index([blockId, startedAt])
   @@index([sprayerId, startedAt])
+  @@index([startedAt])
+  @@index([blockId, relay, startedAt])
+  @@index([sprayerId, relay, endedAt])
+  @@index([mode, startedAt])
   @@index([actorId])
   @@index([firebaseDateKey])
   @@index([firebaseEventId])
@@ -335,6 +349,8 @@ model ActivityLog {
   @@index([actorId, createdAt])
   @@index([regionId, createdAt])
   @@index([action, createdAt])
+  @@index([createdAt])
+  @@index([entityType, createdAt])
   @@map("activity_log")
 }
 
@@ -375,6 +391,7 @@ model EmailDelivery {
 
   @@index([recipientId, createdAt])
   @@index([toEmail, createdAt])
+  @@index([createdAt])
   @@map("email_delivery")
 }
 
@@ -461,4 +478,16 @@ model UserProfile {
   user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_detail")
+}
+
+model LoginThrottle {
+  key           String    @id @db.VarChar(128)
+  failures      Int       @default(0)
+  level         Int       @default(0)
+  cooldownUntil DateTime? @map("cooldown_until")
+  lastEventAt   DateTime  @default(now()) @map("last_event_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@index([lastEventAt])
+  @@map("login_throttle")
 }

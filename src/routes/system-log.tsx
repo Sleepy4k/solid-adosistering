@@ -53,10 +53,10 @@ export default function LogSistem() {
   return (
     <>
       <PageMeta page="systemLog" />
-      
+
       <div class="flex flex-col gap-5">
         <h1 class="text-2xl font-bold text-slate-900">Log Sistem</h1>
-  
+
         <div class="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-5">
           <div class="flex min-w-56 flex-col gap-1.5">
             <label class="text-xs font-medium text-slate-600">Tipe Aksi</label>
@@ -95,13 +95,13 @@ export default function LogSistem() {
             </Show>
           </Suspense>
         </div>
-  
+
         <Show when={data()?.forbidden}>
           <div class="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
             Anda tidak memiliki akses ke log ini.
           </div>
         </Show>
-  
+
         <div class="rounded-xl border border-slate-200 bg-white">
           <Suspense
             fallback={
@@ -157,7 +157,7 @@ export default function LogSistem() {
                   </tbody>
                 </table>
               </div>
-  
+
               <TablePagination page={page()} pageSize={pageSize()} total={data()?.total ?? 0} onPageChange={setPage} />
             </Show>
           </Suspense>

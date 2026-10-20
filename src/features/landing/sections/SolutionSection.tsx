@@ -6,7 +6,7 @@ export default function SolutionSection() {
       <div class="container mx-auto max-w-screen-xl px-4 pt-16 sm:px-6 md:pt-24 lg:px-12 lg:pt-32 xl:px-16">
         <div class="mb-16 flex justify-center md:mb-20">
           <img
-            src="/landing/solution-title.png"
+            src="/landing/solution-title.webp"
             alt="Solusi Irigasi Cerdas"
             class="h-auto w-auto max-w-[240px] sm:max-w-[340px] md:max-w-[420px] lg:max-w-[480px]"
             loading="lazy"
@@ -28,7 +28,7 @@ export default function SolutionSection() {
           </div>
           <div class="flex justify-center lg:justify-end">
             <img
-              src="/landing/solution-feature.png"
+              src="/landing/solution-feature.webp"
               alt="Tampilan aplikasi ADOSISTERING"
               class="relative z-10 h-auto w-full max-w-[480px] lg:max-w-[600px]"
               loading="lazy"

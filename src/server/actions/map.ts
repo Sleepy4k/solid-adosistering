@@ -7,6 +7,7 @@ import { assertSuperadmin } from "../security";
 import { getSession } from "../session";
 import { logActivity, pointsToPolygonGeojson } from "./_helpers";
 import type { MapPoint, MapConfig, MapDisplayConfig, MapWorkspace } from "~/types/map";
+import { blockGeometrySchema, mapConfigSchema, mapDisplaySchema, parseInput } from "../validation";
 
 export type { MapPoint, MapConfig, MapDisplayConfig, MapWorkspace };
 
@@ -53,14 +54,15 @@ export async function getMapWorkspace(): Promise<MapWorkspace> {
 }
 
 export async function saveMapConfig(input: MapConfig) {
+  const data = parseInput(mapConfigSchema, input);
   const session = await getSession();
   if (!session) throw redirect("/login");
   assertSuperadmin(session);
 
   await prisma.systemSetting.upsert({
     where: { key: "mapConfig" },
-    create: { key: "mapConfig", value: input },
-    update: { value: input },
+    create: { key: "mapConfig", value: data },
+    update: { value: data },
   });
   await logActivity({
     actorId: session.id,
@@ -82,14 +84,15 @@ export async function getMapDisplayConfig(): Promise<MapDisplayConfig> {
 }
 
 export async function saveMapDisplayConfig(input: MapDisplayConfig) {
+  const data = parseInput(mapDisplaySchema, input);
   const session = await getSession();
   if (!session) throw redirect("/login");
   assertSuperadmin(session);
 
   await prisma.systemSetting.upsert({
     where: { key: "mapDisplayConfig" },
-    create: { key: "mapDisplayConfig", value: input as unknown as Prisma.InputJsonValue },
-    update: { value: input as unknown as Prisma.InputJsonValue },
+    create: { key: "mapDisplayConfig", value: data as unknown as Prisma.InputJsonValue },
+    update: { value: data as unknown as Prisma.InputJsonValue },
   });
   await logActivity({
     actorId: session.id,
@@ -101,13 +104,14 @@ export async function saveMapDisplayConfig(input: MapDisplayConfig) {
 }
 
 export async function saveBlockMapGeometry(input: { blockId: string; points: MapPoint[] }) {
+  const data = parseInput(blockGeometrySchema, input);
   const session = await getSession();
   if (!session) throw redirect("/login");
   assertSuperadmin(session);
 
-  const geojson = pointsToPolygonGeojson(input.points);
+  const geojson = pointsToPolygonGeojson(data.points);
   const block = await prisma.block.update({
-    where: { id: input.blockId },
+    where: { id: data.blockId },
     data: { polygonGeojson: geojson ?? Prisma.JsonNull },
     select: { id: true, regionId: true },
   });
@@ -119,7 +123,7 @@ export async function saveBlockMapGeometry(input: { blockId: string; points: Map
     action: ActivityAction.UPDATE,
     entityType: "BlockMapGeometry",
     entityId: block.id,
-    metadata: { pointCount: input.points.length },
+    metadata: { pointCount: data.points.length },
   });
   return { ok: true };
 }

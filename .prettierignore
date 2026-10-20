@@ -7,3 +7,6 @@ pnpm-lock.yaml
 dev-server*.log
 app.config.timestamp_*
 .claude
+
+references
+.data

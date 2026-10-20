@@ -3,91 +3,85 @@
 import { ActivityAction } from "@prisma/client";
 import { redirect } from "@solidjs/router";
 import { prisma } from "../db/prisma";
-import { assertSuperadmin } from "../security";
+import { assertSuperadmin, sanitizeImageUrl } from "../security";
 import { getSession } from "../session";
+import {
+  idInputSchema,
+  landingLocationSchema,
+  landingPartnerSchema,
+  landingTestimonialSchema,
+  parseInput,
+} from "../validation";
 import { logActivity } from "./_helpers";
 
-type LandingTestimonial = {
-  id: string;
-  name: string;
-  role: string;
-  quote: string;
-  imageUrl: string | null;
-  sortOrder: number;
-  isActive: boolean;
-};
+async function requireSuperadmin() {
+  const session = await getSession();
+  if (!session) throw redirect("/login");
+  return assertSuperadmin(session);
+}
 
-type LandingLocation = {
-  id: string;
-  name: string;
-  description: string;
-  imageUrl: string | null;
-  sortOrder: number;
-  isActive: boolean;
-};
-
-type LandingPartner = {
-  id: string;
-  name: string;
-  logoUrl: string | null;
-  sortOrder: number;
-  isActive: boolean;
-};
-
-export async function getLandingTestimonials(): Promise<LandingTestimonial[]> {
+export async function getLandingTestimonials() {
   try {
-     
-    return await (prisma as any).landingTestimonial.findMany({
+    const rows = await prisma.landingTestimonial.findMany({
       where: { isActive: true },
       orderBy: { sortOrder: "asc" },
+      select: { id: true, name: true, role: true, quote: true, imageUrl: true, sortOrder: true, isActive: true },
     });
+    return rows.map((row) => ({ ...row, imageUrl: sanitizeImageUrl(row.imageUrl) }));
   } catch {
     return [];
   }
 }
 
-export async function getLandingLocations(): Promise<LandingLocation[]> {
+export async function getLandingLocations() {
   try {
-     
-    return await (prisma as any).landingLocation.findMany({
+    const rows = await prisma.landingLocation.findMany({
       where: { isActive: true },
       orderBy: { sortOrder: "asc" },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        imageUrl: true,
+        sortOrder: true,
+        isActive: true,
+      },
     });
+    return rows.map((row) => ({ ...row, imageUrl: sanitizeImageUrl(row.imageUrl) }));
   } catch {
     return [];
   }
 }
 
-export async function getLandingPartners(): Promise<LandingPartner[]> {
+export async function getLandingPartners() {
   try {
-     
-    return await (prisma as any).landingPartner.findMany({
+    const rows = await prisma.landingPartner.findMany({
       where: { isActive: true },
       orderBy: { sortOrder: "asc" },
+      select: { id: true, name: true, logoUrl: true, websiteUrl: true, sortOrder: true, isActive: true },
     });
+    return rows.map((row) => ({
+      ...row,
+      logoUrl: sanitizeImageUrl(row.logoUrl),
+      websiteUrl: row.websiteUrl && /^https?:\/\//i.test(row.websiteUrl) ? row.websiteUrl : null,
+    }));
   } catch {
     return [];
   }
 }
 
 export async function getAllTestimonials() {
-  const session = await getSession();
-  if (!session) throw redirect("/login");
-  assertSuperadmin(session);
+  await requireSuperadmin();
   return prisma.landingTestimonial.findMany({ orderBy: { sortOrder: "asc" } });
 }
 
 export async function getAllLocations() {
-  const session = await getSession();
-  if (!session) throw redirect("/login");
-  assertSuperadmin(session);
+  await requireSuperadmin();
   return prisma.landingLocation.findMany({ orderBy: { sortOrder: "asc" } });
 }
 
 export async function getAllPartners() {
-  const session = await getSession();
-  if (!session) throw redirect("/login");
-  assertSuperadmin(session);
+  await requireSuperadmin();
   return prisma.landingPartner.findMany({ orderBy: { sortOrder: "asc" } });
 }
 
@@ -98,18 +92,16 @@ export async function createTestimonial(input: {
   imageUrl?: string;
   sortOrder?: number;
 }) {
-  const session = await getSession();
-  if (!session) throw redirect("/login");
-  assertSuperadmin(session);
-  if (!input.name.trim() || !input.role.trim() || !input.quote.trim())
-    throw new Response("Nama, peran, dan kutipan wajib diisi.", { status: 400 });
+  const data = parseInput(landingTestimonialSchema, input);
+  const session = await requireSuperadmin();
   const item = await prisma.landingTestimonial.create({
     data: {
-      name: input.name.trim(),
-      role: input.role.trim(),
-      quote: input.quote.trim(),
-      imageUrl: input.imageUrl?.trim() || null,
-      sortOrder: input.sortOrder ?? 0,
+      name: data.name,
+      role: data.role,
+      quote: data.quote,
+      imageUrl: data.imageUrl ?? null,
+      sortOrder: data.sortOrder ?? 0,
+      isActive: data.isActive ?? true,
     },
   });
   await logActivity({
@@ -122,7 +114,7 @@ export async function createTestimonial(input: {
 }
 
 export async function updateTestimonial(input: {
-  id: string;
+  id?: string;
   name: string;
   role: string;
   quote: string;
@@ -130,39 +122,38 @@ export async function updateTestimonial(input: {
   sortOrder?: number;
   isActive?: boolean;
 }) {
-  const session = await getSession();
-  if (!session) throw redirect("/login");
-  assertSuperadmin(session);
+  const data = parseInput(landingTestimonialSchema, input);
+  if (!data.id) throw new Response("ID testimoni wajib diisi.", { status: 400 });
+  const session = await requireSuperadmin();
   await prisma.landingTestimonial.update({
-    where: { id: input.id },
+    where: { id: data.id },
     data: {
-      name: input.name.trim(),
-      role: input.role.trim(),
-      quote: input.quote.trim(),
-      imageUrl: input.imageUrl?.trim() || null,
-      sortOrder: input.sortOrder ?? 0,
-      isActive: input.isActive ?? true,
+      name: data.name,
+      role: data.role,
+      quote: data.quote,
+      imageUrl: data.imageUrl ?? null,
+      sortOrder: data.sortOrder ?? 0,
+      isActive: data.isActive ?? true,
     },
   });
   await logActivity({
     actorId: session.id,
     action: ActivityAction.UPDATE,
     entityType: "LandingTestimonial",
-    entityId: input.id,
+    entityId: data.id,
   });
   return { ok: true };
 }
 
 export async function deleteTestimonial(id: string) {
-  const session = await getSession();
-  if (!session) throw redirect("/login");
-  assertSuperadmin(session);
-  await prisma.landingTestimonial.delete({ where: { id } });
+  const data = parseInput(idInputSchema, { id });
+  const session = await requireSuperadmin();
+  await prisma.landingTestimonial.delete({ where: { id: data.id } });
   await logActivity({
     actorId: session.id,
     action: ActivityAction.DELETE,
     entityType: "LandingTestimonial",
-    entityId: id,
+    entityId: data.id,
   });
   return { ok: true };
 }
@@ -173,17 +164,15 @@ export async function createLocation(input: {
   imageUrl?: string;
   sortOrder?: number;
 }) {
-  const session = await getSession();
-  if (!session) throw redirect("/login");
-  assertSuperadmin(session);
-  if (!input.name.trim() || !input.description.trim())
-    throw new Response("Nama dan deskripsi wajib diisi.", { status: 400 });
+  const data = parseInput(landingLocationSchema, input);
+  const session = await requireSuperadmin();
   const item = await prisma.landingLocation.create({
     data: {
-      name: input.name.trim(),
-      description: input.description.trim(),
-      imageUrl: input.imageUrl?.trim() || null,
-      sortOrder: input.sortOrder ?? 0,
+      name: data.name,
+      description: data.description,
+      imageUrl: data.imageUrl ?? null,
+      sortOrder: data.sortOrder ?? 0,
+      isActive: data.isActive ?? true,
     },
   });
   await logActivity({
@@ -196,45 +185,44 @@ export async function createLocation(input: {
 }
 
 export async function updateLocation(input: {
-  id: string;
+  id?: string;
   name: string;
   description: string;
   imageUrl?: string;
   sortOrder?: number;
   isActive?: boolean;
 }) {
-  const session = await getSession();
-  if (!session) throw redirect("/login");
-  assertSuperadmin(session);
+  const data = parseInput(landingLocationSchema, input);
+  if (!data.id) throw new Response("ID lokasi wajib diisi.", { status: 400 });
+  const session = await requireSuperadmin();
   await prisma.landingLocation.update({
-    where: { id: input.id },
+    where: { id: data.id },
     data: {
-      name: input.name.trim(),
-      description: input.description.trim(),
-      imageUrl: input.imageUrl?.trim() || null,
-      sortOrder: input.sortOrder ?? 0,
-      isActive: input.isActive ?? true,
+      name: data.name,
+      description: data.description,
+      imageUrl: data.imageUrl ?? null,
+      sortOrder: data.sortOrder ?? 0,
+      isActive: data.isActive ?? true,
     },
   });
   await logActivity({
     actorId: session.id,
     action: ActivityAction.UPDATE,
     entityType: "LandingLocation",
-    entityId: input.id,
+    entityId: data.id,
   });
   return { ok: true };
 }
 
 export async function deleteLocation(id: string) {
-  const session = await getSession();
-  if (!session) throw redirect("/login");
-  assertSuperadmin(session);
-  await prisma.landingLocation.delete({ where: { id } });
+  const data = parseInput(idInputSchema, { id });
+  const session = await requireSuperadmin();
+  await prisma.landingLocation.delete({ where: { id: data.id } });
   await logActivity({
     actorId: session.id,
     action: ActivityAction.DELETE,
     entityType: "LandingLocation",
-    entityId: id,
+    entityId: data.id,
   });
   return { ok: true };
 }
@@ -245,16 +233,15 @@ export async function createPartner(input: {
   websiteUrl?: string;
   sortOrder?: number;
 }) {
-  const session = await getSession();
-  if (!session) throw redirect("/login");
-  assertSuperadmin(session);
-  if (!input.name.trim()) throw new Response("Nama mitra wajib diisi.", { status: 400 });
+  const data = parseInput(landingPartnerSchema, input);
+  const session = await requireSuperadmin();
   const item = await prisma.landingPartner.create({
     data: {
-      name: input.name.trim(),
-      logoUrl: input.logoUrl?.trim() || null,
-      websiteUrl: input.websiteUrl?.trim() || null,
-      sortOrder: input.sortOrder ?? 0,
+      name: data.name,
+      logoUrl: data.logoUrl ?? null,
+      websiteUrl: data.websiteUrl ?? null,
+      sortOrder: data.sortOrder ?? 0,
+      isActive: data.isActive ?? true,
     },
   });
   await logActivity({
@@ -267,45 +254,44 @@ export async function createPartner(input: {
 }
 
 export async function updatePartner(input: {
-  id: string;
+  id?: string;
   name: string;
   logoUrl?: string;
   websiteUrl?: string;
   sortOrder?: number;
   isActive?: boolean;
 }) {
-  const session = await getSession();
-  if (!session) throw redirect("/login");
-  assertSuperadmin(session);
+  const data = parseInput(landingPartnerSchema, input);
+  if (!data.id) throw new Response("ID mitra wajib diisi.", { status: 400 });
+  const session = await requireSuperadmin();
   await prisma.landingPartner.update({
-    where: { id: input.id },
+    where: { id: data.id },
     data: {
-      name: input.name.trim(),
-      logoUrl: input.logoUrl?.trim() || null,
-      websiteUrl: input.websiteUrl?.trim() || null,
-      sortOrder: input.sortOrder ?? 0,
-      isActive: input.isActive ?? true,
+      name: data.name,
+      logoUrl: data.logoUrl ?? null,
+      websiteUrl: data.websiteUrl ?? null,
+      sortOrder: data.sortOrder ?? 0,
+      isActive: data.isActive ?? true,
     },
   });
   await logActivity({
     actorId: session.id,
     action: ActivityAction.UPDATE,
     entityType: "LandingPartner",
-    entityId: input.id,
+    entityId: data.id,
   });
   return { ok: true };
 }
 
 export async function deletePartner(id: string) {
-  const session = await getSession();
-  if (!session) throw redirect("/login");
-  assertSuperadmin(session);
-  await prisma.landingPartner.delete({ where: { id } });
+  const data = parseInput(idInputSchema, { id });
+  const session = await requireSuperadmin();
+  await prisma.landingPartner.delete({ where: { id: data.id } });
   await logActivity({
     actorId: session.id,
     action: ActivityAction.DELETE,
     entityType: "LandingPartner",
-    entityId: id,
+    entityId: data.id,
   });
   return { ok: true };
 }

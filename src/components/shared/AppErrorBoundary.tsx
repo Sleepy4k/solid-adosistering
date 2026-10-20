@@ -22,8 +22,14 @@ function titleFromStatus(status: number) {
 }
 
 export function AppErrorFallback(props: { error: unknown; reset: () => void }) {
-  const message = () => messageFromError(props.error);
   const status = () => statusFromError(props.error);
+  const message = () => {
+    // Unexpected server errors can contain SQL, paths, or credential fragments.
+    if (status() >= 500 && import.meta.env.PROD) {
+      return "Terjadi kesalahan pada server. Silakan coba lagi beberapa saat lagi.";
+    }
+    return messageFromError(props.error);
+  };
 
   return (
     <section class="mx-auto flex min-h-[55vh] max-w-xl items-center justify-center px-4 py-12">

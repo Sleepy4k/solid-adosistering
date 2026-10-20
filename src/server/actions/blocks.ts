@@ -9,24 +9,38 @@ import {
   renameBlockNode,
   updateSprayerControl,
 } from "../services/firebaseSync";
-import { assertAdminOrHigher, type SessionUser } from "../security";
+import { assertAdminOrHigher } from "../security";
 import { getSession } from "../session";
+import { checkRateLimit, rateLimitResponse } from "../rateLimit";
 import { getScopedRegionIds, logActivity } from "./_helpers";
+import {
+  createBlockSchema,
+  createSprayerSchema,
+  overridePumpSchema,
+  parseInput,
+  updateBlockSchema,
+} from "../validation";
 
 export async function createBlock(input: {
-  actor: SessionUser;
   regionId: string;
   name: string;
   areaHectare?: string;
   description?: string;
 }) {
-  const actor = assertAdminOrHigher(input.actor);
-  const region = await prisma.region.findUniqueOrThrow({ where: { id: input.regionId } });
+  const data = parseInput(createBlockSchema, input);
+  const session = await getSession();
+  if (!session) throw redirect("/login");
+  const actor = assertAdminOrHigher(session);
+  if (session.role === "ADMIN") {
+    const scoped = await getScopedRegionIds(session);
+    if (!scoped?.includes(data.regionId)) throw new Response("Forbidden", { status: 403 });
+  }
+  const region = await prisma.region.findUniqueOrThrow({ where: { id: data.regionId } });
   const block = await prisma.block.create({
     data: {
       regionId: region.id,
-      name: input.name.trim(),
-      areaHectare: input.areaHectare,
+      name: data.name,
+      areaHectare: data.areaHectare,
       createdById: actor.id,
       firebaseSyncStatus: SyncStatus.PENDING,
     },
@@ -59,14 +73,21 @@ export async function createBlock(input: {
   }
 }
 
-export async function updateBlock(input: { actor: SessionUser; id: string; name: string; areaHectare?: string }) {
-  const actor = assertAdminOrHigher(input.actor);
-  const existing = await prisma.block.findUniqueOrThrow({ where: { id: input.id }, include: { region: true } });
+export async function updateBlock(input: { id: string; name: string; areaHectare?: string }) {
+  const data = parseInput(updateBlockSchema, input);
+  const session = await getSession();
+  if (!session) throw redirect("/login");
+  const actor = assertAdminOrHigher(session);
+  const existing = await prisma.block.findUniqueOrThrow({ where: { id: data.id }, include: { region: true } });
+  if (session.role === "ADMIN") {
+    const scoped = await getScopedRegionIds(session);
+    if (!scoped?.includes(existing.regionId)) throw new Response("Forbidden", { status: 403 });
+  }
   const updated = await prisma.block.update({
-    where: { id: input.id },
+    where: { id: data.id },
     data: {
-      name: input.name.trim(),
-      areaHectare: input.areaHectare,
+      name: data.name,
+      areaHectare: data.areaHectare,
       updatedById: actor.id,
       firebaseSyncStatus: SyncStatus.PENDING,
     },
@@ -100,20 +121,29 @@ export async function updateBlock(input: { actor: SessionUser; id: string; name:
 }
 
 export async function createSprayer(input: {
-  actor: SessionUser;
   blockId: string;
   hardwareId: string;
   displayName: string;
   dryMaxPercent: number;
   wetMinPercent: number;
 }) {
-  const actor = assertAdminOrHigher(input.actor);
-  const block = await prisma.block.findUniqueOrThrow({ where: { id: input.blockId }, include: { region: true } });
+  const data = parseInput(createSprayerSchema, input);
+  if (data.dryMaxPercent >= data.wetMinPercent) {
+    throw new Response("Batas kering harus lebih kecil dari batas basah.", { status: 400 });
+  }
+  const session = await getSession();
+  if (!session) throw redirect("/login");
+  const actor = assertAdminOrHigher(session);
+  const block = await prisma.block.findUniqueOrThrow({ where: { id: data.blockId }, include: { region: true } });
+  if (session.role === "ADMIN") {
+    const scoped = await getScopedRegionIds(session);
+    if (!scoped?.includes(block.regionId)) throw new Response("Forbidden", { status: 403 });
+  }
   const sprayer = await prisma.sprayer.create({
     data: {
       blockId: block.id,
-      hardwareId: input.hardwareId.trim(),
-      displayName: input.displayName.trim(),
+      hardwareId: data.hardwareId,
+      displayName: data.displayName,
       firebaseSyncStatus: SyncStatus.PENDING,
     },
   });
@@ -122,8 +152,8 @@ export async function createSprayer(input: {
       regionName: block.region.name,
       blockName: block.name,
       hardwareId: sprayer.hardwareId,
-      dryMaxPercent: input.dryMaxPercent,
-      wetMinPercent: input.wetMinPercent,
+      dryMaxPercent: data.dryMaxPercent,
+      wetMinPercent: data.wetMinPercent,
     });
     await logActivity({
       actorId: actor.id,
@@ -152,14 +182,18 @@ export async function createSprayer(input: {
 }
 
 export async function overridePump(input: { sprayerId: string; mode: "AUTO" | "MANUAL"; relay: "OFF" | "ON" }) {
+  const data = parseInput(overridePumpSchema, input);
   const session = await getSession();
   if (!session) throw redirect("/login");
   if (session.role === "ADMIN") {
     throw new Response("Admin hanya dapat melihat data dan tidak dapat melakukan kontrol pompa.", { status: 403 });
   }
 
+  const controlLimit = checkRateLimit(`pump:user:${session.id}`, 30, 60_000);
+  if (!controlLimit.allowed) throw rateLimitResponse(controlLimit);
+
   const sprayer = await prisma.sprayer.findUniqueOrThrow({
-    where: { id: input.sprayerId },
+    where: { id: data.sprayerId },
     include: { block: { include: { region: true } } },
   });
   if (session.role !== "SUPERADMIN") {
@@ -171,18 +205,18 @@ export async function overridePump(input: { sprayerId: string; mode: "AUTO" | "M
     regionName: sprayer.block.region.name,
     blockName: sprayer.block.name,
     hardwareId: sprayer.hardwareId,
-    mode: input.mode,
-    relay: input.relay,
+    mode: data.mode,
+    relay: data.relay,
   });
 
   let event;
-  if (input.relay === "ON") {
+  if (data.relay === "ON") {
     event = await prisma.irrigationEvent.create({
       data: {
         blockId: sprayer.blockId,
         sprayerId: sprayer.id,
         actorId: session.id,
-        mode: input.mode === "AUTO" ? IrrigationMode.AUTO : IrrigationMode.MANUAL,
+        mode: data.mode === "AUTO" ? IrrigationMode.AUTO : IrrigationMode.MANUAL,
         relay: RelayState.ON,
         reason: "Manual dashboard override",
         startedAt: new Date(),

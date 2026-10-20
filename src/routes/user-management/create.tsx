@@ -9,7 +9,13 @@ import { SimpleSelect } from "~/components/ui/SimpleSelect";
 import type { Role } from "@prisma/client";
 import { ChevronLeft, Eye, EyeOff } from "lucide-solid";
 import { debounce } from "~/lib/shared/debounce";
-import { validateEmail, validateName, validateNewPassword, validatePasswordConfirm, validatePhone } from "~/lib/shared/validation";
+import {
+  validateEmail,
+  validateName,
+  validateNewPassword,
+  validatePasswordConfirm,
+  validatePhone,
+} from "~/lib/shared/validation";
 
 const loadFormOptions = query(() => getUserFormOptions(), "user-create-form-options");
 export const route = { preload: () => loadFormOptions() };

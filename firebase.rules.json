@@ -1,0 +1,26 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "$region": {
+      ".read": false,
+      ".write": false,
+      "region_settings": {
+        ".read": true,
+        ".write": false
+      },
+      "blocks": {
+        ".read": true,
+        ".write": false,
+        "$block": {
+          ".read": true,
+          ".write": false,
+          "$sprayer": {
+            ".read": true,
+            ".write": false
+          }
+        }
+      }
+    }
+  }
+}

@@ -10,6 +10,8 @@ export default [
       ".nitro/**",
       "dist/**",
       "node_modules/**",
+      "references/**",
+      ".data/**",
       "*.log",
       "*.lock",
       "pnpm-lock.yaml",

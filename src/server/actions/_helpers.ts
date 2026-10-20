@@ -1,4 +1,6 @@
 import { type ActivityAction, MoistureStatus, type Prisma } from "@prisma/client";
+import { getRequestHeader, getRequestIP } from "@solidjs/start/http";
+import { serverConfig } from "../config";
 import type { Role } from "@prisma/client";
 import { syncFirebaseSnapshotToDatabase } from "../services/firebaseSync";
 import { prisma } from "../db/prisma";
@@ -7,6 +9,17 @@ import type { MapPoint } from "~/types/map";
 
 export type CoordinateInput = string | number | null | undefined;
 export type { MapPoint };
+
+function requestAuditFields() {
+  try {
+    return {
+      ipAddress: getRequestIP({ xForwardedFor: serverConfig.trustProxy })?.slice(0, 64) ?? null,
+      userAgent: getRequestHeader("user-agent")?.slice(0, 512) ?? null,
+    };
+  } catch {
+    return { ipAddress: null, userAgent: null };
+  }
+}
 
 export async function logActivity(input: {
   actorId?: string;
@@ -17,6 +30,7 @@ export async function logActivity(input: {
   entityId?: string;
   metadata?: Prisma.InputJsonValue;
 }) {
+  const audit = requestAuditFields();
   await prisma.activityLog.create({
     data: {
       actorId: input.actorId === "system" ? undefined : input.actorId,
@@ -26,6 +40,7 @@ export async function logActivity(input: {
       entityType: input.entityType,
       entityId: input.entityId,
       metadata: input.metadata,
+      ...audit,
     },
   });
 }
@@ -84,6 +99,12 @@ export async function assertRegionsAssignable(session: SessionUser, regionIds: s
   }
   if (role === "ADMIN" && session.role === "SUPERADMIN" && uniqueIds.length === 0) {
     throw new Response("Admin wajib memiliki minimal 1 region.", { status: 400 });
+  }
+  if (uniqueIds.length > 0) {
+    const found = await prisma.region.count({ where: { id: { in: uniqueIds } } });
+    if (found !== uniqueIds.length) {
+      throw new Response("Satu atau lebih region tidak ditemukan.", { status: 400 });
+    }
   }
   if (session.role === "ADMIN") {
     if (role !== "USER") throw new Response("Admin hanya dapat membuat atau mengubah role User.", { status: 403 });

@@ -180,7 +180,26 @@ export async function updateRegionSettings(input: {
   });
 }
 
-export async function syncFirebaseSnapshotToDatabase(input: { staleMs?: number } = {}) {
+type FirebaseSyncStats = {
+  skipped: boolean;
+  regions: number;
+  blocks: number;
+  sprayers: number;
+  readings: number;
+  events: number;
+};
+
+let inFlightSync: Promise<FirebaseSyncStats> | null = null;
+
+export function syncFirebaseSnapshotToDatabase(input: { staleMs?: number } = {}): Promise<FirebaseSyncStats> {
+  if (inFlightSync) return inFlightSync;
+  inFlightSync = runFirebaseSync(input).finally(() => {
+    inFlightSync = null;
+  });
+  return inFlightSync;
+}
+
+async function runFirebaseSync(input: { staleMs?: number } = {}) {
   const staleMs = input.staleMs ?? 60_000;
   const syncKey = "firebase_sync:snapshot";
   const marker = await prisma.systemSetting.findUnique({ where: { key: syncKey } });
@@ -196,10 +215,21 @@ export async function syncFirebaseSnapshotToDatabase(input: { staleMs?: number }
   if (regions.length === 0) return { skipped: false, regions: 0, blocks: 0, sprayers: 0, readings: 0, events: 0 };
 
   const db = firebaseAdminDb();
-  const stats = { skipped: false, regions: 0, blocks: 0, sprayers: 0, readings: 0, events: 0 };
+  const stats: FirebaseSyncStats = { skipped: false, regions: 0, blocks: 0, sprayers: 0, readings: 0, events: 0 };
 
-  for (const region of regions) {
-    const snapshot = await db.ref(firebaseSegment(region.name)).get();
+  const snapshots = await Promise.allSettled(
+    regions.map(async (region) => ({
+      region,
+      snapshot: await db.ref(firebaseSegment(region.name)).get(),
+    })),
+  );
+
+  for (const result of snapshots) {
+    if (result.status === "rejected") {
+      console.error("[firebase] region snapshot failed:", result.reason);
+      continue;
+    }
+    const { region, snapshot } = result.value;
     if (!snapshot.exists()) continue;
 
     const node = snapshot.val() as FirebaseRegionNode;
@@ -257,26 +287,22 @@ export async function syncFirebaseSnapshotToDatabase(input: { staleMs?: number }
         const live = sprayerNode.live_data;
         if (live) {
           const recordedAt = fromEpoch(live.last_updated);
-          const exists = await prisma.sensorReading.findFirst({
-            where: { blockId: block.id, sprayerId: sprayer.id, recordedAt },
-            select: { id: true },
+          await prisma.sensorReading.upsert({
+            where: { sprayerId_recordedAt: { sprayerId: sprayer.id, recordedAt } },
+            update: {},
+            create: {
+              blockId: block.id,
+              sprayerId: sprayer.id,
+              moisturePercent: numberOrZero(live.moisture_percent),
+              flowLmin: numberOrZero(live.flow_Lmin),
+              totalVolumeLiter: live.totalVolume === undefined ? null : numberOrZero(live.totalVolume),
+              moistureStatus: moistureStatus(live.moisture_status),
+              pumpStatus: sprayerNode.control?.pump_status ? "ON" : "OFF",
+              windDirection: live.arah_angin ?? null,
+              recordedAt,
+            },
           });
-          if (!exists) {
-            await prisma.sensorReading.create({
-              data: {
-                blockId: block.id,
-                sprayerId: sprayer.id,
-                moisturePercent: numberOrZero(live.moisture_percent),
-                flowLmin: numberOrZero(live.flow_Lmin),
-                totalVolumeLiter: live.totalVolume === undefined ? null : numberOrZero(live.totalVolume),
-                moistureStatus: moistureStatus(live.moisture_status),
-                pumpStatus: sprayerNode.control?.pump_status ? "ON" : "OFF",
-                windDirection: live.arah_angin ?? null,
-                recordedAt,
-              },
-            });
-            stats.readings += 1;
-          }
+          stats.readings += 1;
         }
 
         for (const [dateKey, entries] of Object.entries(sprayerNode.history ?? {})) {
@@ -351,25 +377,21 @@ export async function syncFirebaseSnapshotToDatabase(input: { staleMs?: number }
             stats.events += 1;
 
             const recordedAt = fromEpoch(entry.timestamp ?? entry.endtime ?? entry.starttime);
-            const exists = await prisma.sensorReading.findFirst({
-              where: { blockId: block.id, sprayerId: sprayer.id, recordedAt },
-              select: { id: true },
+            await prisma.sensorReading.upsert({
+              where: { sprayerId_recordedAt: { sprayerId: sprayer.id, recordedAt } },
+              update: {},
+              create: {
+                blockId: block.id,
+                sprayerId: sprayer.id,
+                moisturePercent: numberOrZero(entry.moisture_percent),
+                flowLmin: numberOrZero(entry.flow_Lmin),
+                totalVolumeLiter: entry.totalVolume === undefined ? null : numberOrZero(entry.totalVolume),
+                moistureStatus: moistureStatus(entry.moisture_status),
+                pumpStatus: entry.pump_status ? "ON" : "OFF",
+                recordedAt,
+              },
             });
-            if (!exists) {
-              await prisma.sensorReading.create({
-                data: {
-                  blockId: block.id,
-                  sprayerId: sprayer.id,
-                  moisturePercent: numberOrZero(entry.moisture_percent),
-                  flowLmin: numberOrZero(entry.flow_Lmin),
-                  totalVolumeLiter: entry.totalVolume === undefined ? null : numberOrZero(entry.totalVolume),
-                  moistureStatus: moistureStatus(entry.moisture_status),
-                  pumpStatus: entry.pump_status ? "ON" : "OFF",
-                  recordedAt,
-                },
-              });
-              stats.readings += 1;
-            }
+            stats.readings += 1;
           }
         }
       }

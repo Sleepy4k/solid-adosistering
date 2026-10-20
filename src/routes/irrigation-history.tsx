@@ -21,7 +21,8 @@ const PAGE_SIZE = 10;
 type HistoryItem = Awaited<ReturnType<typeof getIrrigationHistory>>["items"][number];
 
 function toMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Data riwayat belum bisa dimuat.";
+  if (!import.meta.env.PROD && error instanceof Error) return error.message;
+  return "Data riwayat belum bisa dimuat.";
 }
 
 function formatDate(d: Date | string) {
@@ -358,9 +359,7 @@ export default function RiwayatIrigasi() {
                             <p class="mb-1 inline-flex items-center gap-2 text-xs font-medium text-[#6B7280]">
                               <Clock3 size={15} /> Durasi
                             </p>
-                            <p class="text-sm font-semibold text-[#4F4F4F]">
-                              {formatDuration(event.durationSeconds)}
-                            </p>
+                            <p class="text-sm font-semibold text-[#4F4F4F]">{formatDuration(event.durationSeconds)}</p>
                           </div>
                           <div class="rounded-xl border border-[#DDECD7] bg-[#F7FBF5] p-4 sm:col-span-2 xl:col-span-2">
                             <p class="mb-1 inline-flex items-center gap-2 text-xs font-medium text-[#6B7280]">

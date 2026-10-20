@@ -36,7 +36,7 @@
     "leaflet": "^1.9.4",
     "lucide-solid": "^1.17.0",
     "nitro": "^3.0.260610-beta",
-    "nodemailer": "^8.0.10",
+    "nodemailer": "^10.1.7",
     "nprogress": "^0.2.0",
     "server-only": "^0.0.1",
     "solid-js": "^1.9.14",
@@ -64,7 +64,15 @@
   },
   "overrides": {
     "seroval": "^1.6.11",
-    "seroval-plugins": "^1.6.11"
+    "seroval-plugins": "^1.6.11",
+    "postcss": "^8.5.31",
+    "nanoid": "^3.3.20",
+    "@grpc/grpc-js": "^1.14.6",
+    "source-map-js": "^1.2.2",
+    "baseline-browser-mapping": "^2.11.30",
+    "browserslist": "^4.29.4",
+    "uuid": "^11.1.1",
+    "picomatch": "^4.0.7"
   },
   "trustedDependencies": [
     "@firebase/util",

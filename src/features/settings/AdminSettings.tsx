@@ -1,5 +1,6 @@
 import { createMemo, createSignal, Show } from "solid-js";
 import { saveRegionSafetyTimeout } from "~/server/actions/settings";
+import { AutomaticModePanel } from "./AutomaticModePanel";
 import { IrrigationControl } from "./IrrigationControl";
 import { SafetyTimeoutPanel } from "./SafetyTimeoutPanel";
 import { RegionSelector } from "./RegionSelector";
@@ -28,6 +29,12 @@ export function AdminSettings(props: { settings: AdminSettingsData }) {
             onChange={setSelectedRegionId}
           />
           <IrrigationControl region={region()} readOnly />
+          <AutomaticModePanel
+            regionId={region().id}
+            regionName={region().name}
+            automaticMode={region().automaticMode}
+            sprayerCount={region().sprayerCount}
+          />
           <SafetyTimeoutPanel
             initialMin={region().safetyTimeout.min}
             initialMax={region().safetyTimeout.max}

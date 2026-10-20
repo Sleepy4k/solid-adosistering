@@ -61,6 +61,12 @@ enum AlertTargetType {
   SPRAYER
 }
 
+enum NewsletterStatus {
+  PENDING
+  CONFIRMED
+  UNSUBSCRIBED
+}
+
 model User {
   id                   String                  @id @default(cuid())
   email                String                  @unique @db.VarChar(254)
@@ -448,13 +454,20 @@ model LandingPartner {
 }
 
 model NewsletterSubscriber {
-  id             String    @id @default(cuid())
-  email          String    @unique @db.VarChar(254)
-  subscribedAt   DateTime  @default(now()) @map("subscribed_at")
-  isActive       Boolean   @default(true) @map("is_active")
-  unsubscribedAt DateTime? @map("unsubscribed_at")
+  id                     String           @id @default(cuid())
+  email                  String           @unique @db.VarChar(254)
+  status                 NewsletterStatus @default(PENDING)
+  subscribedAt           DateTime         @default(now()) @map("subscribed_at")
+  confirmedAt            DateTime?        @map("confirmed_at")
+  unsubscribedAt         DateTime?        @map("unsubscribed_at")
+  confirmationTokenHash  String?          @map("confirmation_token_hash") @db.VarChar(64)
+  confirmationExpiresAt  DateTime?        @map("confirmation_expires_at")
+  lastConfirmationSentAt DateTime?        @map("last_confirmation_sent_at")
+  consentSource          String?          @map("consent_source") @db.VarChar(64)
 
-  @@index([isActive, subscribedAt])
+  @@index([status, subscribedAt])
+  @@index([confirmationExpiresAt])
+  @@index([confirmationTokenHash])
   @@map("newsletter_subscriber")
 }
 
@@ -474,7 +487,6 @@ model UserProfile {
   postalCode     String?   @map("postal_code") @db.VarChar(20)
   internalNotes  String?   @map("internal_notes") @db.Text
   deviceUsername String?   @unique @map("device_username") @db.VarChar(100)
-  apiKey         String?   @unique @map("api_key") @db.VarChar(255)
   updatedAt      DateTime  @updatedAt @map("updated_at")
   user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 

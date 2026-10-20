@@ -69,7 +69,7 @@ export function RegionConfigRow(props: { region: RegionRow; onSaved: () => void 
             onChange={(e) => setAutoIrrig(e.currentTarget.checked)}
             class="h-4 w-4 rounded accent-emerald-600"
           />
-          <span class="text-sm text-[#4F4F4F]">Aktifkan</span>
+          <span class="text-sm text-[#4F4F4F]">Tampilkan Kontrol Otomatis</span>
         </label>
       </td>
       <td class="px-5 py-4">

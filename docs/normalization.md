@@ -141,7 +141,11 @@ The delta spans two migrations that touch these tables, followed by an index-onl
 - `prisma/migrations/20261021120000_bcnf_normalization` performs the region, threshold, sensor, event, audit, alert, user, and string-width changes described above.
 - `prisma/migrations/20261021130000_drop_redundant_event_indexes` is the follow-up index migration. It drops `irrigation_event_firebase_event_id_idx` because the unique index already covers `firebase_event_id`, and drops `irrigation_event_started_at_idx` because `started_at` is the leading column of `irrigation_event_started_at_id_idx`.
 
-Apply them in filename order with `bun run db:deploy`. Do not edit an applied migration or run the SQL manually on production.
+### Related forward migration
+
+`prisma/migrations/20261021140000_newsletter_double_opt_in_and_drop_api_key` ships in the same release but is outside the BCNF delta described above. It adds the `newsletter_subscriber` lifecycle columns (status, confirmation hash/expiry, last-send, and consent source), backfills legacy active rows to `CONFIRMED` with `consent_source = 'LEGACY_IMPORT'` (inactive rows become `UNSUBSCRIBED`), drops the legacy `is_active` column and its index, and drops `user_detail.api_key` with its unique index. No relation, functional dependency, or verification query in the BCNF analysis above changes.
+
+Apply the pending migrations in filename order with `bun run db:deploy`. Do not edit an applied migration or run the SQL manually on production.
 
 ## Post-migration verification
 

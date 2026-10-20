@@ -33,6 +33,7 @@ export async function getRegions() {
       longitude: true,
       firebaseSyncStatus: true,
       firebaseSyncedAt: true,
+      automaticMode: true,
       createdAt: true,
       _count: { select: { blocks: true, adminAssignments: true } },
       adminAssignments: {
@@ -40,6 +41,18 @@ export async function getRegions() {
       },
     },
   });
+
+  const blockCounts = await prisma.block.findMany({
+    where: { regionId: { in: regions.map((region) => region.id) } },
+    select: {
+      regionId: true,
+      _count: { select: { sprayers: { where: { isActive: true } } } },
+    },
+  });
+  const sprayerCountByRegion = new Map<string, number>();
+  for (const block of blockCounts) {
+    sprayerCountByRegion.set(block.regionId, (sprayerCountByRegion.get(block.regionId) ?? 0) + block._count.sprayers);
+  }
 
   return regions.map((region) => ({
     id: region.id,
@@ -49,6 +62,8 @@ export async function getRegions() {
     longitude: region.longitude === null ? null : Number(region.longitude),
     firebaseSyncStatus: region.firebaseSyncStatus,
     firebaseSyncedAt: region.firebaseSyncedAt?.toISOString() ?? null,
+    automaticMode: region.automaticMode,
+    sprayerCount: sprayerCountByRegion.get(region.id) ?? 0,
     createdAt: region.createdAt.toISOString(),
     _count: region._count,
     adminAssignments: region.adminAssignments,

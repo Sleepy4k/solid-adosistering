@@ -3,6 +3,7 @@ import nodemailer from "nodemailer";
 import { serverConfig } from "../../config";
 import { prisma } from "../../db/prisma";
 import { loginBlockedTemplate } from "~/templates/email/loginBlocked";
+import { newsletterConfirmationTemplate } from "~/templates/email/newsletterConfirmation";
 import { passwordChangedTemplate } from "~/templates/email/passwordChanged";
 import { passwordResetTemplate } from "~/templates/email/passwordReset";
 import { welcomeUserTemplate } from "~/templates/email/welcomeUser";
@@ -14,6 +15,26 @@ type WebConfigValue = {
   tagline?: string;
   logoUrl?: string | null;
   primaryColor?: string;
+};
+
+/**
+ * Structural subset of nodemailer's SMTP options. Keeping this local lets the
+ * pooled branch add `pool`/`maxConnections`/`maxMessages` without importing
+ * nodemailer's internal module paths, while still type-checking against the
+ * public `createTransport` overload.
+ */
+type SmtpTransportOptions = {
+  host: string;
+  port: number;
+  secure: boolean;
+  auth: { user: string; pass: string };
+  connectionTimeout: number;
+  greetingTimeout: number;
+  socketTimeout: number;
+  tls: { rejectUnauthorized: boolean };
+  pool?: boolean;
+  maxConnections?: number;
+  maxMessages?: number;
 };
 
 function resolveLogoUrl(logoUrl: string | null | undefined): string | null {
@@ -39,7 +60,13 @@ export async function getEmailBrandConfig(): Promise<Partial<EmailBrandConfig>> 
   };
 }
 
-export function createSmtpTransporter() {
+/**
+ * Creates a nodemailer transporter. Pooled transports keep up to 5 SMTP
+ * connections open, so callers must invoke `transporter.close()` when done
+ * (see `sendBulkEmail`). Single transactional emails use the default
+ * non-pooled transport and close their connection after sending.
+ */
+export function createSmtpTransporter(options: { pool?: boolean } = {}) {
   const { host, port, secure, user, pass } = serverConfig.smtp;
 
   if (!host || !user || !pass) {
@@ -47,7 +74,7 @@ export function createSmtpTransporter() {
     throw new Error(`SMTP not configured: ${missing.join(", ")} missing`);
   }
 
-  return nodemailer.createTransport({
+  const transportOptions: SmtpTransportOptions = {
     host,
     port,
     secure,
@@ -56,7 +83,10 @@ export function createSmtpTransporter() {
     greetingTimeout: 10_000,
     socketTimeout: 15_000,
     tls: { rejectUnauthorized: process.env.SMTP_TLS_REJECT_UNAUTHORIZED !== "false" },
-  });
+    ...(options.pool ? { pool: true, maxConnections: 5, maxMessages: 100 } : {}),
+  };
+
+  return nodemailer.createTransport(transportOptions);
 }
 
 function resolveFrom(): string {
@@ -141,4 +171,15 @@ export async function sendWelcomeUserEmail(input: {
   const config = await getEmailBrandConfig();
   const template = welcomeUserTemplate({ ...input, config });
   await sendTransactionalEmail({ recipientId: input.recipientId, to: input.to, ...template });
+}
+
+/** Newsletter subscribers are not application users, so no recipientId is linked. */
+export async function sendNewsletterConfirmationEmail(input: { to: string; confirmUrl: string; expiresAt: Date }) {
+  const config = await getEmailBrandConfig();
+  const template = newsletterConfirmationTemplate({
+    confirmUrl: input.confirmUrl,
+    expiresAt: input.expiresAt,
+    config,
+  });
+  await sendTransactionalEmail({ to: input.to, ...template });
 }

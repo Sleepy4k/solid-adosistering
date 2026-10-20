@@ -5,6 +5,7 @@ import { PROTECTED_ROUTE_PREFIXES, PUBLIC_ROUTES, ROUTES } from "~/constants/rou
 import {
   appOrigin,
   assertServerConfig,
+  isLoopbackHttpOrigin,
   isProduction,
   SESSION_ABSOLUTE_SECONDS,
   SESSION_IDLE_SECONDS,
@@ -14,6 +15,13 @@ import { prisma } from "~/server/db/prisma";
 import { hashToken } from "~/server/auth/security";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS", "TRACE"]);
+/**
+ * Solid Router's `query()` runs server functions over GET and SolidStart's
+ * client always attaches this header. Cross-site navigations and subresource
+ * requests can never set a custom header (and a cross-origin fetch would need
+ * a CORS preflight we never approve), so it is safe to accept these reads.
+ */
+const SERVER_FUNCTION_CLIENT_HEADER = "x-server-instance";
 const ASSET_PREFIXES = [
   "/_build/",
   "/assets/",
@@ -67,13 +75,29 @@ function isAssetPath(pathname: string) {
   return ASSET_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
+/**
+ * Policy comparison copy of a pathname: URL routing stays case-sensitive and
+ * keeps the real path, but policy decisions must not be bypassable with
+ * `/Newsletter/Confirm/` style variants. Trailing slashes are ignored except
+ * for the root path.
+ */
+function normalizePolicyPath(pathname: string): string {
+  const lowercased = pathname.toLowerCase();
+  if (lowercased === "/") return "/";
+  const trimmed = lowercased.replace(/\/+$/, "");
+  return trimmed === "" ? "/" : trimmed;
+}
+
 function isPublicPath(pathname: string) {
-  if (pathname === "/") return true;
-  return PUBLIC_ROUTES.some((route) => route !== "/" && (pathname === route || pathname.startsWith(route + "/")));
+  const normalized = normalizePolicyPath(pathname);
+  if (normalized === "/") return true;
+  return PUBLIC_ROUTES.some((route) => route !== "/" && (normalized === route || normalized.startsWith(route + "/")));
 }
 
 function matchesRoute(pathname: string, route: string) {
-  return pathname === route || pathname.startsWith(route + "/");
+  const normalizedPath = normalizePolicyPath(pathname);
+  const normalizedRoute = normalizePolicyPath(route);
+  return normalizedPath === normalizedRoute || normalizedPath.startsWith(normalizedRoute + "/");
 }
 
 function clearSessionCookieHeader() {
@@ -135,10 +159,11 @@ function respond(event: { res: { headers: Headers } }, body: BodyInit | null, in
 }
 
 function isProtectedPath(pathname: string): boolean {
-  return PROTECTED_ROUTE_PREFIXES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+  const normalized = normalizePolicyPath(pathname);
+  return PROTECTED_ROUTE_PREFIXES.some((route) => normalized === route || normalized.startsWith(`${route}/`));
 }
 
-function hasValidOrigin(req: Request, requestUrl: URL): boolean {
+function hasValidOrigin(req: Request, requestUrl: URL, options: { allowMissing?: boolean } = {}): boolean {
   const secFetchSite = req.headers.get("sec-fetch-site");
   if (secFetchSite === "cross-site") return false;
 
@@ -158,14 +183,32 @@ function hasValidOrigin(req: Request, requestUrl: URL): boolean {
   if (origin) return isAllowedOrigin(origin);
 
   const referer = req.headers.get("referer");
-  if (!referer) return false;
+  if (!referer) return options.allowMissing === true;
   try {
     const parsed = new URL(referer);
-    if (parsed.protocol !== "https:" && isProduction) return false;
+    // Production normally requires HTTPS. Loopback plain-HTTP origins are the
+    // one exception, mirroring the APP_ORIGIN rule for local production previews.
+    if (isProduction && parsed.protocol !== "https:" && !isLoopbackHttpOrigin(parsed.origin)) return false;
     return isAllowedOrigin(parsed.origin);
   } catch {
     return false;
   }
+}
+
+/**
+ * SolidStart's client only treats a failed server-function response as an
+ * error when `X-Error` is present (or the status is >= 500); without it a
+ * blocked action would silently resolve as success. Mark every middleware
+ * rejection accordingly and keep the body plain text.
+ */
+function rejectServerFunction(event: { res: { headers: Headers } }, status: 403 | 405): Response {
+  const headers: Record<string, string> = {
+    "Content-Type": "text/plain; charset=utf-8",
+    "X-Error": "true",
+    "Cache-Control": "no-store",
+    ...(status === 405 ? { Allow: "POST" } : {}),
+  };
+  return respond(event, status === 405 ? "Method Not Allowed" : "Forbidden", { status, headers });
 }
 
 export default createMiddleware([
@@ -187,19 +230,53 @@ export default createMiddleware([
     event.res.headers.set("Vary", "Cookie, Origin");
     event.res.headers.delete("x-powered-by");
 
+    // Server functions are state-changing even when invoked with a "safe" HTTP
+    // method: `GET /_server?id=...&args=...` executes the action. Only POST and
+    // the framework's header-marked query transport are ever allowed, and every
+    // request that can execute gets an origin check.
+    if (pathname.startsWith("/_server")) {
+      event.res.headers.set("Cache-Control", "no-store");
+
+      const isClientQueryRequest = event.req.method === "GET" && event.req.headers.has(SERVER_FUNCTION_CLIENT_HEADER);
+
+      if (!isClientQueryRequest && event.req.method !== "POST") {
+        return rejectServerFunction(event, 405);
+      }
+
+      // Header-marked GETs may be sent without any Origin/Referer: cross-site JS
+      // cannot set `x-server-instance` without a preflight this app rejects, and
+      // newsletter pages answer with `Referrer-Policy: no-referrer`. Any Origin
+      // or Referer that IS present must still pass the exact-origin check.
+      if (!hasValidOrigin(event.req, requestUrl, { allowMissing: isClientQueryRequest })) {
+        return rejectServerFunction(event, 403);
+      }
+
+      // Server functions must never run with an unvalidated configuration.
+      ensureServerConfig();
+      return next();
+    }
+
     const csrfRejected = !SAFE_METHODS.has(event.req.method) && !hasValidOrigin(event.req, requestUrl);
     if (csrfRejected) {
       return respond(event, "Forbidden", { status: 403, headers: { "Cache-Control": "no-store" } });
     }
 
-    // Server-function RPC and API endpoints enforce authentication themselves so
-    // they can return JSON status codes instead of an HTML login redirect.
-    if (pathname.startsWith("/_server") || pathname.startsWith("/api/")) return next();
+    // API endpoints enforce authentication themselves so they can return JSON
+    // status codes instead of an HTML login redirect.
+    if (pathname.startsWith("/api/")) return next();
 
     if (isAssetPath(pathname)) return next();
 
     if (isPublicPath(pathname)) {
       ensureServerConfig();
+      if (matchesRoute(pathname, ROUTES.newsletterConfirm) || matchesRoute(pathname, ROUTES.newsletterUnsubscribe)) {
+        // These URLs carry bearer tokens in the query string: never cache them,
+        // never leak the token through Referer, and never let crawlers index them.
+        event.res.headers.set("Cache-Control", "no-store");
+        event.res.headers.set("Referrer-Policy", "no-referrer");
+        event.res.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
+        return next();
+      }
       // Personalized landing and auth pages must never be shared by an intermediary cache.
       event.res.headers.set("Cache-Control", "private, max-age=0, must-revalidate");
       return next();

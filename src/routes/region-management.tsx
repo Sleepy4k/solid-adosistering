@@ -1,9 +1,11 @@
-import { query, createAsync } from "@solidjs/router";
+import { query, createAsync, revalidate } from "@solidjs/router";
 import { createEffect, createMemo, createSignal, For, lazy, Show, Suspense } from "solid-js";
 import { Plus } from "lucide-solid";
 import { PageMeta } from "~/components/shared/PageMeta";
 import { PageSizeSelect, TablePagination } from "~/components/ui/TablePagination";
+import { Badge } from "~/components/ui/Badge";
 import { getRegions, deleteRegion, getAdmins } from "~/server/actions/regions";
+import { setRegionAutomaticMode } from "~/server/actions/settings";
 import { SkTableRow } from "~/components/shared/Skeleton";
 import { useToast } from "~/components/shared/ToastProvider";
 import { useConfirm } from "~/components/shared/ConfirmProvider";
@@ -37,6 +39,7 @@ export default function ManajemenRegion() {
   const [loadError, setLoadError] = createSignal<string>("");
   const [page, setPage] = createSignal<number>(0);
   const [pageSize, setPageSize] = createSignal<number>(10);
+  const [modePendingId, setModePendingId] = createSignal<string | null>(null);
 
   const regions = createAsync(async () => {
     void refreshKey();
@@ -71,6 +74,60 @@ export default function ManajemenRegion() {
     } catch {
       notify({ kind: "error", title: "Gagal menghapus region" });
     }
+  };
+
+  const handleAutomaticMode = async (r: RegionRow, enabled: boolean) => {
+    if (enabled && r.sprayerCount === 0) {
+      notify({
+        kind: "warning",
+        title: "Mode otomatis membutuhkan sprayer aktif",
+        message: "Aktifkan atau tambahkan minimal satu sprayer pada region ini terlebih dahulu.",
+      });
+      return;
+    }
+
+    const ok = await confirm({
+      title: enabled ? "Aktifkan Mode Otomatis" : "Nonaktifkan Mode Otomatis",
+      message: enabled
+        ? `Mengaktifkan mode otomatis untuk region "${r.name}" akan memindahkan semua sprayer aktif ke AUTO/OFF. Irigasi dapat menyala secara otomatis berdasarkan kelembapan tanah. Lanjutkan?`
+        : `Menonaktifkan mode otomatis untuk region "${r.name}" akan memindahkan semua sprayer aktif ke MANUAL/OFF. Lanjutkan?`,
+      confirmLabel: enabled ? "Aktifkan Otomatis" : "Nonaktifkan",
+      tone: enabled ? "primary" : "danger",
+    });
+    if (!ok) return;
+
+    setModePendingId(r.id);
+    try {
+      const result = await setRegionAutomaticMode({ regionId: r.id, enabled });
+      if (result.syncStatus === "FAILED") {
+        notify({
+          kind: "warning",
+          title: "Mode otomatis tersimpan, sinkronisasi Firebase tertunda",
+          message:
+            "Status utama di database sudah diperbarui, tetapi mirror Firebase gagal atau belum tersinkron. Perangkat dapat memakai mode sebelumnya sampai sinkronisasi berhasil.",
+        });
+      } else {
+        notify({
+          kind: "success",
+          title: enabled ? `Mode otomatis diaktifkan untuk ${r.name}` : `Mode otomatis dinonaktifkan untuk ${r.name}`,
+          message:
+            result.sprayerCount > 0
+              ? `${result.sprayerCount} sprayer aktif dipindahkan ke ${enabled ? "AUTO/OFF" : "MANUAL/OFF"}.`
+              : "Tidak ada sprayer aktif yang perlu dipindahkan.",
+        });
+      }
+    } catch (error) {
+      const message =
+        error instanceof Response
+          ? (await error.text().catch(() => "")) || "Periksa koneksi Anda lalu coba lagi."
+          : "Periksa koneksi Anda lalu coba lagi.";
+      notify({ kind: "error", title: "Gagal mengubah mode otomatis", message });
+      return;
+    } finally {
+      setModePendingId(null);
+    }
+
+    await revalidate("regions-list").catch(() => undefined);
   };
 
   return (
@@ -130,6 +187,7 @@ export default function ManajemenRegion() {
                       <th class="px-5 py-3 text-left">Nama Region</th>
                       <th class="px-5 py-3 text-left">Blok</th>
                       <th class="px-5 py-3 text-left">Admin</th>
+                      <th class="px-5 py-3 text-left">Mode Otomatis</th>
                       <th class="px-5 py-3 text-left">Firebase</th>
                       <th class="px-5 py-3 text-left">Aksi</th>
                     </tr>
@@ -156,6 +214,39 @@ export default function ManajemenRegion() {
                                   </For>
                                 </div>
                               </Show>
+                            </td>
+                            <td class="px-5 py-3">
+                              <div class="flex flex-col gap-2">
+                                <div class="flex items-center gap-2">
+                                  <Badge tone={region.automaticMode ? "success" : "muted"}>
+                                    {region.automaticMode ? "Aktif" : "Nonaktif"}
+                                  </Badge>
+                                  <span class="text-xs text-slate-400">{region.sprayerCount} sprayer aktif</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  disabled={
+                                    modePendingId() !== null || (!region.automaticMode && region.sprayerCount === 0)
+                                  }
+                                  title={
+                                    !region.automaticMode && region.sprayerCount === 0
+                                      ? "Aktifkan minimal satu sprayer di region ini untuk memakai mode otomatis."
+                                      : undefined
+                                  }
+                                  onClick={() => handleAutomaticMode(region, !region.automaticMode)}
+                                  class={`w-fit rounded-lg border px-2.5 py-1 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50 ${
+                                    region.automaticMode
+                                      ? "border-rose-200 text-rose-700 hover:bg-rose-50"
+                                      : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                                  }`}
+                                >
+                                  {modePendingId() === region.id
+                                    ? "Menyimpan..."
+                                    : region.automaticMode
+                                      ? "Nonaktifkan"
+                                      : "Aktifkan"}
+                                </button>
+                              </div>
                             </td>
                             <td class="px-5 py-3">
                               <span class={`rounded-full px-2 py-0.5 text-xs font-semibold ${badge.cls}`}>

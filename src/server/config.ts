@@ -37,7 +37,33 @@ function normalizeOrigin(value: string | undefined): string | undefined {
   }
 }
 
+/** Hostnames allowed to serve the production bundle over plain HTTP. Intentionally exact-match only. */
+const LOOPBACK_HOSTNAMES: ReadonlySet<string> = new Set(["localhost", "127.0.0.1", "::1"]);
+
+/**
+ * Local production preview/smoke tests only: the built server inlines
+ * `NODE_ENV=production`, so `bun run start` against a loopback origin would
+ * otherwise be rejected by the HTTPS rule. Public hostnames still fail closed.
+ *
+ * Exported so the middleware applies the exact same loopback rule to
+ * plain-HTTP `Referer` headers during those local production previews.
+ */
+export function isLoopbackHttpOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    if (url.protocol !== "http:") return false;
+    // WHATWG URL reports IPv6 hostnames with brackets (`[::1]`); normalise both forms.
+    const hostname =
+      url.hostname.startsWith("[") && url.hostname.endsWith("]") ? url.hostname.slice(1, -1) : url.hostname;
+    return LOOPBACK_HOSTNAMES.has(hostname);
+  } catch {
+    return false;
+  }
+}
+
 export const isProduction = process.env.NODE_ENV === "production";
+/** True only for an explicit `NODE_ENV=development`, never for test/staging. */
+const isNodeDevelopment = process.env.NODE_ENV === "development";
 export const isDevelopment = !isProduction;
 
 const configuredAppOrigin = normalizeOrigin(process.env.APP_ORIGIN);
@@ -58,6 +84,15 @@ export const SESSION_ABSOLUTE_SECONDS = 60 * 60 * 24 * 30;
 export const SESSION_RENEW_WINDOW_SECONDS = 60 * 60 * 24;
 
 const serviceAccountJson = env("FIREBASE_SERVICE_ACCOUNT_JSON");
+
+/**
+ * Newsletter tokens are security-sensitive (unsubscribe links are bearer
+ * credentials). Production must provide a real secret; development falls back
+ * to a clearly labelled value so local opt-in flows remain testable.
+ */
+const DEVELOPMENT_NEWSLETTER_TOKEN_SECRET = "insecure-development-only-newsletter-token-secret";
+const newsletterTokenSecret = env("NEWSLETTER_TOKEN_SECRET");
+const MIN_NEWSLETTER_TOKEN_SECRET_LENGTH = 32;
 
 export const serverConfig = {
   appOrigin,
@@ -87,7 +122,27 @@ export const serverConfig = {
     dir: env("UPLOAD_DIR") ?? ".data/uploads",
     maxBytes: positiveInt(env("UPLOAD_MAX_BYTES"), 2 * 1024 * 1024),
   },
+  newsletter: {
+    tokenSecret: newsletterTokenSecret ?? (isNodeDevelopment ? DEVELOPMENT_NEWSLETTER_TOKEN_SECRET : undefined),
+    confirmTtlHours: Math.min(168, positiveInt(env("NEWSLETTER_CONFIRM_TTL_HOURS"), 24)),
+  },
 } as const;
+
+/** Resolve the newsletter signing secret, failing closed when production config is missing. */
+export function getNewsletterTokenSecret(): string {
+  const secret = serverConfig.newsletter.tokenSecret;
+  if (!secret) {
+    // assertServerConfig() rejects this outside development; this guard keeps
+    // actions safe if they are ever invoked outside the normal request pipeline.
+    throw new Error("NEWSLETTER_TOKEN_SECRET is not configured.");
+  }
+  // Defence in depth: actions call this directly, so a short key must be rejected
+  // even when assertServerConfig() was never run (e.g. a bypassed request path).
+  if (secret.length < MIN_NEWSLETTER_TOKEN_SECRET_LENGTH) {
+    throw new Error(`NEWSLETTER_TOKEN_SECRET must be at least ${MIN_NEWSLETTER_TOKEN_SECRET_LENGTH} characters long.`);
+  }
+  return secret;
+}
 
 export function getServerConfigStatus(): ConfigStatus {
   return {
@@ -118,7 +173,9 @@ export function assertServerConfig() {
     throw new Error("APP_ORIGIN must be a valid absolute URL in production.");
   }
   if (isProduction && configuredAppOrigin && !configuredAppOrigin.startsWith("https://")) {
-    console.warn("[config] APP_ORIGIN should use HTTPS in production.");
+    if (!isLoopbackHttpOrigin(configuredAppOrigin)) {
+      throw new Error("APP_ORIGIN must use HTTPS in production.");
+    }
   }
   if (!status.firebaseAdminConfigured && !serverConfig.firebase.syncDisabled) {
     console.warn("[config] Firebase Admin is not configured; live telemetry sync is disabled.");
@@ -128,6 +185,16 @@ export function assertServerConfig() {
   }
   if (!/^[A-Za-z0-9_-]+$/.test(serverConfig.sessionCookieName)) {
     throw new Error("SESSION_COOKIE_NAME may only contain letters, numbers, underscores, and dashes.");
+  }
+  const newsletterSecret = env("NEWSLETTER_TOKEN_SECRET");
+  if (!isNodeDevelopment && !newsletterSecret) {
+    throw new Error("NEWSLETTER_TOKEN_SECRET is required outside development.");
+  }
+  if (newsletterSecret && newsletterSecret.length < MIN_NEWSLETTER_TOKEN_SECRET_LENGTH) {
+    throw new Error("NEWSLETTER_TOKEN_SECRET must be at least 32 characters long.");
+  }
+  if (isNodeDevelopment && !newsletterSecret) {
+    console.warn("[config] NEWSLETTER_TOKEN_SECRET is not set; using an insecure development-only secret.");
   }
 }
 

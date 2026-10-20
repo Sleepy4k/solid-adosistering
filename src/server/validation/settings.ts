@@ -18,6 +18,11 @@ export const saveSafetyTimeoutSchema = z.object({
 
 export const saveRegionSafetyTimeoutSchema = saveSafetyTimeoutSchema.extend({ regionId: idSchema });
 
+export const setRegionAutomaticModeSchema = z.object({
+  regionId: idSchema,
+  enabled: z.boolean(),
+});
+
 export const webConfigSchema = z.object({
   projectName: z.string().trim().min(1, "Nama proyek wajib diisi.").max(100),
   logoUrl: safeImageUrlSchema,

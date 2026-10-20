@@ -1,6 +1,5 @@
 "use server";
 
-import { randomBytes } from "node:crypto";
 import { ActivityAction, MoistureStatus, Prisma, type Role } from "@prisma/client";
 import type { UserListItem } from "~/types/users";
 import { redirect } from "@solidjs/router";
@@ -42,7 +41,7 @@ function uniqueTargetFields(error: unknown): string[] {
 function uniqueConstraintMessage(error: unknown): string {
   const fields = uniqueTargetFields(error);
   if (fields.includes("email")) return "Email sudah digunakan.";
-  if (fields.includes("deviceusername") || fields.includes("apikey")) return "Data unik sudah digunakan.";
+  if (fields.includes("deviceusername")) return "Data unik sudah digunakan.";
   return "Data yang sama sudah ada.";
 }
 
@@ -297,9 +296,6 @@ export async function createUserWithProfile(input: {
   const role = session.role === "ADMIN" ? "USER" : data.role;
   const regionIds = await assertRegionsAssignable(session, data.regionIds ?? [], role);
   const passwordHash = await hashPassword(data.password);
-  const apiKey = randomBytes(16)
-    .toString("hex")
-    .replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, "$1-$2-$3-$4-$5");
 
   const createdUser = await prisma
     .$transaction(async (tx) => {
@@ -321,7 +317,6 @@ export async function createUserWithProfile(input: {
               address: data.address?.trim() || null,
               internalNotes: data.internalNotes?.trim() || null,
               deviceUsername: data.deviceUsername?.trim() || null,
-              apiKey,
             },
           },
         },
@@ -368,7 +363,7 @@ export async function createUserWithProfile(input: {
     password: data.password,
     loginUrl: `${serverConfig.appOrigin}/login`,
   }).catch((err: unknown) => console.error("[email] welcomeUser:", err));
-  return { id: createdUser.id, name: createdUser.name, email: createdUser.email, role: createdUser.role, apiKey };
+  return { id: createdUser.id, name: createdUser.name, email: createdUser.email, role: createdUser.role };
 }
 
 export async function updateUserById(input: {

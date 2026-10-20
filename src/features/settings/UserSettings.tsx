@@ -1,4 +1,5 @@
 import { createMemo, Show } from "solid-js";
+import { AutomaticModePanel } from "./AutomaticModePanel";
 import { IrrigationControl } from "./IrrigationControl";
 import { SafetyTimeoutPanel } from "./SafetyTimeoutPanel";
 import type { UserSettingsData } from "./types";
@@ -18,6 +19,13 @@ export function UserSettings(props: { settings: UserSettingsData }) {
       {(region) => (
         <>
           <IrrigationControl region={region()} />
+          <AutomaticModePanel
+            regionId={region().id}
+            regionName={region().name}
+            automaticMode={region().automaticMode}
+            sprayerCount={region().sprayerCount}
+            readOnly
+          />
           <SafetyTimeoutPanel
             initialMin={region().safetyTimeout.min}
             initialMax={region().safetyTimeout.max}

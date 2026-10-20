@@ -19,6 +19,7 @@ Allow: /.well-known/security.txt
 Disallow: /_server/
 Disallow: /_build/
 Disallow: /api/
+Disallow: /newsletter
 Disallow: /uploads/
 Disallow: /login
 Disallow: /forgot-password

@@ -3,6 +3,8 @@ export const ROUTES = {
   login: "/login",
   forgotPassword: "/forgot-password",
   resetPassword: "/reset-password",
+  newsletterConfirm: "/newsletter/confirm",
+  newsletterUnsubscribe: "/newsletter/unsubscribe",
   home: "/dashboard",
   dashboard: "/dashboard",
   irrigationHistory: "/irrigation-history",
@@ -25,7 +27,14 @@ export const ROUTES = {
   cmsSubscribers: "/superadmin/subscribers",
 } as const;
 
-export const PUBLIC_ROUTES = [ROUTES.landing, ROUTES.login, ROUTES.forgotPassword, ROUTES.resetPassword] as const;
+export const PUBLIC_ROUTES = [
+  ROUTES.landing,
+  ROUTES.login,
+  ROUTES.forgotPassword,
+  ROUTES.resetPassword,
+  ROUTES.newsletterConfirm,
+  ROUTES.newsletterUnsubscribe,
+] as const;
 
 /**
  * Prefixes that require an authenticated session. Unknown paths deliberately

@@ -20,12 +20,19 @@ export function checkRateLimit(key: string, limit: number, windowMs: number): Ra
   const now = Date.now();
   const existing = buckets.get(key);
   if (!existing || existing.resetAt <= now) {
-    buckets.set(key, { count: 1, resetAt: now + windowMs });
-    if (buckets.size > MAX_BUCKETS) {
+    // Keep the map bounded before inserting: prune expired buckets, then evict
+    // the oldest insertion-order entry so memory cannot grow past MAX_BUCKETS.
+    if (buckets.size >= MAX_BUCKETS) {
       for (const [bucketKey, bucket] of buckets) {
         if (bucket.resetAt <= now) buckets.delete(bucketKey);
       }
+      while (buckets.size >= MAX_BUCKETS) {
+        const oldestKey = buckets.keys().next().value;
+        if (oldestKey === undefined) break;
+        buckets.delete(oldestKey);
+      }
     }
+    buckets.set(key, { count: 1, resetAt: now + windowMs });
     return { allowed: true, remaining: Math.max(0, limit - 1), retryAfterSec: 0 };
   }
   if (existing.count >= limit) {

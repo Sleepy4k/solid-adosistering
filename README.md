@@ -55,6 +55,8 @@ The full list is documented in `.env.example`. Important values:
 | `VITE_FIREBASE_*`                                                      | Restricted public Firebase client configuration.                                |
 | `VITE_FIREBASE_APP_CHECK_SITE_KEY`                                     | reCAPTCHA site key used by Firebase App Check.                                  |
 | `SMTP_*`, `EMAIL_FROM`, `SMTP_TLS_REJECT_UNAUTHORIZED`                 | Transactional email configuration. Keep TLS verification enabled in production. |
+| `NEWSLETTER_TOKEN_SECRET`                                              | Newsletter unsubscribe HMAC secret; 32+ characters outside development.         |
+| `NEWSLETTER_CONFIRM_TTL_HOURS`                                         | Confirmation link lifetime in hours, 1-168 (default 24).                        |
 | `UPLOAD_DIR`, `UPLOAD_MAX_BYTES`                                       | Private upload directory and maximum file size.                                 |
 | `SEED_PASSWORD`                                                        | Required for production seeding unless all role-specific overrides are set.     |
 
@@ -78,19 +80,22 @@ VITE_SITE_URL="https://adosistering.example" bun run build
 bun run start      # node .output/server/index.mjs
 ```
 
-The server requires `DATABASE_URL` and, in production, a valid HTTPS `APP_ORIGIN`. Configuration is validated on the first non-static request.
+The server requires `DATABASE_URL`; outside development it also requires `NEWSLETTER_TOKEN_SECRET` (at least 32 characters), and production requires a valid HTTPS `APP_ORIGIN`. `assertServerConfig` runs lazily on the first page or `/_server` request that needs it, including public newsletter pages and every `/_server` call.
 
 Nitro keeps `firebase-admin` external because bundling its CommonJS internals is unsafe. Deploy `.output` together with production `node_modules` (for example `bun install --frozen-lockfile --production` on the target host), or configure your bundler to package that dependency. Do not copy `.env` or `.data` into the public web root.
 
-Schema migrations are forward-only. Read [docs/deployment.md](./docs/deployment.md) before applying them to a production database; the BCNF migration requires a backup and a maintenance window.
+Schema migrations are forward-only. Read [docs/deployment.md](./docs/deployment.md) before applying them to a production database; the pending migration set requires a backup and a maintenance window.
 
 ## Data model
 
 The affected relations are normalized to BCNF so control settings, display preferences, and scope are stored once.
 
 - `Region` owns `dryMaxPercent`, `wetMinPercent`, `automaticMode`, and `safetyTimeoutMin`/`safetyTimeoutMax`. The Firebase `region_settings` node is a downstream mirror written by the app, not a second source of truth.
+- **Automatic mode is a region-wide hardware switch.** Enabling `Region.automaticMode` sets every active sprayer to `AUTO/OFF`; disabling sets `MANUAL/OFF`. SQL is authoritative and the Firebase mirror follows it. This application does not run a server-side watering scheduler, so device firmware must act on the per-sprayer AUTO mode; `showAutoIrrigation` only controls display visibility. Toggles serialize in process memory (`withAutomaticModeLock`), so keep the deployment at one replica until a distributed lock exists.
 - `IndicatorThreshold` keeps only per-user display fields (`displayDryMaxPercent`, `displayMoistMaxPercent`, `displayWetMinPercent`) plus `landPreference`.
 - `SensorReading`, `IrrigationEvent`, and `ActivityLog` no longer store `blockId`. Block scope is derived through `Sprayer -> Block`, and `SensorReading` is keyed by `(sprayerId, sourceKey)` so repeated same-second payloads are not discarded.
+- `NewsletterSubscriber` uses a `PENDING | CONFIRMED | UNSUBSCRIBED` lifecycle. A public signup creates a pending row for a new address, or rotates one for a pending/previously unsubscribed address; an already-confirmed address returns early without rotating its token. Only a button click on `/newsletter/confirm?token=...` confirms it. Migration `20261021140000_newsletter_double_opt_in_and_drop_api_key` backfills legacy subscribers (active to `CONFIRMED` with `consent_source='LEGACY_IMPORT'`, inactive to `UNSUBSCRIBED`) and removes the old `is_active` flag.
+- `UserProfile.apiKey` and the underlying `user_detail.api_key` column were removed, including its unique index. No server action or API route authenticates with an API key.
 - `AlertNotificationTarget` stores at most one normalized target (`REGION`, `BLOCK`, or `SPRAYER`) per alert instead of three nullable scope columns.
 - User deletion is a soft delete plus anonymization. Activity, irrigation, email, and alert rows keep their historical references instead of being orphaned or destroyed.
 
@@ -103,7 +108,7 @@ See [docs/normalization.md](./docs/normalization.md) for the functional dependen
 - **Login protection:** per-email attempts use a persistent atomic reservation in `login_throttle` (a MariaDB row lock via `INSERT IGNORE` plus `SELECT ... FOR UPDATE`), so replicas share one failure counter and cooldown ladder. A separate in-memory per-IP brake allows 100 attempts per 15 minutes and never escalates; client IPs that resolve to `"unknown"` are not used as a blocking key. A successful login clears only the per-email reservation, and blocked attempts do not extend an active cooldown.
 - **Reset tokens:** single-use, hashed, expire quickly, and invalidate existing sessions after a successful reset.
 - **Server actions:** Zod input validation, role checks, rate limits, generic error responses, and audit logging.
-- **CSRF:** same-origin `Origin`/`Referer` validation for unsafe methods, plus custom `X-Server-Id` headers used by SolidStart server functions.
+- **CSRF:** same-origin `Origin`/`Referer` validation for unsafe methods. `/_server` accepts only POST or the SolidStart `X-Server-Instance` header-marked GET transport; headerless GET and every other method return `405`, and any present `Origin`/`Referer` must match the exact configured origin.
 - **CSP:** per-request nonce in production; scripts receive the nonce through middleware and SSR. CSP is relaxed only for Vite development.
 - **Headers:** HSTS, `X-Frame-Options: DENY`, `nosniff`, strict referrer policy, permissions policy, COOP/CORP, and no `X-Powered-By`.
 - **Uploads:** private `.data/uploads` directory; only 32-hex PNG/JPEG filenames are served, with signature checks, size limits, `nosniff`, and immutable caching.
@@ -117,6 +122,7 @@ See [SECURITY.md](./SECURITY.md) for the deployment checklist and reporting proc
 - `/robots.txt`, `/llms.txt`, and `/llms-full.txt`
 - Canonical, hreflang, Open Graph, Twitter, theme-color, icons, web manifest, and JSON-LD
 - Only the landing page is indexable; dashboard/auth pages are `noindex`
+- Newsletter confirmation and unsubscribe token pages are `noindex` and disallowed in `/robots.txt`
 - Security contact metadata at `/.well-known/security.txt`
 
 ## Uploads and fonts

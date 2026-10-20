@@ -37,7 +37,6 @@ export async function getMyProfile(): Promise<MyProfile> {
           city: true,
           postalCode: true,
           deviceUsername: true,
-          apiKey: true,
         },
       },
     },

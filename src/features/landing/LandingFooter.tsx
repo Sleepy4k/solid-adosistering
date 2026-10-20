@@ -106,14 +106,16 @@ export default function LandingFooter(props: LandingFooterProps) {
                 class="h-12 whitespace-nowrap rounded-full bg-amber-400 px-8 text-sm font-semibold text-neutral-900 transition-colors duration-200 hover:bg-amber-300 disabled:opacity-60"
               >
                 {newsletterState() === "loading"
-                  ? "Menyimpan..."
+                  ? "Mengirim..."
                   : newsletterState() === "success"
-                    ? "Terdaftar!"
+                    ? "Cek Email"
                     : "Daftar"}
               </button>
             </form>
             {newsletterState() === "success" && (
-              <p class="mt-2 text-xs text-emerald-400">Email berhasil didaftarkan. Terima kasih!</p>
+              <p class="mt-2 text-xs text-emerald-400">
+                Pendaftaran berhasil. Silakan cek email Anda dan klik tautan konfirmasi untuk mengaktifkan langganan.
+              </p>
             )}
             {newsletterState() === "error" && (
               <p class="mt-2 text-xs text-rose-400">Gagal mendaftar. Silakan coba lagi.</p>

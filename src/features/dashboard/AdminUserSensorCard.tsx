@@ -100,7 +100,12 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
           {props.user.name.slice(0, 2).toUpperCase()}
         </div>
         <div class="min-w-0 flex-1">
-          <p class="truncate text-lg font-bold text-[#467A30]">{props.user.name}</p>
+          <div class="flex flex-wrap items-center gap-2">
+            <p class="min-w-0 truncate text-lg font-bold text-[#467A30]">{props.user.name}</p>
+            <Badge tone={props.user.isActive ? "success" : "danger"} class="shrink-0">
+              {props.user.isActive ? "Aktif" : "Nonaktif"}
+            </Badge>
+          </div>
           <p class="truncate text-sm text-[#808080]">
             {[props.user.domicile, props.user.city].filter(Boolean).join(", ") || "-"}
           </p>
@@ -110,15 +115,23 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
           <button
             type="button"
             class="rounded-lg p-1 text-[#467A30] hover:bg-gray-100"
-            aria-label="Menu pengguna"
+            aria-label={`Menu pengguna ${props.user.name}`}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen()}
             onClick={() => setMenuOpen((value) => !value)}
           >
             <EllipsisVertical size={20} />
           </button>
           <Show when={menuOpen()}>
-            <div class="absolute right-0 top-8 z-20 w-44 rounded-xl border border-gray-200 bg-white py-2 text-sm shadow-lg">
+            <div
+              role="menu"
+              aria-label={`Menu pengguna ${props.user.name}`}
+              class="absolute right-0 top-8 z-20 w-44 rounded-xl border border-gray-200 bg-white py-2 text-sm shadow-lg"
+            >
               <A
                 href={`${ROUTES.adminView}/${props.user.id}`}
+                role="menuitem"
+                aria-label={`Lihat detail ${props.user.name}`}
                 class="block px-4 py-2 text-[#4F4F4F] hover:bg-gray-50"
                 onClick={() => setMenuOpen(false)}
               >
@@ -126,12 +139,16 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
               </A>
               <A
                 href={`/user-management?search=${encodeURIComponent(props.user.email)}`}
+                role="menuitem"
+                aria-label={`Kelola pengguna ${props.user.name}`}
                 class="block px-4 py-2 text-[#4F4F4F] hover:bg-gray-50"
+                onClick={() => setMenuOpen(false)}
               >
                 Kelola Pengguna
               </A>
               <button
                 type="button"
+                role="menuitem"
                 class="block w-full px-4 py-2 text-left text-[#4F4F4F] hover:bg-gray-50"
                 onClick={() => setMenuOpen(false)}
               >

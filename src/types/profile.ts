@@ -15,6 +15,5 @@ export type MyProfile = {
     city: string | null;
     postalCode: string | null;
     deviceUsername: string | null;
-    apiKey: string | null;
   } | null;
 };

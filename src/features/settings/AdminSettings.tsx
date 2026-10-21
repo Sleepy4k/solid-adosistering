@@ -1,5 +1,4 @@
 import { createMemo, createSignal, Show } from "solid-js";
-import { AutomaticModePanel } from "./AutomaticModePanel";
 import { IrrigationControl } from "./IrrigationControl";
 import { RegionSelector } from "./RegionSelector";
 import type { AdminSettingsData } from "./types";
@@ -27,12 +26,6 @@ export function AdminSettings(props: { settings: AdminSettingsData }) {
             onChange={setSelectedRegionId}
           />
           <IrrigationControl region={region()} readOnly />
-          <AutomaticModePanel
-            regionId={region().id}
-            regionName={region().name}
-            automaticMode={region().automaticMode}
-            sprayerCount={region().sprayerCount}
-          />
         </>
       )}
     </Show>

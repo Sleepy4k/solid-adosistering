@@ -1,5 +1,4 @@
 import { createMemo, Show } from "solid-js";
-import { AutomaticModePanel } from "./AutomaticModePanel";
 import { IrrigationControl } from "./IrrigationControl";
 import type { UserSettingsData } from "./types";
 
@@ -18,13 +17,6 @@ export function UserSettings(props: { settings: UserSettingsData }) {
       {(region) => (
         <>
           <IrrigationControl region={region()} />
-          <AutomaticModePanel
-            regionId={region().id}
-            regionName={region().name}
-            automaticMode={region().automaticMode}
-            sprayerCount={region().sprayerCount}
-            readOnly
-          />
         </>
       )}
     </Show>

@@ -7,6 +7,7 @@ import { AppErrorFallback } from "~/components/shared/AppErrorBoundary";
 import { ConfirmProvider } from "~/components/shared/ConfirmProvider";
 import { DefaultMeta } from "~/components/shared/DefaultMeta";
 import { PageSkeleton } from "~/components/shared/PageSkeleton";
+import RouterProgress from "~/components/shared/RouterProgress";
 import { ToastProvider } from "~/components/shared/ToastProvider";
 import { PROTECTED_ROUTE_PREFIXES } from "~/constants/routes";
 import AppShell from "~/layouts/AppLayout";
@@ -19,20 +20,23 @@ function RootLayout(props: { children: JSX.Element }) {
     PROTECTED_ROUTE_PREFIXES.some((route) => location.pathname === route || location.pathname.startsWith(route + "/"));
 
   return (
-    <Show
-      when={isProtected()}
-      fallback={
-        <ErrorBoundary fallback={(error, reset) => <AppErrorFallback error={error} reset={reset} />}>
-          <Suspense fallback={<PageSkeleton />}>{props.children}</Suspense>
-        </ErrorBoundary>
-      }
-    >
-      <AppShell>
-        <ErrorBoundary fallback={(error, reset) => <AppErrorFallback error={error} reset={reset} />}>
-          {props.children}
-        </ErrorBoundary>
-      </AppShell>
-    </Show>
+    <>
+      <RouterProgress />
+      <Show
+        when={isProtected()}
+        fallback={
+          <ErrorBoundary fallback={(error, reset) => <AppErrorFallback error={error} reset={reset} />}>
+            <Suspense fallback={<PageSkeleton />}>{props.children}</Suspense>
+          </ErrorBoundary>
+        }
+      >
+        <AppShell>
+          <ErrorBoundary fallback={(error, reset) => <AppErrorFallback error={error} reset={reset} />}>
+            {props.children}
+          </ErrorBoundary>
+        </AppShell>
+      </Show>
+    </>
   );
 }
 

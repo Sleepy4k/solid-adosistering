@@ -2,12 +2,14 @@
 
 import { ActivityAction, Prisma } from "@prisma/client";
 import { redirect } from "@solidjs/router";
+import { normalizePolygonPoints } from "~/lib/shared/polygon";
+import type { BlockCreateResult, MapPoint, MapConfig, MapDisplayConfig, MapWorkspace } from "~/types/map";
 import { prisma } from "../db/prisma";
 import { assertSuperadmin } from "../auth/security";
 import { getSession } from "../auth/session";
-import { logActivity, pointsToPolygonGeojson } from "../domain";
-import type { MapPoint, MapConfig, MapDisplayConfig, MapWorkspace } from "~/types/map";
+import { decimalToString, logActivity, pointsToPolygonGeojson } from "../domain";
 import { blockGeometrySchema, mapConfigSchema, mapDisplaySchema, parseInput } from "../validation";
+import { createBlock } from "./blocks";
 
 export type { MapPoint, MapConfig, MapDisplayConfig, MapWorkspace };
 
@@ -35,7 +37,7 @@ export async function getMapWorkspace(): Promise<MapWorkspace> {
         longitude: true,
         blocks: {
           orderBy: { name: "asc" },
-          select: { id: true, name: true, polygonGeojson: true },
+          select: { id: true, name: true, polygonGeojson: true, areaHectare: true, firebaseSyncStatus: true },
         },
       },
     }),
@@ -46,11 +48,33 @@ export async function getMapWorkspace(): Promise<MapWorkspace> {
     regions: regions.map((region) => ({
       id: region.id,
       name: region.name,
-      latitude: region.latitude ? Number(region.latitude) : null,
-      longitude: region.longitude ? Number(region.longitude) : null,
-      blocks: region.blocks,
+      latitude: region.latitude === null ? null : Number(region.latitude),
+      longitude: region.longitude === null ? null : Number(region.longitude),
+      blocks: region.blocks.map((block) => ({
+        id: block.id,
+        name: block.name,
+        polygonGeojson: block.polygonGeojson,
+        areaHectare: decimalToString(block.areaHectare),
+        firebaseSyncStatus: block.firebaseSyncStatus,
+      })),
     })),
   };
+}
+
+/**
+ * Block creation entry point for the map configuration screen. The caller must
+ * be a superadmin; createBlock performs the actual validation, scoping,
+ * Firebase provisioning, and the single audit row.
+ */
+export async function createBlockFromMap(input: {
+  regionId: string;
+  name: string;
+  areaHectare?: string | null;
+}): Promise<BlockCreateResult> {
+  const session = await getSession();
+  if (!session) throw redirect("/login");
+  assertSuperadmin(session);
+  return createBlock(input);
 }
 
 export async function saveMapConfig(input: MapConfig) {
@@ -104,25 +128,36 @@ export async function saveMapDisplayConfig(input: MapDisplayConfig) {
 }
 
 export async function saveBlockMapGeometry(input: { blockId: string; points: MapPoint[] }) {
-  const data = parseInput(blockGeometrySchema, input);
   const session = await getSession();
   if (!session) throw redirect("/login");
-  assertSuperadmin(session);
+  const actor = assertSuperadmin(session);
 
-  const geojson = pointsToPolygonGeojson(data.points);
-  const block = await prisma.block.update({
-    where: { id: data.blockId },
-    data: { polygonGeojson: geojson ?? Prisma.JsonNull },
-    select: { id: true, regionId: true },
-  });
+  const data = parseInput(blockGeometrySchema, input);
+  const points = normalizePolygonPoints(data.points);
+  const geojson = pointsToPolygonGeojson(points);
+
+  let block: { id: string; regionId: string };
+  try {
+    block = await prisma.block.update({
+      where: { id: data.blockId },
+      data: { polygonGeojson: geojson ?? Prisma.JsonNull, updatedById: actor.id },
+      select: { id: true, regionId: true },
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      throw new Response("Block tidak ditemukan.", { status: 404 });
+    }
+    throw error;
+  }
 
   await logActivity({
-    actorId: session.id,
+    actorId: actor.id,
     regionId: block.regionId,
     action: ActivityAction.UPDATE,
     entityType: "BlockMapGeometry",
     entityId: block.id,
-    metadata: { pointCount: data.points.length },
-  });
+    metadata: { pointCount: points.length },
+  }).catch((error: unknown) => console.error("[map] failed to record block geometry audit", error));
+
   return { ok: true };
 }

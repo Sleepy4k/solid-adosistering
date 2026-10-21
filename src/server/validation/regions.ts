@@ -1,6 +1,48 @@
 import { z } from "zod";
 import { inclusiveJakartaDayCount, isValidDateOnly } from "~/lib/shared/datetime";
+import {
+  hasDuplicateVertices,
+  POLYGON_MAX_POINTS,
+  POLYGON_MIN_AREA_DEGREES2,
+  polygonAreaDegrees2,
+} from "~/lib/shared/polygon";
 import { firebaseKeySchema, firebaseNameSchema, idSchema, nameSchema, optionalText, percentSchema } from "./common";
+
+const MAX_AREA_HECTARE = 99_999_999.99;
+
+/**
+ * Accept a comma decimal separator (`12,5`) but keep the canonical form with a
+ * dot. Leading/trailing dots are expanded (`0.5`, `5`) so both editor habits
+ * round-trip, while exponents and unit suffixes remain invalid.
+ */
+function normalizeAreaText(raw: string): string {
+  let text = raw.trim().replace(",", ".");
+  if (text.startsWith(".")) text = `0${text}`;
+  if (text.endsWith(".")) text = text.slice(0, -1);
+  return text;
+}
+
+export const areaHectareSchema = z.preprocess(
+  (value) => {
+    if (value === null || value === undefined) return undefined;
+    if (typeof value === "number") return Number.isFinite(value) ? String(value) : value;
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      return trimmed === "" ? undefined : trimmed;
+    }
+    return value;
+  },
+  z
+    .string({ error: "Luas area harus berupa angka." })
+    .transform(normalizeAreaText)
+    .refine(
+      (value) => /^-?\d+(?:\.\d{1,2})?$/.test(value),
+      "Luas area harus berupa angka dengan maksimal 2 angka desimal.",
+    )
+    .refine((value) => Number(value) > 0, "Luas area harus lebih besar dari 0.")
+    .refine((value) => Number(value) <= MAX_AREA_HECTARE, "Luas area maksimal 99.999.999,99 hektare.")
+    .optional(),
+);
 
 export const coordinateSchema = z
   .union([z.string(), z.number()])
@@ -29,14 +71,13 @@ export const updateRegionConfigSchema = z.object({
 export const createBlockSchema = z.object({
   regionId: idSchema,
   name: firebaseNameSchema,
-  areaHectare: optionalText(32),
-  description: optionalText(1000),
+  areaHectare: areaHectareSchema,
 });
 
 export const updateBlockSchema = z.object({
   id: idSchema,
   name: firebaseNameSchema,
-  areaHectare: optionalText(32),
+  areaHectare: areaHectareSchema,
 });
 
 export const createSprayerSchema = z.object({
@@ -54,14 +95,26 @@ export const overridePumpSchema = z.object({
 });
 
 export const mapPointSchema = z.object({
-  lat: z.number().min(-90).max(90),
-  lng: z.number().min(-180).max(180),
+  lat: z.number().finite().min(-90).max(90),
+  lng: z.number().finite().min(-180).max(180),
 });
 
-export const blockGeometrySchema = z.object({
-  blockId: idSchema,
-  points: z.array(mapPointSchema).min(3, "Polygon membutuhkan minimal 3 titik koordinat.").max(500),
-});
+export const blockGeometrySchema = z
+  .object({
+    blockId: idSchema,
+    points: z
+      .array(mapPointSchema)
+      .min(3, "Polygon membutuhkan minimal 3 titik koordinat.")
+      .max(POLYGON_MAX_POINTS, `Polygon maksimal ${POLYGON_MAX_POINTS} titik koordinat.`),
+  })
+  .refine((data) => !hasDuplicateVertices(data.points), {
+    message: "Polygon memiliki titik koordinat duplikat.",
+    path: ["points"],
+  })
+  .refine((data) => polygonAreaDegrees2(data.points) > POLYGON_MIN_AREA_DEGREES2, {
+    message: "Polygon tidak memiliki luas yang valid (titik-titik segaris).",
+    path: ["points"],
+  });
 
 export const historyFiltersSchema = z.object({
   blockId: idSchema.optional(),

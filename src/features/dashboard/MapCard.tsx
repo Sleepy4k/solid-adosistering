@@ -68,9 +68,9 @@ export function MapCard(props: { regions?: DashboardRegion[] }) {
             Peta Area Irigasi IoT
           </span>
         }
+        description="Klik area untuk melihat nama Blok"
       />
-      <p class="px-5 py-2.5 text-xs text-[#6B7280]">Klik area untuk melihat nama Blok</p>
-      <LeafletMap markers={markers()} polygons={polygons()} class="h-80" />
+      <LeafletMap markers={markers()} polygons={polygons()} class="h-[clamp(240px,45dvh,320px)]" />
     </Card>
   );
 }

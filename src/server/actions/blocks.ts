@@ -1,7 +1,8 @@
 "use server";
 
-import { ActivityAction, IrrigationMode, RelayState, SyncStatus, type IrrigationEvent } from "@prisma/client";
+import { ActivityAction, IrrigationMode, Prisma, RelayState, SyncStatus, type IrrigationEvent } from "@prisma/client";
 import { redirect } from "@solidjs/router";
+import type { BlockCreateResult } from "~/types/map";
 import { prisma } from "../db/prisma";
 import {
   provisionBlockNode,
@@ -12,7 +13,7 @@ import {
 import { assertAdminOrHigher } from "../auth/security";
 import { getSession } from "../auth/session";
 import { checkRateLimit, rateLimitResponse } from "../http/rateLimit";
-import { getScopedRegionIds, logActivity } from "../domain";
+import { decimalToString, getScopedRegionIds, logActivity } from "../domain";
 import {
   createBlockSchema,
   createSprayerSchema,
@@ -50,12 +51,15 @@ async function withPumpControlLock<T>(sprayerId: string, fn: () => Promise<T>): 
   }
 }
 
+function isUniqueConstraint(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+}
+
 export async function createBlock(input: {
   regionId: string;
   name: string;
-  areaHectare?: string;
-  description?: string;
-}) {
+  areaHectare?: string | null;
+}): Promise<BlockCreateResult> {
   const data = parseInput(createBlockSchema, input);
   const session = await getSession();
   if (!session) throw redirect("/login");
@@ -64,31 +68,54 @@ export async function createBlock(input: {
     const scoped = await getScopedRegionIds(session);
     if (!scoped?.includes(data.regionId)) throw new Response("Forbidden", { status: 403 });
   }
-  const region = await prisma.region.findUniqueOrThrow({ where: { id: data.regionId } });
-  const block = await prisma.block.create({
-    data: {
-      regionId: region.id,
-      name: data.name,
-      areaHectare: data.areaHectare,
-      createdById: actor.id,
-      firebaseSyncStatus: SyncStatus.PENDING,
-    },
+
+  const region = await prisma.region.findUnique({
+    where: { id: data.regionId },
+    select: { id: true, name: true },
   });
+  if (!region) throw new Response("Region tidak ditemukan.", { status: 404 });
+
+  let block: {
+    id: string;
+    regionId: string;
+    name: string;
+    areaHectare: { toString(): string } | null;
+    firebaseSyncStatus: SyncStatus;
+  };
+  try {
+    block = await prisma.block.create({
+      data: {
+        regionId: region.id,
+        name: data.name,
+        areaHectare: data.areaHectare,
+        createdById: actor.id,
+        firebaseSyncStatus: SyncStatus.PENDING,
+      },
+      select: { id: true, regionId: true, name: true, areaHectare: true, firebaseSyncStatus: true },
+    });
+  } catch (error) {
+    if (isUniqueConstraint(error)) {
+      throw new Response("Block dengan nama tersebut sudah ada di region ini.", { status: 409 });
+    }
+    throw error;
+  }
 
   let synced = false;
   try {
     await provisionBlockNode({ regionName: region.name, blockName: block.name });
     synced = true;
-  } catch {
+  } catch (error) {
+    console.error("[block] Firebase provisioning failed", error);
     synced = false;
   }
 
-  const result = synced
-    ? await prisma.block.update({
-        where: { id: block.id },
-        data: { firebaseSyncStatus: SyncStatus.SYNCED, firebaseSyncedAt: new Date() },
-      })
-    : await prisma.block.update({ where: { id: block.id }, data: { firebaseSyncStatus: SyncStatus.FAILED } });
+  const result = await prisma.block.update({
+    where: { id: block.id },
+    data: synced
+      ? { firebaseSyncStatus: SyncStatus.SYNCED, firebaseSyncedAt: new Date() }
+      : { firebaseSyncStatus: SyncStatus.FAILED },
+    select: { id: true, regionId: true, name: true, areaHectare: true, firebaseSyncStatus: true },
+  });
 
   // Audit once, outside the Firebase try/catch: a successful provision must not
   // be reported as FAILED because the audit insert failed, and a failed
@@ -99,9 +126,15 @@ export async function createBlock(input: {
     action: ActivityAction.CREATE,
     entityType: "Block",
     entityId: block.id,
-  }).catch(() => undefined);
+  }).catch((error: unknown) => console.error("[block] audit log failed", error));
 
-  return result;
+  return {
+    id: result.id,
+    regionId: result.regionId,
+    name: result.name,
+    areaHectare: decimalToString(result.areaHectare),
+    firebaseSyncStatus: result.firebaseSyncStatus,
+  };
 }
 
 export async function updateBlock(input: { id: string; name: string; areaHectare?: string }) {

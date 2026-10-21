@@ -18,6 +18,13 @@ export function decimalCoordinate(value: CoordinateInput, label: "Latitude" | "L
   return text;
 }
 
+/** Serialize a Prisma Decimal (or any decimal-like value) for a JSON DTO. */
+export function decimalToString(value: { toString(): string } | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  const text = value.toString();
+  return text === "NaN" ? null : text;
+}
+
 export function pointIsValid(point: MapPoint) {
   return (
     Number.isFinite(point.lat) &&

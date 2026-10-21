@@ -1,16 +1,17 @@
 import { ChevronDown } from "lucide-solid";
-import { createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
 import { Badge } from "~/components/ui/Badge";
 import { Button } from "~/components/ui/Button";
 import { Card, CardHeader } from "~/components/ui/Card";
 import type { MoistureStatus } from "@prisma/client";
 import { subscribeToBlock, isFirebaseConfigured } from "~/lib/client/firebaseClient";
-import type { LiveSprayerData, Threshold } from "~/lib/shared/irrigation";
+import { useNow } from "~/lib/client/liveDate";
+import { firebaseSegment, type LiveSprayerData, type Threshold } from "~/lib/shared/irrigation";
 import { overridePump } from "~/server/actions/blocks";
 import { useConfirm } from "~/components/shared/ConfirmProvider";
 import { InlineError } from "~/components/shared/AppErrorBoundary";
 import { useToast } from "~/components/shared/ToastProvider";
-import { aggregateLive, moistureTone } from "./helpers";
+import { aggregateLive, deriveLiveStatus, moistureTone } from "./helpers";
 import { SprayerCard, type SprayerMeta } from "./SprayerCard";
 
 export function BlockCard(props: {
@@ -24,15 +25,68 @@ export function BlockCard(props: {
   readOnly?: boolean;
 }) {
   const [liveData, setLiveData] = createSignal<LiveSprayerData[]>([]);
-  const [connected, setConnected] = createSignal<boolean>(false);
   const [loading, setLoading] = createSignal<boolean>(true);
   const [error, setError] = createSignal<string>("");
   const [expanded, setExpanded] = createSignal<boolean>(true);
   const confirm = useConfirm();
   const { notify } = useToast();
+  const nowMs = useNow(30_000);
 
-  const sprayerMeta = (hardwareId: string) => props.sprayers.find((sprayer) => sprayer.hardwareId === hardwareId);
-  const aggregate = () => aggregateLive(liveData());
+  /**
+   * Live rows are keyed by the Firebase node key: usually the exact
+   * `hardwareId`, but legacy nodes used the sanitized path segment. Match the
+   * raw key first so IDs containing `.`/`#`/`$` are not silently rewritten.
+   */
+  const findMeta = (sprayerId: string) =>
+    props.sprayers.find((sprayer) => sprayer.hardwareId === sprayerId) ??
+    props.sprayers.find((sprayer) => firebaseSegment(sprayer.hardwareId) === sprayerId);
+  const sprayerMeta = (sprayerId: string) => findMeta(sprayerId);
+  const monitorError = () => error().length > 0;
+
+  // Map each live row back to the configured inventory entry through
+  // `findMeta`, then merge it with that entry below so offline sprayers stay
+  // visible with `data: null` until they report again.
+  const liveByMetaId = createMemo(() => {
+    const map = new Map<string, LiveSprayerData>();
+    for (const row of liveData()) {
+      const meta = findMeta(row.sprayerId);
+      if (meta) map.set(meta.id, row);
+    }
+    return map;
+  });
+
+  const sprayerRows = createMemo(() =>
+    props.sprayers.map((meta) => ({
+      meta,
+      data: liveByMetaId().get(meta.id) ?? null,
+    })),
+  );
+
+  const freshLive = createMemo(() => {
+    const tick = nowMs();
+    const failed = monitorError();
+    return sprayerRows()
+      .map((row) => row.data)
+      .filter((row): row is LiveSprayerData => row !== null)
+      .filter((row) => {
+        const status = deriveLiveStatus(row, tick, failed);
+        return status === "watering" || status === "no-flow" || status === "idle";
+      });
+  });
+
+  // Zeros are not a measurement: when no device is fresh there is no aggregate
+  // at all, and the card renders an explicit empty state instead of `0.00`.
+  const aggregate = createMemo(() => {
+    const rows = freshLive();
+    return rows.length > 0 ? aggregateLive(rows) : null;
+  });
+  const liveSummary = () => {
+    if (loading()) return { label: "Memuat", tone: "muted" as const };
+    if (monitorError()) return { label: "Data Tidak Tersedia", tone: "warning" as const };
+    return freshLive().length > 0
+      ? { label: "Realtime", tone: "success" as const }
+      : { label: "Menunggu Data", tone: "warning" as const };
+  };
   const threshold = () =>
     props.threshold
       ? { ...props.threshold, volumeDivider: props.volumeDivider ?? 1 }
@@ -45,7 +99,24 @@ export function BlockCard(props: {
           landPreference: "LEMBAB" as MoistureStatus,
           volumeDivider: props.volumeDivider ?? 1,
         };
-  const moisture = () => moistureTone(aggregate().avgMoisture, threshold());
+  const moisture = () => {
+    const summary = aggregate();
+    return summary
+      ? moistureTone(summary.avgMoisture, threshold())
+      : { label: "Belum Ada Data", tone: "muted" as const };
+  };
+  const avgMoistureText = () => {
+    const summary = aggregate();
+    return summary ? `${summary.avgMoisture.toFixed(2)}%` : "-";
+  };
+  const avgFlowText = () => {
+    const summary = aggregate();
+    return summary ? `${summary.avgFlow.toFixed(2)} L/min` : "-";
+  };
+  const totalVolumeText = () => {
+    const summary = aggregate();
+    return summary ? `${summary.totalVolume.toFixed(2)} L` : "-";
+  };
   const showWind = () => props.showWindDirection ?? true;
   const showAutoIrrig = () => props.showAutoIrrigation ?? true;
 
@@ -59,13 +130,11 @@ export function BlockCard(props: {
       { regionName: props.regionName, blockName: props.blockName, threshold: threshold() },
       (sprayers) => {
         setLiveData(sprayers);
-        setConnected(sprayers.length > 0);
         setLoading(false);
         setError("");
       },
       (err) => {
         setLoading(false);
-        setConnected(false);
         setError(err.message);
       },
     );
@@ -134,7 +203,7 @@ export function BlockCard(props: {
         title={props.blockName}
         actions={
           <div class="flex flex-wrap items-center gap-2">
-            <Badge tone={connected() ? "success" : "warning"}>{connected() ? "Realtime" : "Menunggu Data"}</Badge>
+            <Badge tone={liveSummary().tone}>{liveSummary().label}</Badge>
             <Show when={!props.readOnly}>
               <Button tone="primary" onClick={() => bulkControl("ON")}>
                 Nyalakan Semua
@@ -161,17 +230,17 @@ export function BlockCard(props: {
           <div class="rounded-xl border border-gray-200 bg-white p-4">
             <p class="mb-1 text-sm text-gray-600">Kelembaban Tanah Rata-Rata</p>
             <div class="flex items-end justify-between gap-2">
-              <p class="text-2xl font-bold text-[#4F4F4F]">{aggregate().avgMoisture.toFixed(2)}%</p>
+              <p class="text-2xl font-bold text-[#4F4F4F]">{avgMoistureText()}</p>
               <Badge tone={moisture().tone}>{moisture().label}</Badge>
             </div>
           </div>
           <div class="rounded-xl border border-gray-200 bg-white p-4">
             <p class="mb-1 text-sm text-gray-600">Debit Rata-Rata</p>
-            <p class="text-2xl font-bold text-[#4F4F4F]">{aggregate().avgFlow.toFixed(2)} L/min</p>
+            <p class="text-2xl font-bold text-[#4F4F4F]">{avgFlowText()}</p>
           </div>
           <div class="rounded-xl border border-gray-200 bg-white p-4">
             <p class="mb-1 text-sm text-gray-600">Total Volume Air</p>
-            <p class="text-2xl font-bold text-[#4F4F4F]">{aggregate().totalVolume.toFixed(2)} L</p>
+            <p class="text-2xl font-bold text-[#4F4F4F]">{totalVolumeText()}</p>
           </div>
         </div>
 
@@ -193,18 +262,20 @@ export function BlockCard(props: {
             }
           >
             <Show
-              when={liveData().length > 0}
+              when={sprayerRows().length > 0}
               fallback={
                 <div class="col-span-full rounded-xl border border-gray-200 bg-gray-50 p-8 text-center text-sm text-gray-600">
                   Belum ada data sprayer.
                 </div>
               }
             >
-              <For each={liveData()}>
-                {(sprayer) => (
+              <For each={sprayerRows()}>
+                {(row) => (
                   <SprayerCard
-                    data={sprayer}
-                    meta={sprayerMeta(sprayer.sprayerId)}
+                    data={row.data}
+                    meta={row.meta}
+                    nowMs={nowMs()}
+                    monitorError={monitorError()}
                     threshold={threshold()}
                     showWindDirection={showWind()}
                     showAutoIrrigation={showAutoIrrig()}

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { inclusiveJakartaDayCount, isValidDateOnly } from "~/lib/shared/datetime";
 import { firebaseKeySchema, firebaseNameSchema, idSchema, nameSchema, optionalText, percentSchema } from "./common";
 
 export const coordinateSchema = z
@@ -81,8 +82,40 @@ export const historyFiltersSchema = z.object({
   limit: z.number().int().min(1).max(85).optional(),
 });
 
-export const statisticsSchema = z.object({
-  blockId: idSchema.optional(),
-  regionId: idSchema.optional(),
-  range: z.enum(["today", "7d", "30d"]),
-});
+const statisticsDateSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal tidak valid.")
+  .refine((value) => isValidDateOnly(value), "Tanggal tidak valid.")
+  .optional();
+
+const MAX_STATISTICS_RANGE_DAYS = 31;
+
+export const statisticsSchema = z
+  .object({
+    blockId: idSchema.optional(),
+    regionId: idSchema.optional(),
+    range: z.enum(["today", "7d", "30d"]).optional(),
+    dateFrom: statisticsDateSchema,
+    dateTo: statisticsDateSchema,
+  })
+  .refine((data) => Boolean(data.dateFrom) === Boolean(data.dateTo), {
+    message: "Tanggal awal dan tanggal akhir harus diisi bersama.",
+    path: ["dateFrom"],
+  })
+  .refine((data) => !data.dateFrom || !data.dateTo || data.dateFrom <= data.dateTo, {
+    message: "Tanggal awal tidak boleh melewati tanggal akhir.",
+    path: ["dateTo"],
+  })
+  .refine(
+    (data) => {
+      if (!data.dateFrom || !data.dateTo) return true;
+      const days = inclusiveJakartaDayCount(data.dateFrom, data.dateTo);
+      return Number.isFinite(days) && days <= MAX_STATISTICS_RANGE_DAYS;
+    },
+    { message: `Rentang tanggal maksimal ${MAX_STATISTICS_RANGE_DAYS} hari.`, path: ["dateTo"] },
+  )
+  .refine((data) => Boolean(data.dateFrom) || Boolean(data.range), {
+    message: "Pilih rentang statistik.",
+    path: ["range"],
+  });

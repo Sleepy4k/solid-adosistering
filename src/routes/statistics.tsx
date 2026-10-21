@@ -1,24 +1,97 @@
 import { query, createAsync } from "@solidjs/router";
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, Suspense } from "solid-js";
-import { ChartBar, Activity } from "lucide-solid";
+import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, Suspense } from "solid-js";
+import { X } from "lucide-solid";
 import { PageMeta } from "~/components/shared/PageMeta";
 import { getMyRegions } from "~/server/actions/regions";
 import { getStatistics } from "~/server/actions/statistics";
 import { finishProgress, startProgress } from "~/lib/client/progress";
 import { SkCard } from "~/components/shared/Skeleton";
 import { SelectSearch } from "~/components/ui/SelectSearch";
+import { DatePicker } from "~/components/ui/DatePicker";
+import {
+  addJakartaDays,
+  endOfJakartaDayExclusive,
+  inclusiveJakartaDayCount,
+  isValidDateOnly,
+  jakartaDateKey,
+  startOfJakartaDay,
+} from "~/lib/shared/datetime";
 import type { Chart as ChartType } from "chart.js";
 
 type Range = "today" | "7d" | "30d";
-type DataMode = "raw" | "smooth";
-type Reading = Awaited<ReturnType<typeof getStatistics>>["readings"][number];
+type StatsResult = Awaited<ReturnType<typeof getStatistics>>;
+type StatsArgs = { range: Range; dateFrom?: string; dateTo?: string; regionId?: string };
+
+const PRESET_DAYS: Record<Range, number> = { today: 1, "7d": 7, "30d": 30 };
+const DAY_MS = 86_400_000;
+const MAX_RANGE_DAYS = 31;
 
 const loadStats = query(
-  (range: Range, regionId: string) => getStatistics({ range, regionId: regionId || undefined }),
+  (args: StatsArgs) =>
+    getStatistics({
+      range: args.range,
+      regionId: args.regionId || undefined,
+      dateFrom: args.dateFrom || undefined,
+      dateTo: args.dateTo || undefined,
+    }),
   "statistics",
 );
 const loadRegions = query(() => getMyRegions(), "my-regions");
-export const route = { preload: () => loadStats("today", "") };
+export const route = { preload: () => loadStats({ range: "today", regionId: "" }) };
+
+function resolveWindow(args: StatsArgs): { from: Date; to: Date } {
+  if (
+    args.dateFrom &&
+    args.dateTo &&
+    isValidDateOnly(args.dateFrom) &&
+    isValidDateOnly(args.dateTo) &&
+    args.dateFrom <= args.dateTo
+  ) {
+    return { from: startOfJakartaDay(args.dateFrom), to: endOfJakartaDayExclusive(args.dateTo) };
+  }
+
+  const to = endOfJakartaDayExclusive(jakartaDateKey(new Date()));
+  return { from: addJakartaDays(to, -PRESET_DAYS[args.range]), to };
+}
+
+function rangeError(from: string, to: string): string {
+  if (!from && !to) return "";
+  if (!from || !to) return "Lengkapi tanggal awal dan tanggal akhir.";
+  if (!isValidDateOnly(from) || !isValidDateOnly(to)) return "Format tanggal tidak valid.";
+  const days = inclusiveJakartaDayCount(from, to);
+  if (!Number.isFinite(days)) return "Tanggal awal tidak boleh melewati tanggal akhir.";
+  if (days > MAX_RANGE_DAYS) return `Rentang tanggal maksimal ${MAX_RANGE_DAYS} hari.`;
+  return "";
+}
+
+function fallbackStats(args: StatsArgs): StatsResult {
+  // An invalid custom range must never widen the request: fall back to the
+  // preset window the user still has selected.
+  const presetArgs: StatsArgs = { range: args.range, regionId: args.regionId };
+  const { from, to } = resolveWindow(rangeError(args.dateFrom ?? "", args.dateTo ?? "") ? presetArgs : args);
+  const fromIso = from.toISOString();
+  return {
+    granularity: to.getTime() - from.getTime() <= DAY_MS ? "2h" : "day",
+    buckets: [],
+    summary: {
+      averageMoisture: null,
+      averageFlow: null,
+      totalFlow: 0,
+      readingCount: 0,
+      irrigationCount: 0,
+      autoCount: 0,
+      manualCount: 0,
+    },
+    since: fromIso,
+    from: fromIso,
+    to: to.toISOString(),
+  };
+}
+
+function toMessage(error: unknown) {
+  if (!import.meta.env.PROD && error instanceof Error) return error.message;
+  return "Data statistik belum bisa dimuat.";
+}
 
 function StatBadge(props: { label: string; value: string; sub?: string; accent?: boolean }) {
   return (
@@ -44,9 +117,10 @@ function MiniStat(props: { label: string; value: string; sub?: string; labelColo
   );
 }
 
-function LineChart(props: { labels: string[]; data: number[]; label: string; color: string; yMax: number }) {
+function LineChart(props: { labels: string[]; data: (number | null)[]; label: string; color: string; yMax: number }) {
   let canvas: HTMLCanvasElement | undefined;
   let chart: ChartType | undefined;
+  let disposed = false;
 
   const syncChart = () => {
     if (!chart) return;
@@ -57,13 +131,13 @@ function LineChart(props: { labels: string[]; data: number[]; label: string; col
       yScale.min = 0;
       yScale.max = props.yMax;
     }
-    chart.update();
+    chart.update("none");
   };
 
   onMount(async () => {
     const { Chart, registerables } = await import("chart.js");
     Chart.register(...registerables);
-    if (!canvas) return;
+    if (disposed || !canvas) return;
     chart = new Chart(canvas, {
       type: "line",
       data: {
@@ -79,6 +153,7 @@ function LineChart(props: { labels: string[]; data: number[]; label: string; col
             pointHoverRadius: 4,
             tension: 0.35,
             fill: true,
+            spanGaps: false,
           },
         ],
       },
@@ -102,7 +177,10 @@ function LineChart(props: { labels: string[]; data: number[]; label: string; col
     syncChart();
   });
 
-  onCleanup(() => chart?.destroy());
+  onCleanup(() => {
+    disposed = true;
+    chart?.destroy();
+  });
 
   return (
     <div class="animate-in relative h-48">
@@ -111,150 +189,96 @@ function LineChart(props: { labels: string[]; data: number[]; label: string; col
   );
 }
 
-function dateKey(date: Date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function buildTimeSlots(range: Range) {
-  if (range === "today") {
-    return {
-      labels: Array.from({ length: 12 }, (_, i) => `${String(i * 2).padStart(2, "0")}:00`),
-      keys: Array.from({ length: 12 }, (_, i) => String(i).padStart(2, "0")),
-    };
-  }
-
-  const days = range === "7d" ? 7 : 30;
-  const dates = Array.from({ length: days }, (_, i) => {
-    const date = new Date();
-    date.setHours(0, 0, 0, 0);
-    date.setDate(date.getDate() - (days - 1 - i));
-    return date;
-  });
-  return {
-    labels: dates.map((date) => date.toLocaleDateString("id-ID", { day: "2-digit", month: "short" })),
-    keys: dates.map(dateKey),
-  };
-}
-
-function bucketIndex(range: Range, reading: Reading, keys: string[]) {
-  const date = new Date(reading.recordedAt);
-  if (range === "today") {
-    if (dateKey(date) !== dateKey(new Date())) return -1;
-    return Math.floor(date.getHours() / 2);
-  }
-  return keys.indexOf(dateKey(date));
-}
-
-function average(values: number[]) {
-  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
-}
-
-function interpolateZeros(values: number[]): number[] {
-  const result = [...values];
-  let i = 0;
-  while (i < result.length) {
-    if (result[i] !== 0) {
-      i++;
-      continue;
-    }
-    let prevIdx = i - 1;
-    while (prevIdx >= 0 && result[prevIdx] === 0) prevIdx--;
-    let nextIdx = i + 1;
-    while (nextIdx < result.length && result[nextIdx] === 0) nextIdx++;
-    const prevVal = prevIdx >= 0 ? result[prevIdx] : nextIdx < result.length ? result[nextIdx] : 0;
-    const nextVal = nextIdx < result.length ? result[nextIdx] : prevVal;
-    const span = nextIdx - (prevIdx >= 0 ? prevIdx : 0);
-    for (let j = (prevIdx >= 0 ? prevIdx : 0) + 1; j < nextIdx; j++) {
-      const t = span > 0 ? (j - (prevIdx >= 0 ? prevIdx : 0)) / span : 0;
-      result[j] = prevVal + t * (nextVal - prevVal);
-    }
-    i = nextIdx;
-  }
-  return result;
-}
-
-function smooth(values: number[]) {
-  const n = values.length;
-  if (n < 2) return [...values];
-  const filled = interpolateZeros(values);
-  const weights = [0.05, 0.25, 0.4, 0.25, 0.05];
-  return filled.map((_, i) => {
-    let sum = 0;
-    let wsum = 0;
-    for (let k = -2; k <= 2; k++) {
-      const idx = i + k;
-      if (idx < 0 || idx >= n) continue;
-      const w = weights[k + 2];
-      sum += filled[idx] * w;
-      wsum += w;
-    }
-    return wsum > 0 ? sum / wsum : filled[i];
-  });
-}
-
-function waterValue(reading: Reading) {
-  return Number(reading.flowLmin ?? 0);
-}
-
-function toMessage(error: unknown) {
-  if (!import.meta.env.PROD && error instanceof Error) return error.message;
-  return "Data statistik belum bisa dimuat.";
-}
-
 export default function Statistik() {
   const [range, setRange] = createSignal<Range>("today");
-  const [dataMode, setDataMode] = createSignal<DataMode>("raw");
+  const [dateFrom, setDateFrom] = createSignal<string>("");
+  const [dateTo, setDateTo] = createSignal<string>("");
   const [regionId, setRegionId] = createSignal<string>("");
   const [loadError, setLoadError] = createSignal<string>("");
 
   const regions = createAsync(() => loadRegions());
 
+  const rangeValidation = createMemo(() => rangeError(dateFrom(), dateTo()));
+
+  const selectPreset = (preset: Range) => {
+    setDateFrom("");
+    setDateTo("");
+    setRange(preset);
+  };
+
+  const clearRange = () => {
+    setDateFrom("");
+    setDateTo("");
+  };
+
   const stats = createAsync(async () => {
     setLoadError("");
+    const from = dateFrom();
+    const to = dateTo();
+    const args: StatsArgs =
+      from && to
+        ? { range: range(), regionId: regionId(), dateFrom: from, dateTo: to }
+        : { range: range(), regionId: regionId() };
+
+    // Never hit the server with half a custom range; the inline message explains why.
+    if (rangeValidation()) return fallbackStats(args);
+
     void startProgress();
     try {
-      return await loadStats(range(), regionId());
+      return await loadStats(args);
     } catch (error) {
       setLoadError(toMessage(error));
-      return { readings: [], events: [], since: new Date().toISOString() } as Awaited<ReturnType<typeof getStatistics>>;
+      return fallbackStats(args);
     } finally {
       void finishProgress();
     }
   });
 
   const chartSeries = createMemo(() => {
-    const slots = buildTimeSlots(range());
-    const buckets = slots.labels.map(() => ({ moisture: [] as number[], water: [] as number[] }));
-
-    for (const reading of stats()?.readings ?? []) {
-      const index = bucketIndex(range(), reading, slots.keys);
-      if (index < 0 || index >= buckets.length) continue;
-      buckets[index].moisture.push(Number(reading.moisturePercent ?? 0));
-      buckets[index].water.push(waterValue(reading));
-    }
-
-    const moisture = buckets.map((bucket) => average(bucket.moisture));
-    const water = buckets.map((bucket) => average(bucket.water));
+    const buckets = stats()?.buckets ?? [];
     return {
-      labels: slots.labels,
-      moisture: dataMode() === "smooth" ? smooth(moisture) : moisture,
-      water: dataMode() === "smooth" ? smooth(water) : water,
-      hasData: (stats()?.readings.length ?? 0) > 0,
+      labels: buckets.map((bucket) => bucket.label),
+      moisture: buckets.map((bucket) => bucket.averageMoisture),
+      water: buckets.map((bucket) => bucket.averageFlow),
+      hasData: (stats()?.summary.readingCount ?? 0) > 0,
     };
   });
 
-  const totalWater = () => (stats()?.readings ?? []).reduce((sum, reading) => sum + waterValue(reading), 0);
-  const avgMoisture = () => average((stats()?.readings ?? []).map((reading) => Number(reading.moisturePercent ?? 0)));
-  const avgFlow = () => average((stats()?.readings ?? []).map((reading) => Number(reading.flowLmin ?? 0)));
-  const irrigationCount = () => stats()?.events.length ?? 0;
-  const autoCount = () => stats()?.events.filter((e) => e.mode === "AUTO").length ?? 0;
-  const manualCount = () => stats()?.events.filter((e) => e.mode === "MANUAL").length ?? 0;
-  const waterMax = () => Math.max(1, ...chartSeries().water);
+  const summary = () => stats()?.summary;
+  // An empty window is not a measurement: zeroes would read as real "0.00" and
+  // "Kering" values, so every derived metric falls back to a dash instead.
+  const hasReadings = () => (summary()?.readingCount ?? 0) > 0;
+  const avgMoisture = () => summary()?.averageMoisture ?? null;
+  const avgFlow = () => summary()?.averageFlow ?? null;
+  const avgMoistureText = () => {
+    const value = avgMoisture();
+    return value === null || !hasReadings() ? "-" : `${value.toFixed(2)}%`;
+  };
+  const avgFlowText = () => {
+    const value = avgFlow();
+    return value === null || !hasReadings() ? "-" : value.toFixed(2);
+  };
+  const totalWaterText = () => {
+    const value = summary()?.totalFlow;
+    return value === undefined || !hasReadings() ? "-" : value.toFixed(2);
+  };
+  const moistureLabel = () => {
+    const value = avgMoisture();
+    if (value === null || !hasReadings()) return "Belum ada data";
+    if (value <= 40) return "Kering";
+    if (value >= 80) return "Basah";
+    return "Lembab";
+  };
+  const irrigationCount = () => summary()?.irrigationCount ?? 0;
+  const autoCount = () => summary()?.autoCount ?? 0;
+  const manualCount = () => summary()?.manualCount ?? 0;
+  const waterMax = () => {
+    const values = chartSeries().water.filter((value): value is number => value !== null);
+    return Math.max(1, ...values);
+  };
 
   const rangeLabel: Record<Range, string> = { today: "Hari Ini", "7d": "7 Hari Terakhir", "30d": "30 Hari Terakhir" };
+  const presetActive = (item: Range) => !dateFrom() && !dateTo() && range() === item;
 
   return (
     <>
@@ -269,49 +293,58 @@ export default function Statistik() {
           </div>
         </Show>
 
-        <div class="animate-in-soft flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4">
-          <div class="flex flex-wrap items-center gap-3">
-            <div class="flex flex-wrap gap-1">
-              {(["today", "7d", "30d"] as Range[]).map((item) => (
+        <div class="animate-in-soft rounded-xl border border-slate-200 bg-white px-5 py-4">
+          <div class="flex flex-wrap items-end justify-between gap-4">
+            <div class="flex flex-wrap items-center gap-3">
+              <div class="flex flex-wrap gap-1">
+                {(["today", "7d", "30d"] as Range[]).map((item) => (
+                  <button
+                    type="button"
+                    class={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${presetActive(item) ? "text-emerald-700 underline underline-offset-4" : "text-slate-500 hover:text-slate-800"}`}
+                    onClick={() => selectPreset(item)}
+                  >
+                    {rangeLabel[item]}
+                  </button>
+                ))}
+              </div>
+              <Show when={(regions()?.length ?? 0) > 1}>
+                <SelectSearch
+                  value={regionId()}
+                  placeholder="Semua Region"
+                  options={[
+                    { value: "", label: "Semua Region" },
+                    ...(regions() ?? []).map((r) => ({ value: r.id, label: r.name })),
+                  ]}
+                  onChange={setRegionId}
+                />
+              </Show>
+            </div>
+
+            <div class="flex flex-wrap items-end gap-3">
+              <div class="flex w-40 flex-col gap-1">
+                <label class="text-xs font-medium text-slate-500">Dari Tanggal</label>
+                <DatePicker value={dateFrom()} placeholder="Dari tanggal" onChange={setDateFrom} />
+              </div>
+              <div class="flex w-40 flex-col gap-1">
+                <label class="text-xs font-medium text-slate-500">Sampai Tanggal</label>
+                <DatePicker value={dateTo()} placeholder="Sampai tanggal" onChange={setDateTo} />
+              </div>
+              <Show when={dateFrom() || dateTo()}>
                 <button
                   type="button"
-                  class={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${range() === item ? "text-emerald-700 underline underline-offset-4" : "text-slate-500 hover:text-slate-800"}`}
-                  onClick={() => setRange(item)}
+                  class="flex h-[38px] items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
+                  onClick={clearRange}
                 >
-                  {rangeLabel[item]}
+                  <X size={14} />
+                  Hapus rentang
                 </button>
-              ))}
+              </Show>
             </div>
-            <Show when={(regions()?.length ?? 0) > 1}>
-              <SelectSearch
-                value={regionId()}
-                placeholder="Semua Region"
-                options={[
-                  { value: "", label: "Semua Region" },
-                  ...(regions() ?? []).map((r) => ({ value: r.id, label: r.name })),
-                ]}
-                onChange={setRegionId}
-              />
-            </Show>
           </div>
-          <div class="flex gap-1 rounded-lg border border-slate-200 p-0.5">
-            <button
-              type="button"
-              class={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium ${dataMode() === "raw" ? "bg-emerald-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
-              onClick={() => setDataMode("raw")}
-            >
-              <ChartBar size={16} />
-              Data Mentah
-            </button>
-            <button
-              type="button"
-              class={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium ${dataMode() === "smooth" ? "bg-emerald-600 text-white" : "text-slate-600 hover:bg-slate-100"}`}
-              onClick={() => setDataMode("smooth")}
-            >
-              <Activity size={16} />
-              Smoothing
-            </button>
-          </div>
+
+          <Show when={rangeValidation()}>
+            <p class="mt-3 text-xs font-medium text-amber-600">{rangeValidation()}</p>
+          </Show>
         </div>
 
         <Suspense
@@ -323,8 +356,8 @@ export default function Statistik() {
           }
         >
           <div class="flex flex-wrap gap-4">
-            <StatBadge label="Rata-rata Debit Air" value={avgFlow().toFixed(2)} sub="Liter/menit" />
-            <StatBadge label="Kelembaban Rata Rata Keseluruhan" value={`${avgMoisture().toFixed(2)}%`} accent />
+            <StatBadge label="Rata-rata Debit Air" value={avgFlowText()} sub="Liter/menit" />
+            <StatBadge label="Kelembaban Rata Rata Keseluruhan" value={avgMoistureText()} accent />
           </div>
 
           <div class="animate-in-soft rounded-xl border border-slate-200 bg-white">
@@ -338,13 +371,9 @@ export default function Statistik() {
                 sub={`${autoCount()}x Otomatis - ${manualCount()}x Manual`}
                 labelColor="text-amber-600"
               />
-              <MiniStat
-                label="Kelembaban Rata Rata"
-                value={`${avgMoisture().toFixed(2)}%`}
-                sub={avgMoisture() <= 40 ? "Kering" : avgMoisture() >= 80 ? "Basah" : "Lembab"}
-              />
-              <MiniStat label="Total Debit Tercatat" value={totalWater().toFixed(2)} sub="L/mnt (jumlah pembacaan)" />
-              <MiniStat label="Debit Air Rata Rata" value={avgFlow().toFixed(2)} sub="Liter/menit" />
+              <MiniStat label="Kelembaban Rata Rata" value={avgMoistureText()} sub={moistureLabel()} />
+              <MiniStat label="Total Debit Tercatat" value={totalWaterText()} sub="L/mnt (jumlah pembacaan)" />
+              <MiniStat label="Debit Air Rata Rata" value={avgFlowText()} sub="Liter/menit" />
             </div>
 
             <div class="grid gap-5 p-5 lg:grid-cols-2">

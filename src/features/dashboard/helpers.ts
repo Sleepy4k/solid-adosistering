@@ -16,10 +16,70 @@ export function average(values: number[]) {
   return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 }
 
-export function formatLastUpdated(value: Date | number | null) {
+/** A live reading older than this is treated as offline. */
+export const LIVE_STALE_MS = 5 * 60_000;
+/** Tolerated device clock drift into the future before a reading is rejected. */
+export const CLOCK_SKEW_MS = 60_000;
+
+export type LiveStatus = "unknown" | "never" | "offline" | "watering" | "no-flow" | "idle";
+
+/**
+ * Derive a defensible device status from the last Firebase snapshot.
+ *
+ * `lastUpdated` is normally epoch seconds, but older firmware has written
+ * milliseconds; values above 1e12 are treated as milliseconds. Physical flow
+ * wins over the commanded pump state, so a closed tap still reads as watering
+ * when water is actually moving.
+ */
+export function deriveLiveStatus(data: LiveSprayerData | null, nowMs: number, monitorError = false): LiveStatus {
+  if (monitorError) return "unknown";
+  if (!data || data.lastUpdated == null) return "never";
+
+  const raw = data.lastUpdated;
+  const timestampMs = raw > 1e12 ? raw : raw * 1000;
+  if (!Number.isFinite(timestampMs) || timestampMs <= 0) return "never";
+  if (timestampMs - nowMs > CLOCK_SKEW_MS) return "offline";
+  if (nowMs - timestampMs > LIVE_STALE_MS) return "offline";
+
+  // A missing/NaN flow is not a measurement, so it must not read as idle or
+  // "no-flow". Positive flow keeps precedence for firmware that sends a string.
+  const flowLmin = Number(data.flowLmin);
+  if (!Number.isFinite(flowLmin)) return "unknown";
+  if (flowLmin > 0) return "watering";
+  if (data.pumpOn) return "no-flow";
+  return "idle";
+}
+
+export function liveStatusMeta(status: LiveStatus): {
+  label: string;
+  tone: "success" | "warning" | "danger" | "info" | "muted";
+} {
+  switch (status) {
+    case "watering":
+      return { label: "Menyiram", tone: "success" };
+    case "no-flow":
+      return { label: "Pompa Aktif, Tanpa Aliran", tone: "warning" };
+    case "offline":
+      return { label: "Tidak Mengirim Data", tone: "danger" };
+    case "idle":
+      return { label: "Siaga", tone: "info" };
+    case "never":
+      return { label: "Belum Ada Data", tone: "muted" };
+    default:
+      return { label: "Pemantauan Tidak Tersedia", tone: "muted" };
+  }
+}
+
+/**
+ * Relative timestamp; `Date` values are milliseconds. Numbers are epoch seconds,
+ * but legacy firmware wrote milliseconds, so values above 1e12 are milliseconds
+ * (the same rule `deriveLiveStatus` uses).
+ */
+export function formatLastUpdated(value: Date | number | null, nowMs = Date.now()) {
   if (!value) return "Belum ada data";
-  const time = typeof value === "number" ? value * 1000 : value.getTime();
-  const diff = Math.max(0, Math.floor((Date.now() - time) / 1000));
+  const time = typeof value === "number" ? (value > 1e12 ? value : value * 1000) : value.getTime();
+  if (!Number.isFinite(time)) return "Belum ada data";
+  const diff = Math.max(0, Math.floor((nowMs - time) / 1000));
   if (diff < 60) return `${diff} detik yang lalu`;
   if (diff < 3600) return `${Math.floor(diff / 60)} menit yang lalu`;
   return `${Math.floor(diff / 3600)} jam yang lalu`;

@@ -10,6 +10,7 @@ import {
   displayThresholdDefaults,
   scheduleFirebaseRefresh,
 } from "../domain";
+import { getLastWateredBySprayer } from "../domain/lastWatered";
 import type { DashboardRegion, AdminUserCard, SuperadminSummary } from "~/types/dashboard";
 
 export type { DashboardRegion, AdminUserCard, SuperadminSummary };
@@ -77,10 +78,16 @@ export async function getMyDashboard(): Promise<
         },
       },
     });
-    const thresholdMap = await getRegionThresholdMap(
-      session.id,
-      assignments.map((a) => a.regionId),
+    const assignedSprayerIds = assignments.flatMap((a) =>
+      a.region.blocks.flatMap((block) => block.sprayers.map((sprayer) => sprayer.id)),
     );
+    const [thresholdMap, lastWateredMap] = await Promise.all([
+      getRegionThresholdMap(
+        session.id,
+        assignments.map((a) => a.regionId),
+      ),
+      getLastWateredBySprayer(assignedSprayerIds),
+    ]);
 
     return {
       type: "user",
@@ -114,6 +121,7 @@ export async function getMyDashboard(): Promise<
               id: s.id,
               hardwareId: s.hardwareId,
               displayName: s.displayName,
+              lastWateredAt: lastWateredMap.get(s.id) ?? null,
             })),
           })),
         };
@@ -137,35 +145,41 @@ export async function getMyDashboard(): Promise<
   // Materialize the region/block/sprayer tree once; user cards below reference
   // these blocks instead of re-querying them per assignment.
   const blocksByRegion = new Map(adminRegions.map((region) => [region.id, region.blocks]));
+  const adminSprayerIds = adminRegions.flatMap((region) =>
+    region.blocks.flatMap((block) => block.sprayers.map((sprayer) => sprayer.id)),
+  );
 
-  const users = await prisma.user.findMany({
-    where: {
-      role: "USER",
-      deletedAt: null,
-      ...(adminRegionIds ? { assignedRegions: { some: { regionId: { in: adminRegionIds } } } } : {}),
-    },
-    orderBy: { name: "asc" },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      isActive: true,
-      profile: { select: { city: true, domicile: true } },
-      assignedRegions: {
-        include: {
-          region: {
-            select: {
-              id: true,
-              name: true,
-              volumeDivider: true,
-              dryMaxPercent: true,
-              wetMinPercent: true,
+  const [users, lastWateredMap] = await Promise.all([
+    prisma.user.findMany({
+      where: {
+        role: "USER",
+        deletedAt: null,
+        ...(adminRegionIds ? { assignedRegions: { some: { regionId: { in: adminRegionIds } } } } : {}),
+      },
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        isActive: true,
+        profile: { select: { city: true, domicile: true } },
+        assignedRegions: {
+          include: {
+            region: {
+              select: {
+                id: true,
+                name: true,
+                volumeDivider: true,
+                dryMaxPercent: true,
+                wetMinPercent: true,
+              },
             },
           },
         },
       },
-    },
-  });
+    }),
+    getLastWateredBySprayer(adminSprayerIds),
+  ]);
 
   const userIds = users.map((u) => u.id);
   const assignedRegionIds = [...new Set(users.flatMap((u) => u.assignedRegions.map((a) => a.regionId)))];
@@ -206,7 +220,12 @@ export async function getMyDashboard(): Promise<
         id: block.id,
         name: block.name,
         polygonGeojson: block.polygonGeojson,
-        sprayers: block.sprayers.map((s) => ({ id: s.id, hardwareId: s.hardwareId, displayName: s.displayName })),
+        sprayers: block.sprayers.map((s) => ({
+          id: s.id,
+          hardwareId: s.hardwareId,
+          displayName: s.displayName,
+          lastWateredAt: lastWateredMap.get(s.id) ?? null,
+        })),
       })),
     })),
     users: users.map((u) => ({

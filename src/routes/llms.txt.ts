@@ -45,9 +45,9 @@ Bahasa utama situs: Bahasa Indonesia (id-ID). Halaman dashboard memerlukan auten
 
 - Monitoring kelembapan tanah dan status sprayer secara real-time melalui Firebase Realtime Database.
 - Kontrol pompa dan mode otomatis/manual dengan pencatatan audit.
-- Ambang kelembapan otomatis (kering, lembab, basah) dan safety timeout per region.
-- Riwayat irigasi dengan filter tanggal, blok, status, dan mode.
-- Statistik tren kelembapan serta estimasi penggunaan air untuk 1 hari, 7 hari, dan 30 hari.
+- Ambang kelembapan otomatis (kering, lembab, basah) per region.
+- Riwayat irigasi dengan filter tanggal, blok, status, dan ekspor CSV bulanan.
+- Statistik tren kelembapan serta estimasi penggunaan air untuk 1 hari, 7 hari, 30 hari, atau rentang tanggal khusus maksimal 31 hari.
 - Manajemen pengguna dan region dengan role SUPERADMIN, ADMIN, dan USER.
 - Notifikasi email transaksional dan pengiriman email massal untuk subscriber newsletter.
 - Manajemen konten landing page: testimoni, lokasi implementasi, mitra, dan newsletter.

@@ -1,13 +1,14 @@
 import { EllipsisVertical } from "lucide-solid";
 import { A } from "@solidjs/router";
-import { createSignal, onCleanup, onMount, Show } from "solid-js";
+import { createMemo, createSignal, onCleanup, onMount, Show } from "solid-js";
 import { Badge } from "~/components/ui/Badge";
 import { Card } from "~/components/ui/Card";
 import { InlineError } from "~/components/shared/AppErrorBoundary";
 import type { LiveSprayerData, Threshold } from "~/lib/shared/irrigation";
 import { isFirebaseConfigured, subscribeToBlock } from "~/lib/client/firebaseClient";
+import { useNow } from "~/lib/client/liveDate";
 import type { AdminUserCard } from "./DashboardTypes";
-import { formatLastUpdated } from "./helpers";
+import { deriveLiveStatus, formatLastUpdated } from "./helpers";
 import { ROUTES } from "~/constants/routes";
 
 export function AdminUserSensorCard(props: { user: AdminUserCard }) {
@@ -15,7 +16,7 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
   const [loading, setLoading] = createSignal<boolean>(props.user.sprayersByBlock.length > 0);
   const [error, setError] = createSignal<string>("");
   const [menuOpen, setMenuOpen] = createSignal<boolean>(false);
-  const [lastSeen, setLastSeen] = createSignal<Date | null>(null);
+  const nowMs = useNow(30_000);
 
   onMount(() => {
     if (props.user.sprayersByBlock.length === 0) {
@@ -62,7 +63,6 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
             next.set(key, sprayers);
             return next;
           });
-          setLastSeen(new Date());
           if (loaded < total) {
             loaded++;
             if (loaded === total) setLoading(false);
@@ -83,15 +83,68 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
     onCleanup(() => unsubscribers.forEach((u) => u()));
   });
 
-  const allSprayers = () => [...allLive().values()].flat();
+  const allSprayers = createMemo(() => [...allLive().values()].flat());
+  const monitorError = () => error().length > 0;
+  // Only fresh rows may feed the aggregate. Stale snapshots stay visible as a
+  // "last seen" timestamp, never as current moisture, volume, or pump state.
+  const freshSprayers = createMemo(() => {
+    const tick = nowMs();
+    const failed = monitorError();
+    return allSprayers().filter((sprayer) => {
+      const status = deriveLiveStatus(sprayer, tick, failed);
+      return status === "watering" || status === "no-flow" || status === "idle";
+    });
+  });
   const avgMoisture = () => {
-    const items = allSprayers();
-    if (!items.length) return 0;
+    const items = freshSprayers();
+    if (!items.length) return null;
     return items.reduce((sum, s) => sum + s.moisturePercent, 0) / items.length;
   };
-  const totalVolume = () => allSprayers().reduce((sum, s) => sum + s.totalVolumeLiter, 0);
-  const activePumps = () => allSprayers().filter((s) => s.pumpOn).length;
-  const connected = () => allSprayers().length > 0;
+  const totalVolume = () => {
+    const items = freshSprayers();
+    if (!items.length) return null;
+    return items.reduce((sum, s) => sum + s.totalVolumeLiter, 0);
+  };
+  const activePumps = () => {
+    const items = freshSprayers();
+    if (!items.length) return null;
+    return items.filter((s) => s.pumpOn).length;
+  };
+  const moistureText = () => {
+    const value = avgMoisture();
+    return value === null ? "-" : `${value.toFixed(2)}%`;
+  };
+  const volumeText = () => {
+    const value = totalVolume();
+    return value === null ? "-" : `${value.toFixed(2)} L`;
+  };
+  const pumpText = () => {
+    const value = activePumps();
+    return value === null ? "-" : `${value} / ${freshSprayers().length}`;
+  };
+
+  // "Terakhir update" must describe the device, not this card's receive time.
+  // `lastUpdated` is epoch seconds, but tolerate legacy millisecond payloads.
+  const latestDeviceUpdate = () => {
+    let latest: number | null = null;
+    for (const sprayer of allSprayers()) {
+      const value = sprayer.lastUpdated;
+      if (value == null || !Number.isFinite(value) || value <= 0) continue;
+      const seconds = value > 1e12 ? Math.floor(value / 1000) : value;
+      if (latest === null || seconds > latest) latest = seconds;
+    }
+    return latest;
+  };
+
+  const hasFreshData = () => freshSprayers().length > 0;
+
+  const liveSummary = () => {
+    if (loading()) return { label: "Memuat", tone: "muted" as const };
+    if (monitorError()) return { label: "Data Tidak Tersedia", tone: "warning" as const };
+    return hasFreshData()
+      ? { label: "Realtime", tone: "success" as const }
+      : { label: "Menunggu Data", tone: "warning" as const };
+  };
 
   return (
     <Card class="p-5">
@@ -161,7 +214,7 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
 
       <div class="mb-3 flex items-center justify-between">
         <p class="font-semibold text-[#4F4F4F]">Sensor Data (Agregat)</p>
-        <Badge tone={connected() ? "success" : "danger"}>{connected() ? "Terhubung" : "Terputus"}</Badge>
+        <Badge tone={liveSummary().tone}>{liveSummary().label}</Badge>
       </div>
 
       <div class="space-y-2 border-t border-[#C2C2C2] pt-3 text-sm">
@@ -178,22 +231,24 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
         >
           <div class="flex justify-between gap-3">
             <span class="text-[#4F4F4F]">Kelembaban Rata-Rata</span>
-            <span class="font-semibold text-[#4F8936]">{avgMoisture().toFixed(2)}%</span>
+            <span class="font-semibold text-[#4F8936]">{moistureText()}</span>
           </div>
           <div class="flex justify-between gap-3">
             <span class="text-[#4F4F4F]">Total Volume Air</span>
-            <span class="font-semibold text-[#4F8936]">{totalVolume().toFixed(2)} L</span>
+            <span class="font-semibold text-[#4F8936]">{volumeText()}</span>
           </div>
           <div class="flex justify-between gap-3">
             <span class="text-[#4F4F4F]">Pompa Aktif</span>
-            <span class="font-semibold text-[#4F8936]">
-              {activePumps()} / {allSprayers().length}
-            </span>
+            <span class="font-semibold text-[#4F8936]">{pumpText()}</span>
           </div>
         </Show>
       </div>
 
-      <p class="mt-4 text-right text-xs italic text-[#808080]">Terakhir update {formatLastUpdated(lastSeen())}</p>
+      <p class="mt-4 text-right text-xs italic text-[#808080]">
+        {latestDeviceUpdate() === null
+          ? "Belum ada data"
+          : `Terakhir update ${formatLastUpdated(latestDeviceUpdate(), nowMs())}`}
+      </p>
     </Card>
   );
 }

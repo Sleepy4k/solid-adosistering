@@ -1,17 +1,13 @@
 "use server";
 
-import { IrrigationMode, Prisma, RelayState } from "@prisma/client";
 import { redirect } from "@solidjs/router";
 import { prisma } from "../db/prisma";
 import { getSession } from "../auth/session";
 import { historyFiltersSchema, parseInput } from "../validation";
-import {
-  displayMoistureStatus,
-  getRegionThresholdMap,
-  getScopedBlockIds,
-  getScopedRegionIds,
-  scheduleFirebaseRefresh,
-} from "../domain";
+import { getScopedRegionIds, scheduleFirebaseRefresh } from "../domain";
+import { buildIrrigationEventWhere } from "../domain/historyQuery";
+import { enrichIrrigationEvents, historyEventSelect } from "../domain/historyData";
+import { endOfJakartaDayExclusive, isValidDateOnly, startOfJakartaDay } from "~/lib/shared/datetime";
 import type { HistoryFilters } from "~/types/history";
 
 export type { HistoryFilters };
@@ -23,14 +19,6 @@ const MAX_CURSOR_LENGTH = 256;
 type HistoryCursor = {
   startedAt: string;
   id: string;
-};
-
-type EventSensorReading = {
-  eventId: string;
-  moisturePercent: string | number | null;
-  flowLmin: string | number | null;
-  totalVolumeLiter: string | number | null;
-  moistureStatus: string | null;
 };
 
 /**
@@ -66,51 +54,35 @@ function decodeHistoryCursor(value: string): HistoryCursor {
   return { startedAt: startedAt.toISOString(), id: record.id };
 }
 
+/**
+ * The filters schema only checks the `YYYY-MM-DD` shape, so an impossible date
+ * such as `2026-02-31` is rejected here instead of reaching the WIB helpers and
+ * surfacing as a RangeError.
+ */
+function assertValidDateFilter(value: string | undefined, label: string): void {
+  if (value && !isValidDateOnly(value)) throw new Response(`${label} tidak valid.`, { status: 400 });
+}
+
 export async function getIrrigationHistory(filters: HistoryFilters = {}) {
   const data = parseInput(historyFiltersSchema, filters);
   const session = await getSession();
   if (!session) throw redirect("/login");
   scheduleFirebaseRefresh();
 
-  const where: Prisma.IrrigationEventWhereInput = {};
+  assertValidDateFilter(data.dateFrom, "Tanggal awal");
+  assertValidDateFilter(data.dateTo, "Tanggal akhir");
 
-  if (session.role !== "SUPERADMIN" || data.blockId || data.regionId) {
-    let scopedBlockIds: string[];
-    if (data.regionId && !data.blockId) {
-      const scopedRegionIds = await getScopedRegionIds(session);
-      const allowed = scopedRegionIds ? scopedRegionIds.includes(data.regionId) : true;
-      if (!allowed) {
-        scopedBlockIds = [];
-      } else {
-        const blocks = await prisma.block.findMany({
-          where: { regionId: data.regionId },
-          select: { id: true },
-        });
-        scopedBlockIds = blocks.map((b) => b.id);
-      }
-    } else {
-      scopedBlockIds = await getScopedBlockIds(session, data.blockId);
-      if (data.regionId) {
-        const regionBlocks = new Set(
-          (await prisma.block.findMany({ where: { regionId: data.regionId }, select: { id: true } })).map((b) => b.id),
-        );
-        scopedBlockIds = scopedBlockIds.filter((id) => regionBlocks.has(id));
-      }
-    }
-    where.sprayer = { blockId: { in: scopedBlockIds } };
-  }
+  const startedAt: { gte?: Date; lt?: Date } = {};
+  if (data.dateFrom) startedAt.gte = startOfJakartaDay(data.dateFrom);
+  if (data.dateTo) startedAt.lt = endOfJakartaDayExclusive(data.dateTo);
 
-  if (data.status) where.relay = data.status === "ON" ? RelayState.ON : RelayState.OFF;
-  if (data.mode) where.mode = data.mode === "AUTO" ? IrrigationMode.AUTO : IrrigationMode.MANUAL;
-
-  const startedAtFilter: { gte?: Date; lt?: Date } = {};
-  if (data.dateFrom) startedAtFilter.gte = new Date(data.dateFrom);
-  if (data.dateTo) {
-    const d = new Date(data.dateTo);
-    d.setDate(d.getDate() + 1);
-    startedAtFilter.lt = d;
-  }
-  if (startedAtFilter.gte || startedAtFilter.lt) where.startedAt = startedAtFilter;
+  const where = await buildIrrigationEventWhere(session, {
+    ...(data.regionId ? { regionId: data.regionId } : {}),
+    ...(data.blockId ? { blockId: data.blockId } : {}),
+    ...(data.status ? { status: data.status } : {}),
+    ...(data.mode ? { mode: data.mode } : {}),
+    ...(startedAt.gte || startedAt.lt ? { startedAt } : {}),
+  });
 
   const limit = Math.min(data.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
   const cursor = data.cursor ? decodeHistoryCursor(data.cursor) : null;
@@ -123,111 +95,12 @@ export async function getIrrigationHistory(filters: HistoryFilters = {}) {
     where,
     orderBy: [{ startedAt: "desc" }, { id: "desc" }],
     take: limit + 1,
-    select: {
-      id: true,
-      mode: true,
-      relay: true,
-      startedAt: true,
-      endedAt: true,
-      durationSeconds: true,
-      totalVolumeLiter: true,
-      sprayer: {
-        select: {
-          id: true,
-          displayName: true,
-          hardwareId: true,
-          block: {
-            select: {
-              id: true,
-              name: true,
-              region: { select: { id: true, name: true, volumeDivider: true } },
-            },
-          },
-        },
-      },
-      actor: { select: { id: true, name: true } },
-    },
+    select: historyEventSelect,
   });
 
   const hasMore = events.length > limit;
   const page = hasMore ? events.slice(0, limit) : events;
-
-  const thresholdMap = await getRegionThresholdMap(session.id, [
-    ...new Set(page.map((event) => event.sprayer.block.region.id)),
-  ]);
-
-  // One correlated query instead of one query per event (the previous N+1).
-  const readingRows: EventSensorReading[] =
-    page.length > 0
-      ? await prisma.$queryRaw<EventSensorReading[]>`
-          SELECT e.id AS eventId,
-                 sr.moisture_percent AS moisturePercent,
-                 sr.flow_lmin AS flowLmin,
-                 sr.total_volume_liter AS totalVolumeLiter,
-                 sr.moisture_status AS moistureStatus
-          FROM irrigation_event e
-          LEFT JOIN sensor_reading sr ON sr.id = (
-            SELECT sr2.id
-            FROM sensor_reading sr2
-            WHERE sr2.sprayer_id = e.sprayer_id
-              AND sr2.recorded_at <= e.started_at
-            ORDER BY sr2.recorded_at DESC, sr2.id DESC
-            LIMIT 1
-          )
-          WHERE e.id IN (${Prisma.join(page.map((event) => event.id))})
-        `
-      : [];
-  const readingsByEvent = new Map(readingRows.map((row) => [row.eventId, row]));
-
-  const items = page.map((event) => {
-    const reading = readingsByEvent.get(event.id);
-    const moisturePercent = reading?.moisturePercent == null ? null : Number(reading.moisturePercent);
-    const block = event.sprayer.block;
-    const threshold = thresholdMap.get(block.region.id) ?? null;
-    const volumeDivider = Number(block.region.volumeDivider ?? 1);
-
-    const rawVolume =
-      event.totalVolumeLiter === null
-        ? reading?.totalVolumeLiter == null
-          ? null
-          : Number(reading.totalVolumeLiter)
-        : Number(event.totalVolumeLiter);
-
-    const durationSeconds =
-      event.durationSeconds ??
-      (event.endedAt ? Math.round((event.endedAt.getTime() - event.startedAt.getTime()) / 1000) : null);
-
-    return {
-      id: event.id,
-      mode: event.mode,
-      relay: event.relay,
-      startedAt: event.startedAt.toISOString(),
-      endedAt: event.endedAt?.toISOString() ?? null,
-      durationSeconds,
-      totalVolumeLiter: rawVolume === null ? null : rawVolume / volumeDivider,
-      block: {
-        id: block.id,
-        name: block.name,
-        region: { id: block.region.id, name: block.region.name },
-      },
-      sprayer: {
-        id: event.sprayer.id,
-        displayName: event.sprayer.displayName,
-        hardwareId: event.sprayer.hardwareId,
-      },
-      actor: event.actor,
-      sensor: reading
-        ? {
-            moisturePercent,
-            flowLmin: Number(reading.flowLmin) / volumeDivider,
-            moistureStatus:
-              moisturePercent === null
-                ? (reading.moistureStatus ?? "KERING")
-                : displayMoistureStatus(moisturePercent, threshold),
-          }
-        : null,
-    };
-  });
+  const items = await enrichIrrigationEvents(page, session.id);
 
   const lastEvent = page[page.length - 1];
 

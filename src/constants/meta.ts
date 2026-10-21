@@ -38,23 +38,22 @@ export const PAGE_META = {
   irrigationHistory: {
     title: "Riwayat Irigasi",
     description:
-      "Pantau riwayat aktivitas irigasi berdasarkan tanggal, block, sprayer, status penyiraman, mode kontrol, dan penggunaan air.",
+      "Pantau riwayat aktivitas irigasi berdasarkan tanggal, block, sprayer, status penyiraman, dan penggunaan air.",
     path: ROUTES.irrigationHistory,
     keywords: "riwayat irigasi, histori penyiraman, data sprayer, penggunaan air",
   },
   statistics: {
     title: "Statistik",
     description:
-      "Analisis grafik kelembapan tanah, tren penggunaan air, dan aktivitas irigasi Adosistering dalam rentang waktu harian, 7 hari, dan 30 hari.",
+      "Analisis grafik kelembapan tanah, tren penggunaan air, dan aktivitas irigasi Adosistering dalam rentang waktu harian, 7 hari, 30 hari, atau rentang tanggal khusus maksimal 31 hari.",
     path: ROUTES.statistics,
     keywords: "statistik irigasi, grafik kelembapan tanah, penggunaan air, telemetry iot",
   },
   settings: {
     title: "Pengaturan",
-    description:
-      "Atur region, batas kelembapan penyiraman otomatis, preferensi kondisi lahan, dan safety timeout sprayer untuk akun pengguna.",
+    description: "Atur region, batas kelembapan penyiraman otomatis, dan preferensi kondisi lahan untuk akun pengguna.",
     path: ROUTES.settings,
-    keywords: "pengaturan irigasi, threshold kelembapan, safety timeout, preferensi lahan",
+    keywords: "pengaturan irigasi, threshold kelembapan, preferensi lahan",
   },
   profile: {
     title: "Profil",

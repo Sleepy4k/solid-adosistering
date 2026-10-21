@@ -6,6 +6,13 @@ import { defineConfig, type Plugin } from "vite";
 const FORBIDDEN_PUBLIC_ENV = /(PRIVATE|SECRET|PASSWORD|SMTP|DATABASE|SERVICE_ACCOUNT|CLIENT_EMAIL|SESSION_COOKIE)/i;
 
 /**
+ * Exact public keys exempt from FORBIDDEN_PUBLIC_ENV. The Firebase RTDB URL is a
+ * public project identifier consumed by the browser client, while the server-only
+ * credential is `FIREBASE_DATABASE_URL` (no `VITE_` prefix) and stays forbidden.
+ */
+const ALLOWED_PUBLIC_ENV: ReadonlySet<string> = new Set(["VITE_FIREBASE_DATABASE_URL"]);
+
+/**
  * Vite inlines every `VITE_*` variable into the browser bundle. Refuse to build
  * when a server-only credential is prefixed with `VITE_` by mistake.
  */
@@ -16,7 +23,7 @@ function forbidSecretPublicEnv(): Plugin {
     configResolved(config) {
       const keys = new Set([...Object.keys(process.env), ...Object.keys(config.env)]);
       for (const key of keys) {
-        if (key.startsWith("VITE_") && FORBIDDEN_PUBLIC_ENV.test(key)) {
+        if (key.startsWith("VITE_") && !ALLOWED_PUBLIC_ENV.has(key) && FORBIDDEN_PUBLIC_ENV.test(key)) {
           throw new Error(
             `Refusing to build: ${key} looks like a server secret but is exposed to the client. Remove the VITE_ prefix.`,
           );

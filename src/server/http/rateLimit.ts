@@ -45,6 +45,10 @@ export function checkRateLimit(key: string, limit: number, windowMs: number): Ra
 export function rateLimitResponse(result: RateLimitResult): Response {
   return new Response(`Terlalu banyak permintaan. Coba lagi dalam ${result.retryAfterSec} detik.`, {
     status: 429,
-    headers: { "Retry-After": String(result.retryAfterSec), "Cache-Control": "no-store" },
+    headers: {
+      "Retry-After": String(result.retryAfterSec),
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+    },
   });
 }

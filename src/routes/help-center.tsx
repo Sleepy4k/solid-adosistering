@@ -34,7 +34,7 @@ const COMMON_HELP: HelpItem[] = [
   },
   {
     title: "Bagaimana melihat riwayat irigasi?",
-    body: "Buka menu Riwayat Irigasi, lalu gunakan filter nama lahan, status, jenis irigasi, dan tanggal sesuai kebutuhan.",
+    body: "Buka menu Riwayat Irigasi, lalu gunakan filter nama lahan, status, dan tanggal. Data bulanan dapat diunduh melalui tombol Export.",
   },
   {
     title: "Bagaimana membaca grafik statistik?",
@@ -103,10 +103,6 @@ const HELP_BY_ROLE: Record<Role, HelpItem[]> = {
     {
       title: "Mengapa perubahan pengaturan tidak langsung terlihat?",
       body: "Tunggu proses simpan selesai dan data realtime masuk kembali dari Firebase. Dashboard akan menyesuaikan nilai terbaru.",
-    },
-    {
-      title: "Apa fungsi Safety Timeout?",
-      body: "Safety Timeout membantu membatasi durasi saat alat tidak mengirim sinyal digital agar penyiraman tidak terus berjalan tanpa kontrol.",
     },
   ],
   ADMIN: [

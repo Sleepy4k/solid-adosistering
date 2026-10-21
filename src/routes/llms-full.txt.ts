@@ -46,7 +46,7 @@ Masalah yang diselesaikan:
 - Melihat dashboard region yang ditugaskan.
 - Memantau kelembapan tanah dan status sprayer.
 - Melihat riwayat dan statistik irigasi.
-- Mengatur ambang kelembapan dan safety timeout sesuai izin.
+- Mengatur ambang kelembapan sesuai izin.
 - Memperbarui profil dan password.
 
 ### ADMIN

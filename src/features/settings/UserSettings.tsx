@@ -1,7 +1,6 @@
 import { createMemo, Show } from "solid-js";
 import { AutomaticModePanel } from "./AutomaticModePanel";
 import { IrrigationControl } from "./IrrigationControl";
-import { SafetyTimeoutPanel } from "./SafetyTimeoutPanel";
 import type { UserSettingsData } from "./types";
 
 export function UserSettings(props: { settings: UserSettingsData }) {
@@ -25,12 +24,6 @@ export function UserSettings(props: { settings: UserSettingsData }) {
             automaticMode={region().automaticMode}
             sprayerCount={region().sprayerCount}
             readOnly
-          />
-          <SafetyTimeoutPanel
-            initialMin={region().safetyTimeout.min}
-            initialMax={region().safetyTimeout.max}
-            readOnly
-            note="Pengaturan ini dikelola oleh Admin/operator region dan dikirim ke Firebase jika didukung."
           />
         </>
       )}

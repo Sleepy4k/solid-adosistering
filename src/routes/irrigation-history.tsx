@@ -1,7 +1,7 @@
 import { query, createAsync } from "@solidjs/router";
 import { createEffect, createSignal, For, on, onCleanup, onMount, Show, Suspense } from "solid-js";
 import { PageMeta } from "~/components/shared/PageMeta";
-import { CalendarDays, Clock3, Droplets, Gauge, Loader2, RotateCcw, WavesHorizontal } from "lucide-solid";
+import { CalendarDays, Clock3, Download, Droplets, Gauge, Loader2, RotateCcw, WavesHorizontal } from "lucide-solid";
 import { getIrrigationHistory, getMyBlocks } from "~/server/actions/history";
 import { getMyRegions } from "~/server/actions/regions";
 import { finishProgress, startProgress } from "~/lib/client/progress";
@@ -11,6 +11,8 @@ import { SimpleSelect } from "~/components/ui/SimpleSelect";
 import { DatePicker } from "~/components/ui/DatePicker";
 import { useConfirm } from "~/components/shared/ConfirmProvider";
 import { useLiveDate } from "~/lib/client/liveDate";
+import { ExportHistoryModal } from "~/features/history/ExportHistoryModal";
+import { formatJakartaDateTime } from "~/lib/shared/datetime";
 
 const loadBlocks = query(() => getMyBlocks(), "my-blocks");
 const loadRegions = query(() => getMyRegions(), "my-regions");
@@ -26,16 +28,6 @@ function toMessage(error: unknown) {
   return "Data riwayat belum bisa dimuat.";
 }
 
-function formatDate(d: Date | string) {
-  return new Date(d).toLocaleString("id-ID", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 function formatDuration(seconds: number | null) {
   if (!seconds || seconds <= 0) return "-";
   const minutes = Math.floor(seconds / 60);
@@ -46,7 +38,7 @@ function formatDuration(seconds: number | null) {
 }
 
 function avgLmin(totalVolumeLiter: number | null, durationSeconds: number | null): string {
-  if (!totalVolumeLiter || !durationSeconds || durationSeconds === 0) return "-";
+  if (totalVolumeLiter == null || durationSeconds == null || durationSeconds <= 0) return "-";
   const durationMin = durationSeconds / 60;
   return (totalVolumeLiter / durationMin).toFixed(2);
 }
@@ -56,10 +48,27 @@ function statusMeta(event: HistoryItem) {
   return { label: "Irigasi Selesai", cls: "bg-[#EAF5E7] text-[#186D3C]" };
 }
 
-function moistureClass(status?: string) {
+function moistureClass(status?: string | null) {
   if (status === "KERING") return "text-red-600";
   if (status === "BASAH") return "text-blue-600";
-  return "text-[#16A34A]";
+  if (status === "LEMBAB") return "text-[#16A34A]";
+  return "text-slate-500";
+}
+
+function moisturePercentText(sensor: HistoryItem["sensor"]): string {
+  if (sensor?.moisturePercent == null) return "-";
+  return `${sensor.moisturePercent.toFixed(2)}%`;
+}
+
+function moistureStatusLabel(status?: string | null): string {
+  if (status === "KERING") return "Kering";
+  if (status === "BASAH") return "Basah";
+  if (status === "LEMBAB") return "Lembab";
+  return "Tidak tersedia";
+}
+
+function totalVolumeText(value: number | null): string {
+  return value == null ? "-" : `${value.toFixed(2)} L`;
 }
 
 export default function RiwayatIrigasi() {
@@ -68,7 +77,6 @@ export default function RiwayatIrigasi() {
   const [regionId, setRegionId] = createSignal<string>("");
   const [blockId, setBlockId] = createSignal<string>("");
   const [status, setStatus] = createSignal<string>("");
-  const [mode, setMode] = createSignal<string>("");
   const [dateFrom, setDateFrom] = createSignal<string>("");
   const [dateTo, setDateTo] = createSignal<string>("");
   const [loadError, setLoadError] = createSignal<string>("");
@@ -78,6 +86,7 @@ export default function RiwayatIrigasi() {
   const [hasMore, setHasMore] = createSignal(false);
   const [isFetching, setIsFetching] = createSignal(false);
   const [initialLoading, setInitialLoading] = createSignal(true);
+  const [exportOpen, setExportOpen] = createSignal(false);
 
   const blocks = createAsync(() => loadBlocks());
   const regions = createAsync(() => loadRegions());
@@ -108,7 +117,6 @@ export default function RiwayatIrigasi() {
         regionId: regionId() || undefined,
         blockId: blockId() || undefined,
         status: (status() as "ON" | "OFF") || undefined,
-        mode: (mode() as "AUTO" | "MANUAL") || undefined,
         dateFrom: dateFrom() || undefined,
         dateTo: dateTo() || undefined,
         cursor: isReset ? undefined : (nextCursor() ?? undefined),
@@ -135,7 +143,7 @@ export default function RiwayatIrigasi() {
   };
 
   createEffect(
-    on([regionId, blockId, status, mode, dateFrom, dateTo], () => {
+    on([regionId, blockId, status, dateFrom, dateTo], () => {
       void fetchPage(true);
     }),
   );
@@ -165,7 +173,6 @@ export default function RiwayatIrigasi() {
     setRegionId("");
     setBlockId("");
     setStatus("");
-    setMode("");
     setDateFrom("");
     setDateTo("");
   };
@@ -178,15 +185,25 @@ export default function RiwayatIrigasi() {
         <div class="rounded-2xl border border-[#C2C2C2] bg-white px-4 py-5 sm:px-6 lg:px-8">
           <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h1 class="text-xl font-bold text-[#4F4F4F] sm:text-2xl">Riwayat Irigasi</h1>
-            <p class="inline-flex items-center gap-2 text-xs text-gray-500 sm:text-sm">
-              <CalendarDays size={16} />
-              {liveDate().toLocaleDateString("id-ID", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              })}
-            </p>
+            <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+              <p class="inline-flex items-center gap-2 text-xs text-gray-500 sm:text-sm">
+                <CalendarDays size={16} />
+                {liveDate().toLocaleDateString("id-ID", {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })}
+              </p>
+              <button
+                type="button"
+                class="btn-3d-green inline-flex h-9 items-center justify-center gap-1.5 px-3 text-sm font-medium text-white"
+                onClick={() => setExportOpen(true)}
+              >
+                <Download size={16} />
+                Export
+              </button>
+            </div>
           </div>
         </div>
 
@@ -251,19 +268,6 @@ export default function RiwayatIrigasi() {
           </div>
 
           <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-medium text-[#4F4F4F]">Jenis Irigasi</label>
-            <SimpleSelect
-              value={mode()}
-              options={[
-                { value: "", label: "Semua Jenis" },
-                { value: "AUTO", label: "Otomatis" },
-                { value: "MANUAL", label: "Manual" },
-              ]}
-              onChange={setMode}
-            />
-          </div>
-
-          <div class="flex flex-col gap-1.5">
             <label class="text-xs font-medium text-[#4F4F4F]">Dari Tanggal</label>
             <DatePicker value={dateFrom()} placeholder="Dari tanggal" onChange={setDateFrom} />
           </div>
@@ -275,7 +279,7 @@ export default function RiwayatIrigasi() {
 
           <button
             type="button"
-            class="mt-auto flex h-10 items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 lg:col-start-6"
+            class="mt-auto flex h-10 items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
             onClick={() => void reset()}
           >
             <RotateCcw size={16} />
@@ -318,11 +322,6 @@ export default function RiwayatIrigasi() {
                             <p class="text-sm font-medium text-[#4F8936]">{event.sprayer.displayName}</p>
                           </div>
                           <div class="flex flex-wrap gap-2">
-                            <span
-                              class={`rounded-full px-3 py-1 text-xs font-semibold ${event.mode === "AUTO" ? "bg-sky-100 text-sky-700" : "bg-amber-100 text-amber-700"}`}
-                            >
-                              {event.mode === "AUTO" ? "Otomatis" : "Manual"}
-                            </span>
                             <span class={`rounded-full px-3 py-1 text-xs font-semibold ${evStatus.cls}`}>
                               {evStatus.label}
                             </span>
@@ -335,7 +334,7 @@ export default function RiwayatIrigasi() {
                               <WavesHorizontal size={15} /> Kelembaban
                             </p>
                             <p class={`text-sm font-semibold ${moistureClass(event.sensor?.moistureStatus)}`}>
-                              {event.sensor?.moisturePercent?.toFixed(2) ?? "0.00"}%
+                              {moisturePercentText(event.sensor)}
                             </p>
                           </div>
                           <div class="rounded-xl border border-[#DDECD7] bg-[#F7FBF5] p-4">
@@ -343,18 +342,14 @@ export default function RiwayatIrigasi() {
                               <Gauge size={15} /> Kondisi
                             </p>
                             <p class={`text-sm font-semibold ${moistureClass(event.sensor?.moistureStatus)}`}>
-                              {event.sensor?.moistureStatus === "KERING"
-                                ? "Kering"
-                                : event.sensor?.moistureStatus === "BASAH"
-                                  ? "Basah"
-                                  : "Lembab"}
+                              {moistureStatusLabel(event.sensor?.moistureStatus)}
                             </p>
                           </div>
                           <div class="rounded-xl border border-[#DDECD7] bg-[#F7FBF5] p-4">
                             <p class="mb-1 inline-flex items-center gap-2 text-xs font-medium text-[#6B7280]">
                               <Clock3 size={15} /> Waktu
                             </p>
-                            <p class="text-sm font-semibold text-[#4F4F4F]">{formatDate(event.startedAt)}</p>
+                            <p class="text-sm font-semibold text-[#4F4F4F]">{formatJakartaDateTime(event.startedAt)}</p>
                           </div>
                           <div class="rounded-xl border border-[#DDECD7] bg-[#F7FBF5] p-4">
                             <p class="mb-1 inline-flex items-center gap-2 text-xs font-medium text-[#6B7280]">
@@ -370,7 +365,7 @@ export default function RiwayatIrigasi() {
                               <div>
                                 <p class="text-[11px] text-[#6B7280]">Total</p>
                                 <p class="text-sm font-semibold text-[#4F4F4F]">
-                                  {event.totalVolumeLiter?.toFixed(2) ?? "0.00"} L
+                                  {totalVolumeText(event.totalVolumeLiter)}
                                 </p>
                               </div>
                               <div>
@@ -384,7 +379,11 @@ export default function RiwayatIrigasi() {
                         </div>
 
                         <div class="mt-4 flex flex-col gap-1 text-xs text-[#6B7280] sm:flex-row sm:items-center sm:justify-between">
-                          <span>Sensor mengikuti pembacaan terdekat dari waktu event.</span>
+                          <span>
+                            {event.sensor
+                              ? "Sensor mengikuti pembacaan terdekat dari waktu event."
+                              : "Tidak ada pembacaan sensor terdekat untuk event ini."}
+                          </span>
                           <span class="italic">Oleh {event.actor?.name ?? "Sistem otomatis"}</span>
                         </div>
                       </div>
@@ -409,6 +408,14 @@ export default function RiwayatIrigasi() {
 
         <div ref={sentinel} class="h-px" />
       </div>
+
+      <ExportHistoryModal
+        open={exportOpen()}
+        onClose={() => setExportOpen(false)}
+        regionId={regionId() || undefined}
+        blockId={blockId() || undefined}
+        status={status() || undefined}
+      />
     </>
   );
 }

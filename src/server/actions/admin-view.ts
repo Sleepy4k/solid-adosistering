@@ -5,6 +5,7 @@ import { prisma } from "../db/prisma";
 import { assertAdminOrHigher } from "../auth/security";
 import { getSession } from "../auth/session";
 import { getScopedRegionIds, getRegionThresholdMap, scheduleFirebaseRefresh } from "../domain";
+import { getLastWateredBySprayer } from "../domain/lastWatered";
 import type { DashboardRegion } from "~/types/dashboard";
 
 export async function getUserDashboardView(userId: string): Promise<{ regions: DashboardRegion[] }> {
@@ -46,10 +47,16 @@ export async function getUserDashboardView(userId: string): Promise<{ regions: D
     throw new Response("User berada di luar hak akses admin.", { status: 403 });
   }
 
-  const thresholdMap = await getRegionThresholdMap(
-    userId,
-    assignments.map((a) => a.regionId),
+  const assignedSprayerIds = assignments.flatMap((a) =>
+    a.region.blocks.flatMap((block) => block.sprayers.map((sprayer) => sprayer.id)),
   );
+  const [thresholdMap, lastWateredMap] = await Promise.all([
+    getRegionThresholdMap(
+      userId,
+      assignments.map((a) => a.regionId),
+    ),
+    getLastWateredBySprayer(assignedSprayerIds),
+  ]);
 
   return {
     regions: assignments.map((a) => {
@@ -82,6 +89,7 @@ export async function getUserDashboardView(userId: string): Promise<{ regions: D
             id: sprayer.id,
             hardwareId: sprayer.hardwareId,
             displayName: sprayer.displayName,
+            lastWateredAt: lastWateredMap.get(sprayer.id) ?? null,
           })),
         })),
       };

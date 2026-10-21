@@ -56,8 +56,9 @@ export function ToastProvider(props: { children: JSX.Element }) {
   return (
     <ToastContext.Provider value={{ notify }}>
       {props.children}
+      {/* Layering: popover portals (110) < confirm dialog (120) < toasts (130). */}
       <div
-        class="fixed right-4 top-[max(1rem,env(safe-area-inset-top,0px))] z-[100] flex max-h-[calc(100dvh-2rem)] w-[min(380px,calc(100vw-2rem))] flex-col gap-2 overflow-x-clip overflow-y-auto"
+        class="fixed right-4 top-[max(1rem,env(safe-area-inset-top,0px))] z-[130] flex max-h-[calc(100dvh-2rem)] w-[min(380px,calc(100vw-2rem))] flex-col gap-2 overflow-x-clip overflow-y-auto"
         aria-live="polite"
       >
         <For each={toasts()}>

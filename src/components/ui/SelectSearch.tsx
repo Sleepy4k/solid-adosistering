@@ -1,5 +1,6 @@
-import { createEffect, createSignal, For, on, onCleanup, Show } from "solid-js";
+import { createEffect, createSignal, For, on, Show } from "solid-js";
 import { ChevronDown, Search, X } from "lucide-solid";
+import { Popover } from "~/components/ui/Popover";
 
 export type SelectOption = { value: string; label: string };
 
@@ -26,8 +27,8 @@ export function SelectSearch(props: {
   };
 
   const pick = (value: string) => {
-    props.onChange(value);
     setOpen(false);
+    props.onChange(value);
     setQuery("");
   };
 
@@ -42,16 +43,6 @@ export function SelectSearch(props: {
       if (isOpen) setTimeout(() => inputRef?.focus(), 10);
     }),
   );
-
-  const onDocClick = (e: MouseEvent) => {
-    if (!containerRef?.contains(e.target as Node)) setOpen(false);
-  };
-
-  createEffect(() => {
-    if (open()) document.addEventListener("click", onDocClick);
-    else document.removeEventListener("click", onDocClick);
-    onCleanup(() => document.removeEventListener("click", onDocClick));
-  });
 
   return (
     <div ref={containerRef} class={`relative min-w-0 ${props.class ?? ""}`}>
@@ -86,47 +77,49 @@ export function SelectSearch(props: {
         </Show>
       </div>
 
-      <Show when={open()}>
-        <div
-          class={`absolute top-full z-50 mt-1 max-h-72 w-full lg:w-[min(20rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg max-sm:max-w-[calc(100vw-4rem)] ${
-            props.align === "end" ? "right-0 max-sm:left-0 max-sm:right-auto" : "left-0"
-          }`}
-        >
-          <div class="flex items-center gap-2 border-b border-slate-100 px-3 py-2">
-            <Search size={14} class="shrink-0 text-slate-400" />
-            <input
-              ref={inputRef}
-              type="text"
-              class="min-w-0 flex-1 text-sm outline-none placeholder:text-slate-400"
-              placeholder={props.searchPlaceholder ?? "Cari..."}
-              aria-label={props.searchPlaceholder ?? "Cari"}
-              value={query()}
-              onInput={(e) => setQuery(e.currentTarget.value)}
-            />
-          </div>
-          <ul class="max-h-52 overflow-y-auto py-1">
-            <Show
-              when={filtered().length > 0}
-              fallback={<li class="px-4 py-2 text-sm text-slate-400">Tidak ada hasil</li>}
-            >
-              <For each={filtered()}>
-                {(opt) => (
-                  <li>
-                    <button
-                      type="button"
-                      title={opt.label}
-                      class={`block w-full truncate px-4 py-2 text-left text-sm hover:bg-emerald-50 ${opt.value === props.value ? "font-semibold text-emerald-700" : "text-slate-700"}`}
-                      onClick={() => pick(opt.value)}
-                    >
-                      {opt.label}
-                    </button>
-                  </li>
-                )}
-              </For>
-            </Show>
-          </ul>
+      <Popover
+        open={open()}
+        anchorRef={() => containerRef}
+        onClose={() => setOpen(false)}
+        align={props.align}
+        width={320}
+        maxHeight={320}
+        panelClass="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg"
+      >
+        <div class="flex items-center gap-2 border-b border-slate-100 px-3 py-2 focus-within:ring-2 focus-within:ring-inset focus-within:ring-emerald-500/40">
+          <Search size={14} class="shrink-0 text-slate-400" />
+          <input
+            ref={inputRef}
+            type="text"
+            class="min-w-0 flex-1 text-sm outline-none placeholder:text-slate-400"
+            placeholder={props.searchPlaceholder ?? "Cari..."}
+            aria-label={props.searchPlaceholder ?? "Cari"}
+            value={query()}
+            onInput={(e) => setQuery(e.currentTarget.value)}
+          />
         </div>
-      </Show>
+        <ul class="max-h-52 overflow-y-auto py-1">
+          <Show
+            when={filtered().length > 0}
+            fallback={<li class="px-4 py-2 text-sm text-slate-400">Tidak ada hasil</li>}
+          >
+            <For each={filtered()}>
+              {(opt) => (
+                <li>
+                  <button
+                    type="button"
+                    title={opt.label}
+                    class={`block w-full truncate px-4 py-2 text-left text-sm hover:bg-emerald-50 ${opt.value === props.value ? "font-semibold text-emerald-700" : "text-slate-700"}`}
+                    onClick={() => pick(opt.value)}
+                  >
+                    {opt.label}
+                  </button>
+                </li>
+              )}
+            </For>
+          </Show>
+        </ul>
+      </Popover>
     </div>
   );
 }

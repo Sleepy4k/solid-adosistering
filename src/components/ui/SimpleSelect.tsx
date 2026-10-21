@@ -1,5 +1,6 @@
-import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import { Check, ChevronDown } from "lucide-solid";
+import { Popover } from "~/components/ui/Popover";
 
 type Option = { value: string; label: string };
 
@@ -15,18 +16,9 @@ export function SimpleSelect(props: {
 
   const selected = () => props.options.find((o) => o.value === props.value);
 
-  createEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (!containerRef.contains(e.target as Node)) setOpen(false);
-    };
-    if (open()) document.addEventListener("click", handler);
-    else document.removeEventListener("click", handler);
-    onCleanup(() => document.removeEventListener("click", handler));
-  });
-
   const choose = (value: string) => {
-    props.onChange(value);
     setOpen(false);
+    props.onChange(value);
   };
 
   return (
@@ -52,34 +44,36 @@ export function SimpleSelect(props: {
         />
       </button>
 
-      <Show when={open()}>
-        <div
-          class={`absolute top-full z-50 mt-1 max-h-60 w-full lg:w-[min(20rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] overflow-x-hidden overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-md max-sm:max-w-[calc(100vw-4rem)] ${
-            props.align === "end" ? "right-0 max-sm:left-0 max-sm:right-auto" : "left-0"
-          }`}
-          role="listbox"
-        >
-          <For each={props.options}>
-            {(opt) => (
-              <button
-                type="button"
-                role="option"
-                aria-selected={props.value === opt.value}
-                title={opt.label}
-                class={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-slate-50 ${
-                  props.value === opt.value ? "font-medium text-emerald-700" : "text-slate-700"
-                }`}
-                onClick={() => choose(opt.value)}
-              >
-                <span class="min-w-0 flex-1 truncate">{opt.label}</span>
-                <Show when={props.value === opt.value && opt.value !== ""}>
-                  <Check size={13} class="shrink-0 text-emerald-600" />
-                </Show>
-              </button>
-            )}
-          </For>
-        </div>
-      </Show>
+      <Popover
+        open={open()}
+        anchorRef={() => containerRef}
+        onClose={() => setOpen(false)}
+        align={props.align}
+        width={320}
+        maxHeight={240}
+        panelClass="overflow-x-hidden overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-md"
+        role="listbox"
+      >
+        <For each={props.options}>
+          {(opt) => (
+            <button
+              type="button"
+              role="option"
+              aria-selected={props.value === opt.value}
+              title={opt.label}
+              class={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-slate-50 ${
+                props.value === opt.value ? "font-medium text-emerald-700" : "text-slate-700"
+              }`}
+              onClick={() => choose(opt.value)}
+            >
+              <span class="min-w-0 flex-1 truncate">{opt.label}</span>
+              <Show when={props.value === opt.value && opt.value !== ""}>
+                <Check size={13} class="shrink-0 text-emerald-600" />
+              </Show>
+            </button>
+          )}
+        </For>
+      </Popover>
     </div>
   );
 }

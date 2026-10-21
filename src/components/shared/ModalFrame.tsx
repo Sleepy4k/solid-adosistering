@@ -33,6 +33,10 @@ export function ModalFrame(props: ModalFrameProps) {
     panelRef?.focus();
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Popover panels are portaled outside the dialog. Back up the Popover capture handler:
+      // Escape/Tab inside a panel must never close the modal or move its focus.
+      if (event.target instanceof Element && event.target.closest('[data-popover-layer="true"]')) return;
+
       if (event.key === "Escape") {
         event.preventDefault();
         props.onClose();

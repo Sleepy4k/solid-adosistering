@@ -35,8 +35,9 @@ export function ConfirmProvider(props: { children: JSX.Element }) {
       {props.children}
       <Show when={pending()}>
         {(d) => (
+          // Layering: popover portals (110) < confirm dialog (120) < toasts (130).
           <div
-            class="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/40 p-4"
+            class="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/40 p-4"
             onClick={(e) => e.target === e.currentTarget && close(false)}
           >
             <section

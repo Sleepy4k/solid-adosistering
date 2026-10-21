@@ -1,5 +1,6 @@
-import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, on, Show } from "solid-js";
 import { Calendar, ChevronLeft, ChevronRight, X } from "lucide-solid";
+import { Popover } from "~/components/ui/Popover";
 
 const DAYS_SHORT = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
 const MONTHS = [
@@ -92,15 +93,16 @@ export function DatePicker(props: {
   };
 
   const select = (day: number) => {
-    props.onChange(toValue(new Date(viewYear(), viewMonth(), day)));
+    const next = toValue(new Date(viewYear(), viewMonth(), day));
     setOpen(false);
+    props.onChange(next);
   };
 
   const selectToday = () => {
+    setOpen(false);
     props.onChange(toValue(new Date(today.getFullYear(), today.getMonth(), today.getDate())));
     setViewYear(today.getFullYear());
     setViewMonth(today.getMonth());
-    setOpen(false);
   };
 
   const clear = (e: MouseEvent) => {
@@ -125,18 +127,6 @@ export function DatePicker(props: {
 
   const isToday = (day: number) =>
     today.getFullYear() === viewYear() && today.getMonth() === viewMonth() && today.getDate() === day;
-
-  createEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (!e.composedPath().includes(containerRef as EventTarget)) {
-        setOpen(false);
-        setShowYearPicker(false);
-      }
-    };
-    if (open()) document.addEventListener("click", handler);
-    else document.removeEventListener("click", handler);
-    onCleanup(() => document.removeEventListener("click", handler));
-  });
 
   return (
     <div ref={containerRef} class="relative">
@@ -167,123 +157,125 @@ export function DatePicker(props: {
         </div>
       </button>
 
-      <Show when={open()}>
-        <div
-          class={`absolute top-full z-50 mt-1 max-h-[calc(100dvh-2rem)] w-[min(18rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-slate-200 bg-white p-3 shadow-lg max-sm:w-[min(18rem,calc(100vw-4rem))] max-sm:max-w-[calc(100vw-4rem)] ${
-            props.align === "end" ? "right-0 max-sm:left-0 max-sm:right-auto" : "left-0"
-          }`}
-        >
-          <div class="mb-3 flex items-center justify-between">
-            <button
-              type="button"
-              class="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 sm:h-7 sm:w-7"
-              onClick={() => (showYearPicker() ? setYearCenter((c) => c - 12) : goMonth(-1))}
-              aria-label="Sebelumnya"
-            >
-              <ChevronLeft size={15} />
-            </button>
+      <Popover
+        open={open()}
+        anchorRef={() => containerRef}
+        onClose={() => setOpen(false)}
+        align={props.align}
+        width={288}
+        maxHeight={420}
+        panelClass="overflow-y-auto rounded-xl border border-slate-200 bg-white p-3 shadow-lg"
+      >
+        <div class="mb-3 flex items-center justify-between">
+          <button
+            type="button"
+            class="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 sm:h-7 sm:w-7"
+            onClick={() => (showYearPicker() ? setYearCenter((c) => c - 12) : goMonth(-1))}
+            aria-label="Sebelumnya"
+          >
+            <ChevronLeft size={15} />
+          </button>
 
-            <Show
-              when={!showYearPicker()}
-              fallback={
-                <span class="text-sm font-semibold text-slate-800">
-                  {years()[0]} – {years()[11]}
-                </span>
-              }
-            >
-              <div class="flex items-center gap-1 text-sm font-semibold text-slate-800">
-                <span>{MONTHS[viewMonth()]}</span>
-                <button
-                  type="button"
-                  class="rounded px-1 py-0.5 text-emerald-600 underline decoration-dotted hover:bg-emerald-50"
-                  onClick={openYearPicker}
-                  title="Ganti tahun"
-                >
-                  {viewYear()}
-                </button>
-              </div>
-            </Show>
-
-            <button
-              type="button"
-              class="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 sm:h-7 sm:w-7"
-              onClick={() => (showYearPicker() ? setYearCenter((c) => c + 12) : goMonth(1))}
-              aria-label="Berikutnya"
-            >
-              <ChevronRight size={15} />
-            </button>
-          </div>
-
-          <Show when={showYearPicker()}>
-            <div class="grid grid-cols-3 gap-1">
-              <For each={years()}>
-                {(y) => (
-                  <button
-                    type="button"
-                    onClick={() => selectYear(y)}
-                    class={`min-h-10 rounded-lg py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 ${
-                      y === viewYear()
-                        ? "bg-emerald-600 text-white"
-                        : y === today.getFullYear()
-                          ? "text-emerald-600 ring-1 ring-inset ring-emerald-400 hover:bg-emerald-50"
-                          : "text-slate-700 hover:bg-slate-100"
-                    }`}
-                  >
-                    {y}
-                  </button>
-                )}
-              </For>
-            </div>
-            <button
-              type="button"
-              class="mt-2 min-h-10 w-full rounded-lg py-2 text-xs font-medium text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
-              onClick={() => setShowYearPicker(false)}
-            >
-              ← Kembali ke Kalender
-            </button>
-          </Show>
-
-          <Show when={!showYearPicker()}>
-            <div class="mb-1 grid grid-cols-7 text-center">
-              <For each={DAYS_SHORT}>
-                {(d) => <span class="py-1 text-[10px] font-semibold uppercase text-slate-400">{d}</span>}
-              </For>
-            </div>
-
-            <div class="grid grid-cols-7">
-              <For each={cells()}>
-                {(day) => (
-                  <Show when={day !== null} fallback={<span />}>
-                    <button
-                      type="button"
-                      onClick={() => select(day!)}
-                      class={`m-0.5 flex h-10 items-center justify-center rounded-lg text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 sm:h-8 ${
-                        isSelected(day!)
-                          ? "bg-emerald-600 font-semibold text-white"
-                          : isToday(day!)
-                            ? "font-semibold text-emerald-600 ring-1 ring-inset ring-emerald-400"
-                            : "text-slate-700 hover:bg-slate-100"
-                      }`}
-                    >
-                      {day}
-                    </button>
-                  </Show>
-                )}
-              </For>
-            </div>
-
-            <div class="mt-2 border-t border-slate-100 pt-2">
+          <Show
+            when={!showYearPicker()}
+            fallback={
+              <span class="text-sm font-semibold text-slate-800">
+                {years()[0]} – {years()[11]}
+              </span>
+            }
+          >
+            <div class="flex items-center gap-1 text-sm font-semibold text-slate-800">
+              <span>{MONTHS[viewMonth()]}</span>
               <button
                 type="button"
-                onClick={selectToday}
-                class="min-h-10 w-full rounded-lg py-2 text-xs font-medium text-emerald-600 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+                class="rounded px-1 py-0.5 text-emerald-600 underline decoration-dotted hover:bg-emerald-50"
+                onClick={openYearPicker}
+                title="Ganti tahun"
               >
-                Hari Ini
+                {viewYear()}
               </button>
             </div>
           </Show>
+
+          <button
+            type="button"
+            class="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 sm:h-7 sm:w-7"
+            onClick={() => (showYearPicker() ? setYearCenter((c) => c + 12) : goMonth(1))}
+            aria-label="Berikutnya"
+          >
+            <ChevronRight size={15} />
+          </button>
         </div>
-      </Show>
+
+        <Show when={showYearPicker()}>
+          <div class="grid grid-cols-3 gap-1">
+            <For each={years()}>
+              {(y) => (
+                <button
+                  type="button"
+                  onClick={() => selectYear(y)}
+                  class={`min-h-10 rounded-lg py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 ${
+                    y === viewYear()
+                      ? "bg-emerald-600 text-white"
+                      : y === today.getFullYear()
+                        ? "text-emerald-600 ring-1 ring-inset ring-emerald-400 hover:bg-emerald-50"
+                        : "text-slate-700 hover:bg-slate-100"
+                  }`}
+                >
+                  {y}
+                </button>
+              )}
+            </For>
+          </div>
+          <button
+            type="button"
+            class="mt-2 min-h-10 w-full rounded-lg py-2 text-xs font-medium text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+            onClick={() => setShowYearPicker(false)}
+          >
+            ← Kembali ke Kalender
+          </button>
+        </Show>
+
+        <Show when={!showYearPicker()}>
+          <div class="mb-1 grid grid-cols-7 text-center">
+            <For each={DAYS_SHORT}>
+              {(d) => <span class="py-1 text-[10px] font-semibold uppercase text-slate-400">{d}</span>}
+            </For>
+          </div>
+
+          <div class="grid grid-cols-7">
+            <For each={cells()}>
+              {(day) => (
+                <Show when={day !== null} fallback={<span />}>
+                  <button
+                    type="button"
+                    onClick={() => select(day!)}
+                    class={`m-0.5 flex h-10 items-center justify-center rounded-lg text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 sm:h-8 ${
+                      isSelected(day!)
+                        ? "bg-emerald-600 font-semibold text-white"
+                        : isToday(day!)
+                          ? "font-semibold text-emerald-600 ring-1 ring-inset ring-emerald-400"
+                          : "text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    {day}
+                  </button>
+                </Show>
+              )}
+            </For>
+          </div>
+
+          <div class="mt-2 border-t border-slate-100 pt-2">
+            <button
+              type="button"
+              onClick={selectToday}
+              class="min-h-10 w-full rounded-lg py-2 text-xs font-medium text-emerald-600 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
+            >
+              Hari Ini
+            </button>
+          </div>
+        </Show>
+      </Popover>
     </div>
   );
 }

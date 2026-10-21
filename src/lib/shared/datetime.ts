@@ -252,6 +252,28 @@ export function currentJakartaYear(): number {
 }
 
 /**
+ * Order two strict `YYYY-MM` month keys as WIB calendar months.
+ * Returns a negative/zero/positive number like `Array#sort`, or `NaN` when
+ * either key is not a valid month.
+ */
+export function compareJakartaMonth(a: string, b: string): number {
+  const left = parseMonth(a);
+  const right = parseMonth(b);
+  if (!left || !right) return Number.NaN;
+
+  return left.year - right.year || left.month - right.month;
+}
+
+/**
+ * True when `month` is a valid `YYYY-MM` key later than the current WIB month.
+ * Invalid keys return `false` so callers keep their own format validation.
+ */
+export function isFutureJakartaMonth(month: string): boolean {
+  const comparison = compareJakartaMonth(month, currentJakartaMonth());
+  return Number.isFinite(comparison) && comparison > 0;
+}
+
+/**
  * Inclusive number of WIB calendar days from `dateFrom` to `dateTo`.
  * Returns `NaN` when either bound is invalid or the range is reversed.
  */

@@ -1,10 +1,10 @@
-import { createEffect, createSignal, on, onCleanup, Show } from "solid-js";
-import { CalendarX } from "lucide-solid";
+import { createEffect, createSignal, For, on, onCleanup, Show } from "solid-js";
+import { CalendarX, ChevronDown } from "lucide-solid";
 import { ModalFrame } from "~/components/shared/ModalFrame";
 import { SimpleSelect } from "~/components/ui/SimpleSelect";
 import { useToast } from "~/components/shared/ToastProvider";
 import { ROUTES } from "~/constants/routes";
-import { currentJakartaMonth, currentJakartaYear } from "~/lib/shared/datetime";
+import { compareJakartaMonth, currentJakartaMonth, currentJakartaYear } from "~/lib/shared/datetime";
 
 const MONTH_NAMES = [
   "Januari",
@@ -26,24 +26,37 @@ const MONTH_OPTIONS = MONTH_NAMES.map((name, index) => ({
   label: name,
 }));
 
+const FORMAT_OPTIONS = [
+  { value: "csv", label: "CSV (.csv)" },
+  { value: "xlsx", label: "Excel (.xlsx)" },
+  { value: "pdf", label: "PDF (.pdf)" },
+] as const;
+
+type ExportFormat = (typeof FORMAT_OPTIONS)[number]["value"];
+
 function isAbortError(error: unknown) {
   if (error instanceof DOMException) return error.name === "AbortError";
   return error instanceof Error && error.name === "AbortError";
 }
 
+function currentMonthValue() {
+  return String(Number(currentJakartaMonth().slice(5, 7)));
+}
+
 const btnPrimary =
-  "rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60";
+  "w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto";
 const btnGhost =
-  "rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50";
+  "w-full rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 sm:w-auto";
 
 type ExportPreview = {
   count: number;
   maxRows: number;
   filename: string;
+  format: ExportFormat;
 };
 
 function initialMonthValue() {
-  return String(Number(currentJakartaMonth().slice(5, 7)));
+  return currentMonthValue();
 }
 
 export function ExportHistoryModal(props: {
@@ -57,6 +70,7 @@ export function ExportHistoryModal(props: {
   const [view, setView] = createSignal<"form" | "empty">("form");
   const [month, setMonth] = createSignal<string>(initialMonthValue());
   const [year, setYear] = createSignal<string>(String(currentJakartaYear()));
+  const [format, setFormat] = createSignal<ExportFormat>("csv");
   const [loading, setLoading] = createSignal<boolean>(false);
   let requestController: AbortController | null = null;
 
@@ -77,6 +91,7 @@ export function ExportHistoryModal(props: {
         }
         setMonth(initialMonthValue());
         setYear(String(currentJakartaYear()));
+        setFormat("csv");
         setLoading(false);
       },
     ),
@@ -103,6 +118,25 @@ export function ExportHistoryModal(props: {
     });
   };
 
+  // A past year exposes all 12 months; the current WIB year stops at the
+  // current WIB month so a future month can never be selected.
+  const monthOptions = () => {
+    const current = currentJakartaMonth();
+    return MONTH_OPTIONS.filter((option) => {
+      const key = `${year()}-${option.value.padStart(2, "0")}`;
+      return compareJakartaMonth(key, current) <= 0;
+    });
+  };
+
+  const changeYear = (value: string) => {
+    setYear(value);
+    const current = currentJakartaMonth();
+    const selected = `${value}-${month().padStart(2, "0")}`;
+    if (compareJakartaMonth(selected, current) > 0) {
+      setMonth(String(Number(current.slice(5, 7))));
+    }
+  };
+
   const submit = async (event: SubmitEvent) => {
     event.preventDefault();
     if (loading()) return;
@@ -114,6 +148,7 @@ export function ExportHistoryModal(props: {
     const monthKey = `${year()}-${month().padStart(2, "0")}`;
     const params = new URLSearchParams({
       month: monthKey,
+      format: format(),
       preview: "1",
     });
     if (props.regionId) params.set("regionId", props.regionId);
@@ -130,6 +165,12 @@ export function ExportHistoryModal(props: {
 
       if (response.status === 401) {
         window.location.assign(ROUTES.login);
+        return;
+      }
+
+      if (response.status === 400) {
+        const message = (await response.text()).trim();
+        notify({ kind: "error", title: message || "Periode ekspor tidak valid." });
         return;
       }
 
@@ -161,12 +202,56 @@ export function ExportHistoryModal(props: {
       }
 
       params.delete("preview");
+      params.set("format", preview.format);
+
+      // Fetch the file instead of navigating an `<a download>`: anchor
+      // navigation cannot observe a 401/404/413/503, so the browser could save
+      // a text/plain error body under the export filename while the UI still
+      // reports success.
+      const downloadResponse = await fetch(`/api/irrigation-history/export?${params.toString()}`, {
+        credentials: "same-origin",
+        cache: "no-store",
+        signal: controller.signal,
+      });
+
+      if (downloadResponse.status === 401) {
+        window.location.assign(ROUTES.login);
+        return;
+      }
+
+      if (!downloadResponse.ok) {
+        const message = (await downloadResponse.text()).trim();
+        const title =
+          downloadResponse.status === 503
+            ? "Server sedang sibuk"
+            : downloadResponse.status === 413
+              ? "Data ekspor terlalu banyak"
+              : downloadResponse.status === 404
+                ? "Data tidak ditemukan"
+                : "Gagal mengunduh ekspor";
+        notify({ kind: "error", title, message });
+        return;
+      }
+
+      const blob = await downloadResponse.blob();
+      if (blob.size === 0) {
+        notify({
+          kind: "error",
+          title: "Gagal mengunduh ekspor",
+          message: "Berkas ekspor kosong. Coba lagi.",
+        });
+        return;
+      }
+
+      const downloadUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      link.href = `/api/irrigation-history/export?${params.toString()}`;
+      link.href = downloadUrl;
       link.download = preview.filename;
       document.body.appendChild(link);
       link.click();
       link.remove();
+      // Keep the blob alive long enough for slower mobile browsers to save it.
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 30_000);
 
       props.onClose();
       notify({ kind: "success", title: "Export dimulai" });
@@ -192,23 +277,53 @@ export function ExportHistoryModal(props: {
                 <h2 class="text-lg font-semibold text-slate-900">Export Riwayat Irigasi</h2>
                 <p class="mt-1 text-xs leading-5 text-slate-500">
                   {
-                    "Pilih bulan dan tahun data yang akan diunduh. Filter region, lahan, dan status yang aktif akan diterapkan."
+                    "Pilih bulan, tahun, dan format file yang akan diunduh. Filter region, lahan, dan status yang aktif akan diterapkan."
                   }
                 </p>
               </div>
 
-              <div class="grid grid-cols-2 gap-3">
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label class="mb-1 block text-xs font-medium text-slate-600">Bulan</label>
-                  <SimpleSelect value={month()} options={MONTH_OPTIONS} onChange={setMonth} />
+                  <SimpleSelect value={month()} options={monthOptions()} onChange={setMonth} />
                 </div>
                 <div>
                   <label class="mb-1 block text-xs font-medium text-slate-600">Tahun</label>
-                  <SimpleSelect value={year()} options={yearOptions()} onChange={setYear} />
+                  <SimpleSelect value={year()} options={yearOptions()} onChange={changeYear} />
                 </div>
               </div>
 
-              <div class="flex justify-end gap-3 pt-1">
+              <div>
+                <label for="history-export-format" class="mb-1 block text-xs font-medium text-slate-600">
+                  Format file
+                </label>
+                <div class="relative">
+                  <select
+                    id="history-export-format"
+                    class="w-full appearance-none rounded-lg border border-slate-200 bg-white px-3 py-2 pr-9 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                    value={format()}
+                    onChange={(event) => setFormat(event.currentTarget.value as ExportFormat)}
+                  >
+                    <For each={FORMAT_OPTIONS}>
+                      {(option) => (
+                        <option value={option.value} selected={option.value === format()}>
+                          {option.label}
+                        </option>
+                      )}
+                    </For>
+                  </select>
+                  <ChevronDown
+                    size={14}
+                    class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
+                    aria-hidden="true"
+                  />
+                </div>
+                <p class="mt-1 text-[11px] leading-4 text-slate-500">
+                  PDF maks 2.000 baris; CSV/Excel maks 5.000 baris.
+                </p>
+              </div>
+
+              <div class="flex flex-col-reverse gap-3 pt-1 sm:flex-row sm:justify-end">
                 <button type="button" class={btnGhost} onClick={close}>
                   Batal
                 </button>
@@ -225,7 +340,7 @@ export function ExportHistoryModal(props: {
             </div>
             <h2 class="text-lg font-semibold text-slate-900">Data Tidak Ditemukan</h2>
             <p class="mt-2 text-sm leading-6 text-slate-500">{emptyMessage()}</p>
-            <div class="mt-6 flex justify-end gap-3">
+            <div class="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
               <button type="button" class={btnPrimary} onClick={() => setView("form")}>
                 Ubah Periode
               </button>

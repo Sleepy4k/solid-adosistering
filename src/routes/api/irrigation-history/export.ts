@@ -1,7 +1,9 @@
 import type { APIEvent } from "@solidjs/start/server";
 import { z } from "zod";
 import {
-  formatJakartaDateTime,
+  currentJakartaMonth,
+  formatJakartaMonthLabel,
+  isFutureJakartaMonth,
   isValidMonth,
   startOfJakartaMonth,
   startOfNextJakartaMonth,
@@ -11,10 +13,82 @@ import { appOrigin } from "~/server/config";
 import { prisma } from "~/server/db/prisma";
 import { enrichIrrigationEvents, historyEventSelect, type HistoryItem } from "~/server/domain/historyData";
 import { buildIrrigationEventWhere } from "~/server/domain/historyQuery";
+import {
+  EXPORT_MAX_ROWS,
+  HISTORY_EXPORT_HEADERS,
+  maxRowsFor,
+  neutralizeSpreadsheetFormula,
+  PDF_MAX_ROWS,
+  toHistoryExportRow,
+  type HistoryExportValue,
+} from "~/server/export/historyRows";
 import { checkRateLimit, rateLimitResponse } from "~/server/http/rateLimit";
 
-/** Hard cap so one request cannot materialise an unbounded CSV in memory. */
-const EXPORT_MAX_ROWS = 5000;
+const EXPORT_FORMATS = ["csv", "xlsx", "pdf"] as const;
+type ExportFormat = (typeof EXPORT_FORMATS)[number];
+
+/**
+ * `pdf-lib` builds the whole document synchronously, so a second concurrent
+ * build yields no throughput and only doubles peak memory. One active build
+ * plus a bounded FIFO queue keeps latency predictable; the rest get a fast 503
+ * retry hint instead of piling up.
+ */
+const PDF_CONCURRENCY_LIMIT = 1;
+const PDF_QUEUE_LIMIT = 4;
+const PDF_BUSY_MESSAGE = "Server sedang membuat ekspor PDF lain. Coba lagi dalam beberapa detik.";
+
+let activePdfBuilds = 0;
+const pdfQueue: Array<() => void> = [];
+
+/** Cheap gate before count/read work; the acquire below remains authoritative. */
+function isPdfQueueFull(): boolean {
+  return pdfQueue.length >= PDF_QUEUE_LIMIT;
+}
+
+/** Idempotent release token so a double `finally` can never free two slots. */
+function createPdfSlotRelease(): () => void {
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    releasePdfSlot();
+  };
+}
+
+function releasePdfSlot(): void {
+  const next = pdfQueue.shift();
+  if (next) {
+    // Hand the slot straight to the next waiter: `activePdfBuilds` stays full.
+    next();
+    return;
+  }
+  activePdfBuilds = Math.max(activePdfBuilds - 1, 0);
+}
+
+/**
+ * Reserve a PDF build slot, or `null` when the queue is full. Callers must
+ * await the returned promise and invoke its token exactly once in `finally`.
+ */
+function acquirePdfSlot(): Promise<() => void> | null {
+  if (activePdfBuilds < PDF_CONCURRENCY_LIMIT) {
+    activePdfBuilds += 1;
+    return Promise.resolve(createPdfSlotRelease());
+  }
+  if (pdfQueue.length >= PDF_QUEUE_LIMIT) return null;
+
+  return new Promise<() => void>((resolve) => {
+    pdfQueue.push(() => resolve(createPdfSlotRelease()));
+  });
+}
+
+const EXPORT_FORMAT_META: Record<ExportFormat, { readonly extension: string; readonly contentType: string }> = {
+  csv: { extension: "csv", contentType: "text/csv; charset=utf-8" },
+  xlsx: {
+    extension: "xlsx",
+    contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  },
+  pdf: { extension: "pdf", contentType: "application/pdf" },
+};
 
 const idParam = z
   .string()
@@ -33,39 +107,33 @@ const exportQuerySchema = z.object({
     .string()
     .trim()
     .refine((value) => isValidMonth(value), "Format bulan harus YYYY-MM."),
+  format: z.enum(EXPORT_FORMATS).default("csv"),
   preview: z.literal("1").optional(),
   regionId: idParam.optional(),
   blockId: idParam.optional(),
   status: z.enum(["ON", "OFF"]).optional(),
 });
 
-const CSV_HEADERS = [
-  "Region",
-  "Blok",
-  "Sprayer",
-  "Hardware ID",
-  "Waktu Mulai (WIB)",
-  "Waktu Selesai (WIB)",
-  "Durasi (detik)",
-  "Jenis Irigasi",
-  "Status Relay",
-  "Status Event",
-  "Volume Air (L)",
-  "Debit Rata-rata (L/menit)",
-  "Kelembaban (%)",
-  "Kondisi Tanah",
-  "Operator",
-] as const;
+type ExportFilters = {
+  readonly regionId?: string;
+  readonly blockId?: string;
+  readonly status?: "ON" | "OFF";
+};
 
-function textResponse(body: string, status: number): Response {
+function textResponse(body: string, status: number, headers?: Record<string, string>): Response {
   return new Response(body, {
     status,
     headers: {
       "Content-Type": "text/plain; charset=utf-8",
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
+      ...headers,
     },
   });
+}
+
+function pdfBusyResponse(): Response {
+  return textResponse(PDF_BUSY_MESSAGE, 503, { "Retry-After": "5" });
 }
 
 /**
@@ -92,74 +160,90 @@ function isCrossSiteRequest(request: Request): boolean {
   }
 }
 
-/**
- * Spreadsheet apps execute cells starting with `=`, `+`, `-`, `@` or their
- * full-width variants (U+FF1D, U+FF0B, U+FF0D, U+FF20). Leading padding is
- * transparent to that decision, so every Unicode control/format/unassigned
- * (`\p{C}`) and separator (`\p{Z}`) character is skipped before testing the
- * first significant character. That covers C1 controls, bidi marks, BOM,
- * zero-width characters and NBSP, not just the ASCII/`\s` subset.
- * Prefixing a single quote keeps the value as text (CSV injection defence).
- * The single `*` keeps the match linear-time (no nested quantifiers).
- */
-const SPREADSHEET_FORMULA_PREFIX = /^[\p{C}\p{Z}]*[=+\-@＝＋－＠]/u;
-
-function escapeSpreadsheetFormula(value: string): string {
-  return SPREADSHEET_FORMULA_PREFIX.test(value) ? `'${value}` : value;
-}
-
-function csvCell(value: string | number | null): string {
+function csvCell(value: HistoryExportValue): string {
   if (value === null) return "";
   const text = String(value);
   if (text === "") return "";
 
-  return `"${escapeSpreadsheetFormula(text).replace(/"/g, '""')}"`;
-}
-
-function formatDecimal(value: number | null): string | null {
-  if (value === null || !Number.isFinite(value)) return null;
-  return value.toFixed(2);
-}
-
-function averageFlowLmin(item: HistoryItem): string | null {
-  if (item.totalVolumeLiter === null || item.durationSeconds === null || item.durationSeconds <= 0) return null;
-  return formatDecimal(item.totalVolumeLiter / (item.durationSeconds / 60));
-}
-
-function moistureLabel(status: string | null): string | null {
-  if (status === null) return null;
-  if (status === "KERING") return "Kering";
-  if (status === "BASAH") return "Basah";
-  return "Lembab";
-}
-
-function toCsvRow(item: HistoryItem): string {
-  const mode = item.mode === "AUTO" ? "Otomatis" : "Manual";
-  const relay = item.relay === "ON" ? "Nyala" : "Mati";
-  const eventStatus = item.relay === "ON" && !item.endedAt ? "Irigasi Aktif" : "Irigasi Selesai";
-
-  return [
-    csvCell(item.block.region.name),
-    csvCell(item.block.name),
-    csvCell(item.sprayer.displayName),
-    csvCell(item.sprayer.hardwareId),
-    csvCell(formatJakartaDateTime(item.startedAt)),
-    csvCell(item.endedAt ? formatJakartaDateTime(item.endedAt) : null),
-    csvCell(item.durationSeconds),
-    csvCell(mode),
-    csvCell(relay),
-    csvCell(eventStatus),
-    csvCell(formatDecimal(item.totalVolumeLiter)),
-    csvCell(averageFlowLmin(item)),
-    csvCell(item.sensor ? formatDecimal(item.sensor.moisturePercent) : null),
-    csvCell(item.sensor ? moistureLabel(item.sensor.moistureStatus) : null),
-    csvCell(item.actor?.name ?? null),
-  ].join(",");
+  return `"${neutralizeSpreadsheetFormula(text).replace(/"/g, '""')}"`;
 }
 
 function buildCsv(items: HistoryItem[]): string {
-  const lines = [CSV_HEADERS.map((header) => csvCell(header)).join(","), ...items.map(toCsvRow)];
+  const lines = [
+    HISTORY_EXPORT_HEADERS.map(csvCell).join(","),
+    ...items.map((item) => toHistoryExportRow(item).map(csvCell).join(",")),
+  ];
   return `\uFEFF${lines.join("\r\n")}\r\n`;
+}
+
+/**
+ * Derive the PDF filter summary from the already-scoped rows. The `where`
+ * clause guarantees every fetched row matches the selected region/block, so
+ * the first match is representative and no second lookup by raw id is needed
+ * (which also removes an un-scoped read of another region/block name).
+ */
+function describeExportFilters(filters: ExportFilters, items: readonly HistoryItem[]): string[] {
+  const parts: string[] = [];
+  const regionId = filters.regionId;
+  if (regionId) {
+    const regionName = items.find((item) => item.block.region.id === regionId)?.block.region.name;
+    parts.push(`Region: ${regionName ?? "-"}`);
+  }
+
+  const blockId = filters.blockId;
+  if (blockId) {
+    const blockName = items.find((item) => item.block.id === blockId)?.block.name;
+    parts.push(`Blok: ${blockName ?? "-"}`);
+  }
+
+  if (filters.status) parts.push(`Status relay: ${filters.status === "ON" ? "Nyala" : "Mati"}`);
+  return parts;
+}
+
+/**
+ * Heavy renderers are imported per branch so CSV requests never initialise
+ * `exceljs` or `pdf-lib` in the server process.
+ */
+async function buildExportBody(
+  items: HistoryItem[],
+  month: string,
+  format: ExportFormat,
+  filters: ExportFilters,
+): Promise<Uint8Array> {
+  if (format === "csv") return new TextEncoder().encode(buildCsv(items));
+
+  const rows = items.map(toHistoryExportRow);
+  if (format === "xlsx") {
+    const { buildIrrigationHistoryXlsx } = await import("~/server/export/xlsxTemplate");
+    return buildIrrigationHistoryXlsx({ rows });
+  }
+
+  const { buildIrrigationHistoryPdf } = await import("~/server/export/pdfTemplate");
+  return buildIrrigationHistoryPdf({
+    month,
+    rows,
+    filters: describeExportFilters(filters, items),
+    generatedAt: new Date(),
+  });
+}
+
+/**
+ * Explain the per-format cap in the 413 body: PDF is intentionally lower, and
+ * the user can switch to CSV/Excel when the dataset fits the tabular cap.
+ */
+function exportLimitMessage(format: ExportFormat, count: number, month?: string): string {
+  const subject = month ? `Data pada bulan ${month}` : `Jumlah data ${count} baris`;
+  const cap = maxRowsFor(format);
+
+  if (format === "pdf") {
+    return (
+      `${subject} melebihi batas ekspor PDF ${PDF_MAX_ROWS} baris. ` +
+      `Ekspor PDF dibatasi karena proses render yang berat; gunakan CSV atau Excel untuk ekspor hingga ` +
+      `${EXPORT_MAX_ROWS} baris, atau persempit periode/filter lalu coba lagi.`
+    );
+  }
+
+  return `${subject} melebihi batas ekspor ${cap} baris. Persempit periode atau filter lalu coba lagi.`;
 }
 
 export async function GET(event: APIEvent): Promise<Response> {
@@ -178,10 +262,25 @@ export async function GET(event: APIEvent): Promise<Response> {
   const params = Object.fromEntries(new URL(event.request.url).searchParams);
   const parsed = exportQuerySchema.safeParse(params);
   if (!parsed.success) {
-    return textResponse("Parameter ekspor tidak valid. Bulan wajib berformat YYYY-MM dan filter harus valid.", 400);
+    return textResponse(
+      "Parameter ekspor tidak valid. Bulan wajib berformat YYYY-MM, format harus csv, xlsx, atau pdf, dan filter harus valid.",
+      400,
+    );
   }
 
-  const { month, preview, regionId, blockId, status } = parsed.data;
+  const { month, format, preview, regionId, blockId, status } = parsed.data;
+
+  if (isFutureJakartaMonth(month)) {
+    return textResponse(
+      `Bulan ekspor tidak boleh melewati bulan berjalan (WIB). Pilih bulan hingga ${formatJakartaMonthLabel(currentJakartaMonth())}.`,
+      400,
+    );
+  }
+
+  // Reject an already-saturated PDF queue before the count/read/enrichment
+  // queries. Preview requests only read metadata and always bypass this gate;
+  // CSV/XLSX do not use the PDF semaphore at all.
+  if (format === "pdf" && preview !== "1" && isPdfQueueFull()) return pdfBusyResponse();
 
   const where = await buildIrrigationEventWhere(session, {
     ...(regionId ? { regionId } : {}),
@@ -190,18 +289,15 @@ export async function GET(event: APIEvent): Promise<Response> {
     startedAt: { gte: startOfJakartaMonth(month), lt: startOfNextJakartaMonth(month) },
   });
 
-  const filename = `riwayat-irigasi-${month}.csv`;
+  const formatMeta = EXPORT_FORMAT_META[format];
+  const filename = `riwayat-irigasi-${month}.${formatMeta.extension}`;
+  const maxRows = maxRowsFor(format);
   const count = await prisma.irrigationEvent.count({ where });
 
-  if (count > EXPORT_MAX_ROWS) {
-    return textResponse(
-      `Jumlah data ${count} baris melebihi batas ekspor ${EXPORT_MAX_ROWS} baris. Persempit periode atau filter lalu coba lagi.`,
-      413,
-    );
-  }
+  if (count > maxRows) return textResponse(exportLimitMessage(format, count), 413);
 
   if (preview === "1") {
-    return new Response(JSON.stringify({ count, maxRows: EXPORT_MAX_ROWS, filename }), {
+    return new Response(JSON.stringify({ count, maxRows, filename, format }), {
       status: 200,
       headers: {
         "Content-Type": "application/json; charset=utf-8",
@@ -219,24 +315,42 @@ export async function GET(event: APIEvent): Promise<Response> {
   const events = await prisma.irrigationEvent.findMany({
     where,
     orderBy: [{ startedAt: "desc" }, { id: "desc" }],
-    take: EXPORT_MAX_ROWS + 1,
+    take: maxRows + 1,
     select: historyEventSelect,
   });
-  if (events.length > EXPORT_MAX_ROWS) {
-    return textResponse(
-      `Data pada bulan ${month} melebihi batas ekspor ${EXPORT_MAX_ROWS} baris. Persempit periode atau filter lalu coba lagi.`,
-      413,
-    );
-  }
-  const items = await enrichIrrigationEvents(events, session.id);
+  if (events.length > maxRows) return textResponse(exportLimitMessage(format, events.length, month), 413);
 
-  return new Response(buildCsv(items), {
-    status: 200,
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${filename}"`,
-      "Cache-Control": "private, no-store",
-      "X-Content-Type-Options": "nosniff",
-    },
-  });
+  const items = await enrichIrrigationEvents(events, session.id);
+  const filters: ExportFilters = {
+    ...(regionId ? { regionId } : {}),
+    ...(blockId ? { blockId } : {}),
+    ...(status ? { status } : {}),
+  };
+
+  // Count and preview requests returned above, so a slot is only ever held for
+  // an actual PDF render. CSV/XLSX skip the limiter entirely.
+  let releasePdfSlot: (() => void) | null = null;
+  if (format === "pdf") {
+    const pendingSlot = acquirePdfSlot();
+    if (!pendingSlot) return pdfBusyResponse();
+    releasePdfSlot = await pendingSlot;
+  }
+
+  try {
+    const body = await buildExportBody(items, month, format, filters);
+
+    // Copying into a fresh view narrows `ArrayBufferLike` to `ArrayBuffer`,
+    // which is what the DOM `BodyInit` type accepts.
+    return new Response(new Uint8Array(body), {
+      status: 200,
+      headers: {
+        "Content-Type": formatMeta.contentType,
+        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  } finally {
+    releasePdfSlot?.();
+  }
 }

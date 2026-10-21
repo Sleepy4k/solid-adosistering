@@ -2,6 +2,7 @@ import "server-only";
 
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { formatJakartaDateTime, formatJakartaMonthLabel } from "~/lib/shared/datetime";
+import { throwIfAborted, yieldToEventLoop } from "./heavyExport";
 import { HISTORY_EXPORT_HEADERS, displayExportValue, type HistoryExportRow } from "./historyRows";
 
 const PAGE_WIDTH = 841.89;
@@ -20,6 +21,10 @@ const HEADER_PADDING_Y = 4;
 const TABLE_FONT_SIZE = 6.5;
 const TABLE_ROW_HEIGHT = 13;
 const CELL_PADDING_X = 3;
+
+/** Keep each synchronous drawing burst short so other requests stay responsive. */
+const YIELD_BUDGET_MS = 10;
+const ROWS_PER_YIELD = 64;
 
 const COLOR_TEXT = rgb(0.12, 0.16, 0.22);
 const COLOR_MUTED = rgb(0.42, 0.45, 0.5);
@@ -116,6 +121,7 @@ export type IrrigationHistoryPdfOptions = {
   readonly rows: readonly HistoryExportRow[];
   readonly filters: readonly string[];
   readonly generatedAt: Date;
+  readonly signal?: AbortSignal;
 };
 
 function fitText(text: string, font: PDFFont, size: number, maxWidth: number): string {
@@ -363,6 +369,8 @@ function drawFooters(pages: readonly PDFPage[], font: PDFFont): void {
  * an ellipsis. An empty row list still produces a valid one-page document.
  */
 export async function buildIrrigationHistoryPdf(options: IrrigationHistoryPdfOptions): Promise<Uint8Array> {
+  throwIfAborted(options.signal);
+
   const document = await PDFDocument.create();
   const generatedAt = Number.isFinite(options.generatedAt.getTime()) ? options.generatedAt : new Date();
 
@@ -405,15 +413,33 @@ export async function buildIrrigationHistoryPdf(options: IrrigationHistoryPdfOpt
       color: COLOR_MUTED,
     });
   } else {
-    options.rows.forEach((row, rowIndex) => {
+    let lastYieldAt = performance.now();
+    let rowsSinceYield = 0;
+
+    for (const [rowIndex, row] of options.rows.entries()) {
+      throwIfAborted(options.signal);
+
       if (current.tableTop - TABLE_ROW_HEIGHT < CONTENT_BOTTOM) {
         current = startPage(false);
       }
       drawTableRow(current.page, current.tableTop, row, rowIndex, layout, regularFont);
       current.tableTop -= TABLE_ROW_HEIGHT;
-    });
+
+      rowsSinceYield += 1;
+      if (rowsSinceYield >= ROWS_PER_YIELD || performance.now() - lastYieldAt >= YIELD_BUDGET_MS) {
+        await yieldToEventLoop();
+        throwIfAborted(options.signal);
+        lastYieldAt = performance.now();
+        rowsSinceYield = 0;
+      }
+    }
   }
 
+  throwIfAborted(options.signal);
   drawFooters(pages, regularFont);
-  return document.save();
+
+  throwIfAborted(options.signal);
+  const bytes = await document.save({ objectsPerTick: 4 });
+  throwIfAborted(options.signal);
+  return bytes;
 }

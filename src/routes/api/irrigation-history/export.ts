@@ -14,6 +14,12 @@ import { prisma } from "~/server/db/prisma";
 import { enrichIrrigationEvents, historyEventSelect, type HistoryItem } from "~/server/domain/historyData";
 import { buildIrrigationEventWhere } from "~/server/domain/historyQuery";
 import {
+  acquireHeavyExportSlot,
+  HEAVY_EXPORT_BUSY_MESSAGE,
+  isHeavyExportQueueFull,
+  throwIfAborted,
+} from "~/server/export/heavyExport";
+import {
   EXPORT_MAX_ROWS,
   HISTORY_EXPORT_HEADERS,
   maxRowsFor,
@@ -28,58 +34,17 @@ const EXPORT_FORMATS = ["csv", "xlsx", "pdf"] as const;
 type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 /**
- * `pdf-lib` builds the whole document synchronously, so a second concurrent
- * build yields no throughput and only doubles peak memory. One active build
- * plus a bounded FIFO queue keeps latency predictable; the rest get a fast 503
- * retry hint instead of piling up.
+ * Heavy exports share one admission gate: one active build bounds peak RSS
+ * (PDF ~320–360MB; XLSX streams to a compressed archive and measured ~20MB
+ * incremental peak on Node 25 and ~70MB on Bun 1.3 at the 5,000-row cap) and
+ * at most four more may wait. Further requests get a fast 503 retry hint
+ * instead of piling up. CSV renders are cheap and bypass the gate entirely.
+ *
+ * The cheap queue check before `count` is only a hint. The authoritative slot
+ * is acquired after the count/preview/empty responses but before the scoped
+ * read and enrichment, so the slot is held across the heavy query work and a
+ * queued or aborted request never materialises up to 5,000 rows.
  */
-const PDF_CONCURRENCY_LIMIT = 1;
-const PDF_QUEUE_LIMIT = 4;
-const PDF_BUSY_MESSAGE = "Server sedang membuat ekspor PDF lain. Coba lagi dalam beberapa detik.";
-
-let activePdfBuilds = 0;
-const pdfQueue: Array<() => void> = [];
-
-/** Cheap gate before count/read work; the acquire below remains authoritative. */
-function isPdfQueueFull(): boolean {
-  return pdfQueue.length >= PDF_QUEUE_LIMIT;
-}
-
-/** Idempotent release token so a double `finally` can never free two slots. */
-function createPdfSlotRelease(): () => void {
-  let released = false;
-  return () => {
-    if (released) return;
-    released = true;
-    releasePdfSlot();
-  };
-}
-
-function releasePdfSlot(): void {
-  const next = pdfQueue.shift();
-  if (next) {
-    // Hand the slot straight to the next waiter: `activePdfBuilds` stays full.
-    next();
-    return;
-  }
-  activePdfBuilds = Math.max(activePdfBuilds - 1, 0);
-}
-
-/**
- * Reserve a PDF build slot, or `null` when the queue is full. Callers must
- * await the returned promise and invoke its token exactly once in `finally`.
- */
-function acquirePdfSlot(): Promise<() => void> | null {
-  if (activePdfBuilds < PDF_CONCURRENCY_LIMIT) {
-    activePdfBuilds += 1;
-    return Promise.resolve(createPdfSlotRelease());
-  }
-  if (pdfQueue.length >= PDF_QUEUE_LIMIT) return null;
-
-  return new Promise<() => void>((resolve) => {
-    pdfQueue.push(() => resolve(createPdfSlotRelease()));
-  });
-}
 
 const EXPORT_FORMAT_META: Record<ExportFormat, { readonly extension: string; readonly contentType: string }> = {
   csv: { extension: "csv", contentType: "text/csv; charset=utf-8" },
@@ -132,8 +97,19 @@ function textResponse(body: string, status: number, headers?: Record<string, str
   });
 }
 
-function pdfBusyResponse(): Response {
-  return textResponse(PDF_BUSY_MESSAGE, 503, { "Retry-After": "5" });
+function heavyExportBusyResponse(): Response {
+  return textResponse(HEAVY_EXPORT_BUSY_MESSAGE, 503, { "Retry-After": "5" });
+}
+
+/** Client went away (or aborted the fetch): stop work without a response body. */
+function exportAbortedResponse(): Response {
+  return new Response(null, {
+    status: 499,
+    headers: {
+      "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
 }
 
 /**
@@ -205,25 +181,34 @@ function describeExportFilters(filters: ExportFilters, items: readonly HistoryIt
  * `exceljs` or `pdf-lib` in the server process.
  */
 async function buildExportBody(
+  signal: AbortSignal,
   items: HistoryItem[],
   month: string,
   format: ExportFormat,
   filters: ExportFilters,
 ): Promise<Uint8Array> {
-  if (format === "csv") return new TextEncoder().encode(buildCsv(items));
+  if (format === "csv") {
+    throwIfAborted(signal);
+    const body = new TextEncoder().encode(buildCsv(items));
+    throwIfAborted(signal);
+    return body;
+  }
 
   const rows = items.map(toHistoryExportRow);
   if (format === "xlsx") {
     const { buildIrrigationHistoryXlsx } = await import("~/server/export/xlsxTemplate");
-    return buildIrrigationHistoryXlsx({ rows });
+    throwIfAborted(signal);
+    return buildIrrigationHistoryXlsx({ rows, signal });
   }
 
   const { buildIrrigationHistoryPdf } = await import("~/server/export/pdfTemplate");
+  throwIfAborted(signal);
   return buildIrrigationHistoryPdf({
     month,
     rows,
     filters: describeExportFilters(filters, items),
     generatedAt: new Date(),
+    signal,
   });
 }
 
@@ -247,6 +232,10 @@ function exportLimitMessage(format: ExportFormat, count: number, month?: string)
 }
 
 export async function GET(event: APIEvent): Promise<Response> {
+  // Read the signal before any await so the adapter attaches its disconnect
+  // listener at the start of the request, not just once the render begins.
+  const signal = event.request.signal;
+
   // Reject hostile initiators before the limiter: otherwise a cross-site page
   // could burn the victim's export quota without ever reading a row. The
   // session check below still gates every response that carries data.
@@ -277,10 +266,12 @@ export async function GET(event: APIEvent): Promise<Response> {
     );
   }
 
-  // Reject an already-saturated PDF queue before the count/read/enrichment
-  // queries. Preview requests only read metadata and always bypass this gate;
-  // CSV/XLSX do not use the PDF semaphore at all.
-  if (format === "pdf" && preview !== "1" && isPdfQueueFull()) return pdfBusyResponse();
+  const isHeavyExport = format === "xlsx" || format === "pdf";
+
+  // Reject an already-saturated heavy-export queue before the count/read/
+  // enrichment queries. Preview requests only read metadata and bypass this
+  // gate; CSV never uses the heavy renderers.
+  if (isHeavyExport && preview !== "1" && isHeavyExportQueueFull()) return heavyExportBusyResponse();
 
   const where = await buildIrrigationEventWhere(session, {
     ...(regionId ? { regionId } : {}),
@@ -293,9 +284,11 @@ export async function GET(event: APIEvent): Promise<Response> {
   const filename = `riwayat-irigasi-${month}.${formatMeta.extension}`;
   const maxRows = maxRowsFor(format);
   const count = await prisma.irrigationEvent.count({ where });
+  if (signal.aborted) return exportAbortedResponse();
 
-  if (count > maxRows) return textResponse(exportLimitMessage(format, count), 413);
-
+  // Preview returns the uncapped, scoped count (no rows are materialised) so
+  // the client can explain the per-format limit and suggest CSV/Excel before
+  // asking for a file. Actual exports still enforce the cap below.
   if (preview === "1") {
     return new Response(JSON.stringify({ count, maxRows, filename, format }), {
       status: 200,
@@ -307,40 +300,48 @@ export async function GET(event: APIEvent): Promise<Response> {
     });
   }
 
+  if (count > maxRows) return textResponse(exportLimitMessage(format, count), 413);
+
   if (count === 0) return textResponse(`Tidak ada data riwayat irigasi pada bulan ${month}.`, 404);
 
-  // Re-check the cap on the read itself: rows can be inserted between the
-  // `count` above and this query. Fetching one extra row avoids silently
-  // truncating an export that crossed the limit in that window.
-  const events = await prisma.irrigationEvent.findMany({
-    where,
-    orderBy: [{ startedAt: "desc" }, { id: "desc" }],
-    take: maxRows + 1,
-    select: historyEventSelect,
-  });
-  if (events.length > maxRows) return textResponse(exportLimitMessage(format, events.length, month), 413);
-
-  const items = await enrichIrrigationEvents(events, session.id);
-  const filters: ExportFilters = {
-    ...(regionId ? { regionId } : {}),
-    ...(blockId ? { blockId } : {}),
-    ...(status ? { status } : {}),
-  };
-
   // Count and preview requests returned above, so a slot is only ever held for
-  // an actual PDF render. CSV/XLSX skip the limiter entirely.
-  let releasePdfSlot: (() => void) | null = null;
-  if (format === "pdf") {
-    const pendingSlot = acquirePdfSlot();
-    if (!pendingSlot) return pdfBusyResponse();
-    releasePdfSlot = await pendingSlot;
-  }
+  // an actual heavy render. This acquisition is authoritative and happens
+  // before the scoped read/enrichment so queued or aborted requests do not
+  // materialise up to 5,000 rows; the cheap check before `count` can race.
+  let releaseHeavyExport: (() => void) | null = null;
 
   try {
-    const body = await buildExportBody(items, month, format, filters);
+    if (isHeavyExport) {
+      const pendingSlot = acquireHeavyExportSlot(signal);
+      if (!pendingSlot) return heavyExportBusyResponse();
+      releaseHeavyExport = await pendingSlot;
+    }
 
-    // Copying into a fresh view narrows `ArrayBufferLike` to `ArrayBuffer`,
-    // which is what the DOM `BodyInit` type accepts.
+    // Re-check the cap on the read itself: rows can be inserted between the
+    // `count` above and this query. Fetching one extra row avoids silently
+    // truncating an export that crossed the limit in that window.
+    const events = await prisma.irrigationEvent.findMany({
+      where,
+      orderBy: [{ startedAt: "desc" }, { id: "desc" }],
+      take: maxRows + 1,
+      select: historyEventSelect,
+    });
+    throwIfAborted(signal);
+    if (events.length > maxRows) return textResponse(exportLimitMessage(format, events.length, month), 413);
+
+    const items = await enrichIrrigationEvents(events, session.id);
+    throwIfAborted(signal);
+
+    const filters: ExportFilters = {
+      ...(regionId ? { regionId } : {}),
+      ...(blockId ? { blockId } : {}),
+      ...(status ? { status } : {}),
+    };
+
+    const body = await buildExportBody(signal, items, month, format, filters);
+
+    // Copy into a fresh buffer so the response owns a standalone `ArrayBuffer`
+    // (accepted by `BodyInit`) instead of a view over shared/pooled memory.
     return new Response(new Uint8Array(body), {
       status: 200,
       headers: {
@@ -350,7 +351,13 @@ export async function GET(event: APIEvent): Promise<Response> {
         "X-Content-Type-Options": "nosniff",
       },
     });
+  } catch (error) {
+    // A genuine client disconnect while queued/reading/rendering. Only the
+    // request signal maps to 499: an internal or library `AbortError` is a
+    // real failure and must propagate. The slot is released in `finally`.
+    if (signal.aborted) return exportAbortedResponse();
+    throw error;
   } finally {
-    releasePdfSlot?.();
+    releaseHeavyExport?.();
   }
 }

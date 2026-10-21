@@ -3,6 +3,8 @@
 import type { Prisma } from "@prisma/client";
 import { ActivityAction } from "@prisma/client";
 import { redirect } from "@solidjs/router";
+import { invalidateWebConfig, serverCache } from "../cache";
+import { cacheKeys, WEB_CONFIG_TTL_MS } from "../cache/keys";
 import { prisma } from "../db/prisma";
 import { assertSuperadmin, sanitizeImageUrl } from "../auth/security";
 import { getSession } from "../auth/session";
@@ -12,7 +14,16 @@ import type { WebConfig } from "~/types/web-config";
 
 export type { WebConfig };
 
+/**
+ * Public config read. A successful read (including the "no setting yet"
+ * defaults) is cached for five minutes; a rejected Prisma read propagates and
+ * is never cached.
+ */
 export async function getWebConfig(): Promise<WebConfig> {
+  return serverCache.getOrSet(cacheKeys.webConfig, readWebConfig, WEB_CONFIG_TTL_MS);
+}
+
+async function readWebConfig(): Promise<WebConfig> {
   const setting = await prisma.systemSetting.findUnique({ where: { key: "webConfig" } });
   const defaults: WebConfig = {
     projectName: "Adosistering",
@@ -45,6 +56,7 @@ export async function saveWebConfig(input: WebConfig) {
     create: { key: "webConfig", value: data as unknown as Prisma.InputJsonValue },
     update: { value: data as unknown as Prisma.InputJsonValue },
   });
+  invalidateWebConfig();
   await logActivity({
     actorId: session.id,
     action: ActivityAction.UPDATE,

@@ -2,6 +2,8 @@
 
 import { ActivityAction } from "@prisma/client";
 import { redirect } from "@solidjs/router";
+import { invalidateLanding, serverCache } from "../cache";
+import { cacheKeys, LANDING_TTL_MS } from "../cache/keys";
 import { prisma } from "../db/prisma";
 import { assertSuperadmin, sanitizeImageUrl } from "../auth/security";
 import { getSession } from "../auth/session";
@@ -20,14 +22,24 @@ async function requireSuperadmin() {
   return assertSuperadmin(session);
 }
 
+/**
+ * Public active-only lists. The `try/catch` stays outside `getOrSet` so a
+ * database failure returns `[]` to the page without caching that fallback.
+ */
 export async function getLandingTestimonials() {
   try {
-    const rows = await prisma.landingTestimonial.findMany({
-      where: { isActive: true },
-      orderBy: { sortOrder: "asc" },
-      select: { id: true, name: true, role: true, quote: true, imageUrl: true, sortOrder: true, isActive: true },
-    });
-    return rows.map((row) => ({ ...row, imageUrl: sanitizeImageUrl(row.imageUrl) }));
+    return await serverCache.getOrSet(
+      cacheKeys.landing.testimonials,
+      async () => {
+        const rows = await prisma.landingTestimonial.findMany({
+          where: { isActive: true },
+          orderBy: { sortOrder: "asc" },
+          select: { id: true, name: true, role: true, quote: true, imageUrl: true, sortOrder: true, isActive: true },
+        });
+        return rows.map((row) => ({ ...row, imageUrl: sanitizeImageUrl(row.imageUrl) }));
+      },
+      LANDING_TTL_MS,
+    );
   } catch {
     return [];
   }
@@ -35,19 +47,25 @@ export async function getLandingTestimonials() {
 
 export async function getLandingLocations() {
   try {
-    const rows = await prisma.landingLocation.findMany({
-      where: { isActive: true },
-      orderBy: { sortOrder: "asc" },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        imageUrl: true,
-        sortOrder: true,
-        isActive: true,
+    return await serverCache.getOrSet(
+      cacheKeys.landing.locations,
+      async () => {
+        const rows = await prisma.landingLocation.findMany({
+          where: { isActive: true },
+          orderBy: { sortOrder: "asc" },
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            imageUrl: true,
+            sortOrder: true,
+            isActive: true,
+          },
+        });
+        return rows.map((row) => ({ ...row, imageUrl: sanitizeImageUrl(row.imageUrl) }));
       },
-    });
-    return rows.map((row) => ({ ...row, imageUrl: sanitizeImageUrl(row.imageUrl) }));
+      LANDING_TTL_MS,
+    );
   } catch {
     return [];
   }
@@ -55,16 +73,22 @@ export async function getLandingLocations() {
 
 export async function getLandingPartners() {
   try {
-    const rows = await prisma.landingPartner.findMany({
-      where: { isActive: true },
-      orderBy: { sortOrder: "asc" },
-      select: { id: true, name: true, logoUrl: true, websiteUrl: true, sortOrder: true, isActive: true },
-    });
-    return rows.map((row) => ({
-      ...row,
-      logoUrl: sanitizeImageUrl(row.logoUrl),
-      websiteUrl: row.websiteUrl && /^https?:\/\//i.test(row.websiteUrl) ? row.websiteUrl : null,
-    }));
+    return await serverCache.getOrSet(
+      cacheKeys.landing.partners,
+      async () => {
+        const rows = await prisma.landingPartner.findMany({
+          where: { isActive: true },
+          orderBy: { sortOrder: "asc" },
+          select: { id: true, name: true, logoUrl: true, websiteUrl: true, sortOrder: true, isActive: true },
+        });
+        return rows.map((row) => ({
+          ...row,
+          logoUrl: sanitizeImageUrl(row.logoUrl),
+          websiteUrl: row.websiteUrl && /^https?:\/\//i.test(row.websiteUrl) ? row.websiteUrl : null,
+        }));
+      },
+      LANDING_TTL_MS,
+    );
   } catch {
     return [];
   }
@@ -104,6 +128,7 @@ export async function createTestimonial(input: {
       isActive: data.isActive ?? true,
     },
   });
+  invalidateLanding("testimonials");
   await logActivity({
     actorId: session.id,
     action: ActivityAction.CREATE,
@@ -136,6 +161,7 @@ export async function updateTestimonial(input: {
       isActive: data.isActive ?? true,
     },
   });
+  invalidateLanding("testimonials");
   await logActivity({
     actorId: session.id,
     action: ActivityAction.UPDATE,
@@ -149,6 +175,7 @@ export async function deleteTestimonial(id: string) {
   const data = parseInput(idInputSchema, { id });
   const session = await requireSuperadmin();
   await prisma.landingTestimonial.delete({ where: { id: data.id } });
+  invalidateLanding("testimonials");
   await logActivity({
     actorId: session.id,
     action: ActivityAction.DELETE,
@@ -175,6 +202,7 @@ export async function createLocation(input: {
       isActive: data.isActive ?? true,
     },
   });
+  invalidateLanding("locations");
   await logActivity({
     actorId: session.id,
     action: ActivityAction.CREATE,
@@ -205,6 +233,7 @@ export async function updateLocation(input: {
       isActive: data.isActive ?? true,
     },
   });
+  invalidateLanding("locations");
   await logActivity({
     actorId: session.id,
     action: ActivityAction.UPDATE,
@@ -218,6 +247,7 @@ export async function deleteLocation(id: string) {
   const data = parseInput(idInputSchema, { id });
   const session = await requireSuperadmin();
   await prisma.landingLocation.delete({ where: { id: data.id } });
+  invalidateLanding("locations");
   await logActivity({
     actorId: session.id,
     action: ActivityAction.DELETE,
@@ -244,6 +274,7 @@ export async function createPartner(input: {
       isActive: data.isActive ?? true,
     },
   });
+  invalidateLanding("partners");
   await logActivity({
     actorId: session.id,
     action: ActivityAction.CREATE,
@@ -274,6 +305,7 @@ export async function updatePartner(input: {
       isActive: data.isActive ?? true,
     },
   });
+  invalidateLanding("partners");
   await logActivity({
     actorId: session.id,
     action: ActivityAction.UPDATE,
@@ -287,6 +319,7 @@ export async function deletePartner(id: string) {
   const data = parseInput(idInputSchema, { id });
   const session = await requireSuperadmin();
   await prisma.landingPartner.delete({ where: { id: data.id } });
+  invalidateLanding("partners");
   await logActivity({
     actorId: session.id,
     action: ActivityAction.DELETE,

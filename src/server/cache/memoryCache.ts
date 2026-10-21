@@ -2,13 +2,15 @@
  * Process-local, bounded memory cache for small, public, high-frequency reads.
  *
  * Consistency model:
- * - The cache lives in a single Node/Bun process. It is NOT shared between
- *   instances, so it is eventually consistent across a multi-instance
- *   deployment. TTL is the staleness bound for values written by another
- *   process; mutations handled by this process invalidate eagerly.
- * - The current architecture intentionally runs one replica (the process-local
- *   pump/automatic-mode locks already require that), so no cross-process
- *   invalidation bus is needed.
+ * - The store itself remains process-local: entries are never shared between
+ *   instances.
+ * - Cross-instance invalidation is signalled through the `publicCacheVersion`
+ *   row in `system_setting` and handled by `./index.ts`. Replicas re-read it in
+ *   the background at most once per check interval, so they converge within
+ *   ~12s; the TTL remains the fallback when the row cannot be read or a replica
+ *   never observes the change.
+ * - Mutations handled by this process still invalidate eagerly, before the
+ *   version row is bumped.
  * - Set `SERVER_CACHE_DISABLED=true` to disable caching. The flag is read once
  *   when the singleton is created, so changing it requires a restart.
  *

@@ -119,6 +119,11 @@ type TableLayout = {
 export type IrrigationHistoryPdfOptions = {
   readonly month: string;
   readonly rows: readonly HistoryExportRow[];
+  /**
+   * Full scoped row count when the caller kept only the newest `rows`. Omitted
+   * or equal to `rows.length` means the document is complete.
+   */
+  readonly totalRows?: number;
   readonly filters: readonly string[];
   readonly generatedAt: Date;
   readonly signal?: AbortSignal;
@@ -197,11 +202,14 @@ function drawIntro(
   y -= 28;
 
   const filterSummary = options.filters.length > 0 ? options.filters.join(" | ") : "Semua region, lahan, dan status";
+  const totalRows = options.totalRows ?? options.rows.length;
   const metaLines = [
     `Periode: ${formatJakartaMonthLabel(options.month)}`,
     `Filter: ${filterSummary}`,
     `Dibuat: ${formatJakartaDateTime(options.generatedAt)}`,
-    `Total: ${options.rows.length} baris`,
+    totalRows > options.rows.length
+      ? `Menampilkan ${options.rows.length} dari ${totalRows} baris terbaru`
+      : `Total: ${options.rows.length} baris`,
   ];
 
   for (const line of metaLines) {

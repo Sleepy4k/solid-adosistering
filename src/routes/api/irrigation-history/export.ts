@@ -20,11 +20,9 @@ import {
   throwIfAborted,
 } from "~/server/export/heavyExport";
 import {
-  EXPORT_MAX_ROWS,
   HISTORY_EXPORT_HEADERS,
   maxRowsFor,
   neutralizeSpreadsheetFormula,
-  PDF_MAX_ROWS,
   toHistoryExportRow,
   type HistoryExportValue,
 } from "~/server/export/historyRows";
@@ -176,6 +174,12 @@ function describeExportFilters(filters: ExportFilters, items: readonly HistoryIt
   return parts;
 }
 
+/** Row totals surfaced in the response headers and the PDF intro line. */
+type ExportSummary = {
+  readonly totalCount: number;
+  readonly truncated: boolean;
+};
+
 /**
  * Heavy renderers are imported per branch so CSV requests never initialise
  * `exceljs` or `pdf-lib` in the server process.
@@ -186,6 +190,7 @@ async function buildExportBody(
   month: string,
   format: ExportFormat,
   filters: ExportFilters,
+  summary: ExportSummary,
 ): Promise<Uint8Array> {
   if (format === "csv") {
     throwIfAborted(signal);
@@ -206,29 +211,11 @@ async function buildExportBody(
   return buildIrrigationHistoryPdf({
     month,
     rows,
+    totalRows: summary.totalCount,
     filters: describeExportFilters(filters, items),
     generatedAt: new Date(),
     signal,
   });
-}
-
-/**
- * Explain the per-format cap in the 413 body: PDF is intentionally lower, and
- * the user can switch to CSV/Excel when the dataset fits the tabular cap.
- */
-function exportLimitMessage(format: ExportFormat, count: number, month?: string): string {
-  const subject = month ? `Data pada bulan ${month}` : `Jumlah data ${count} baris`;
-  const cap = maxRowsFor(format);
-
-  if (format === "pdf") {
-    return (
-      `${subject} melebihi batas ekspor PDF ${PDF_MAX_ROWS} baris. ` +
-      `Ekspor PDF dibatasi karena proses render yang berat; gunakan CSV atau Excel untuk ekspor hingga ` +
-      `${EXPORT_MAX_ROWS} baris, atau persempit periode/filter lalu coba lagi.`
-    );
-  }
-
-  return `${subject} melebihi batas ekspor ${cap} baris. Persempit periode atau filter lalu coba lagi.`;
 }
 
 export async function GET(event: APIEvent): Promise<Response> {
@@ -286,21 +273,29 @@ export async function GET(event: APIEvent): Promise<Response> {
   const count = await prisma.irrigationEvent.count({ where });
   if (signal.aborted) return exportAbortedResponse();
 
-  // Preview returns the uncapped, scoped count (no rows are materialised) so
-  // the client can explain the per-format limit and suggest CSV/Excel before
-  // asking for a file. Actual exports still enforce the cap below.
+  // Preview returns the uncapped, scoped count (no rows are materialised) plus
+  // the newest-N truncation plan, so the client can explain that an export
+  // keeps at most `maxRows` rows before asking for the file.
   if (preview === "1") {
-    return new Response(JSON.stringify({ count, maxRows, filename, format }), {
-      status: 200,
-      headers: {
-        "Content-Type": "application/json; charset=utf-8",
-        "Cache-Control": "private, no-store",
-        "X-Content-Type-Options": "nosniff",
+    return new Response(
+      JSON.stringify({
+        count,
+        maxRows,
+        filename,
+        format,
+        exportedCount: Math.min(count, maxRows),
+        truncated: count > maxRows,
+      }),
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "private, no-store",
+          "X-Content-Type-Options": "nosniff",
+        },
       },
-    });
+    );
   }
-
-  if (count > maxRows) return textResponse(exportLimitMessage(format, count), 413);
 
   if (count === 0) return textResponse(`Tidak ada data riwayat irigasi pada bulan ${month}.`, 404);
 
@@ -317,17 +312,23 @@ export async function GET(event: APIEvent): Promise<Response> {
       releaseHeavyExport = await pendingSlot;
     }
 
-    // Re-check the cap on the read itself: rows can be inserted between the
-    // `count` above and this query. Fetching one extra row avoids silently
-    // truncating an export that crossed the limit in that window.
-    const events = await prisma.irrigationEvent.findMany({
+    // Over-cap exports keep the newest rows instead of failing. The extra row
+    // only detects overflow; it is sliced off before enrichment so the derived
+    // sensor join and serialisation work stay bounded by `maxRows`. The
+    // `count` can be stale (rows inserted or deleted since), so the larger of
+    // the two totals is reported and truncation is conservative.
+    const rows = await prisma.irrigationEvent.findMany({
       where,
       orderBy: [{ startedAt: "desc" }, { id: "desc" }],
       take: maxRows + 1,
       select: historyEventSelect,
     });
     throwIfAborted(signal);
-    if (events.length > maxRows) return textResponse(exportLimitMessage(format, events.length, month), 413);
+
+    const fetchedOverflow = rows.length > maxRows;
+    const events = fetchedOverflow ? rows.slice(0, maxRows) : rows;
+    const totalCount = Math.max(count, rows.length);
+    const truncated = totalCount > events.length;
 
     const items = await enrichIrrigationEvents(events, session.id);
     throwIfAborted(signal);
@@ -338,7 +339,7 @@ export async function GET(event: APIEvent): Promise<Response> {
       ...(status ? { status } : {}),
     };
 
-    const body = await buildExportBody(signal, items, month, format, filters);
+    const body = await buildExportBody(signal, items, month, format, filters, { totalCount, truncated });
 
     // Copy into a fresh buffer so the response owns a standalone `ArrayBuffer`
     // (accepted by `BodyInit`) instead of a view over shared/pooled memory.
@@ -349,6 +350,9 @@ export async function GET(event: APIEvent): Promise<Response> {
         "Content-Disposition": `attachment; filename="${filename}"`,
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",
+        "X-Export-Row-Count": String(items.length),
+        "X-Export-Total-Count": String(totalCount),
+        "X-Export-Truncated": truncated ? "1" : "0",
       },
     });
   } catch (error) {

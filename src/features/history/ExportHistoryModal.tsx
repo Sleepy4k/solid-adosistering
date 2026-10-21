@@ -43,6 +43,14 @@ function currentMonthValue() {
   return String(Number(currentJakartaMonth().slice(5, 7)));
 }
 
+function parseHeaderCount(value: string | null): number | null {
+  if (value === null) return null;
+  const trimmed = value.trim();
+  if (trimmed === "") return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
 const btnPrimary =
   "w-full rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto";
 const btnGhost =
@@ -53,6 +61,8 @@ type ExportPreview = {
   maxRows: number;
   filename: string;
   format: ExportFormat;
+  exportedCount?: number;
+  truncated?: boolean;
 };
 
 function initialMonthValue() {
@@ -192,14 +202,11 @@ export function ExportHistoryModal(props: {
         return;
       }
 
-      if (preview.count > preview.maxRows) {
-        notify({
-          kind: "error",
-          title: "Data ekspor terlalu banyak",
-          message: `Maksimal ${preview.maxRows} baris. Persempit periode atau filter lalu coba lagi.`,
-        });
-        return;
-      }
+      // The export endpoint caps the file at `maxRows` newest rows instead of
+      // rejecting over-cap requests, so these values only describe a truncated
+      // export and never block the download.
+      const previewExportedCount = preview.exportedCount ?? Math.min(preview.count, preview.maxRows);
+      const previewTruncated = preview.truncated ?? preview.count > preview.maxRows;
 
       params.delete("preview");
       params.set("format", preview.format);
@@ -233,6 +240,15 @@ export function ExportHistoryModal(props: {
         return;
       }
 
+      // Response headers are authoritative; preview values cover older servers
+      // that do not emit them yet.
+      const headerTruncated = downloadResponse.headers.get("X-Export-Truncated") === "1";
+      const headerRowCount = parseHeaderCount(downloadResponse.headers.get("X-Export-Row-Count"));
+      const headerTotalCount = parseHeaderCount(downloadResponse.headers.get("X-Export-Total-Count"));
+      const rowCount = headerRowCount ?? previewExportedCount;
+      const totalCount = headerTotalCount ?? preview.count;
+      const partial = headerTruncated || previewTruncated;
+
       const blob = await downloadResponse.blob();
       if (blob.size === 0) {
         notify({
@@ -254,7 +270,15 @@ export function ExportHistoryModal(props: {
       window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 30_000);
 
       props.onClose();
-      notify({ kind: "success", title: "Export dimulai" });
+      if (partial) {
+        notify({
+          kind: "warning",
+          title: "Ekspor dibatasi",
+          message: `Berkas berisi ${rowCount} baris terbaru dari ${totalCount} baris.`,
+        });
+      } else {
+        notify({ kind: "success", title: "Export dimulai" });
+      }
     } catch (error) {
       if (isAbortError(error)) return;
       notify({ kind: "error", title: "Gagal menyiapkan ekspor" });
@@ -319,7 +343,8 @@ export function ExportHistoryModal(props: {
                   />
                 </div>
                 <p class="mt-1 text-[11px] leading-4 text-slate-500">
-                  PDF maks 2.000 baris; CSV/Excel maks 5.000 baris.
+                  PDF maks 2.000 baris; CSV/Excel maks 5.000 baris. Jika data lebih banyak, hanya baris terbaru yang
+                  diekspor.
                 </p>
               </div>
 

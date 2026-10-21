@@ -235,6 +235,7 @@ export function AdminDashboard(props: { users: AdminUserCard[]; regions: Dashboa
                 placeholder="Semua Akun"
                 searchPlaceholder="Cari status..."
                 options={ACCOUNT_OPTIONS}
+                align="end"
                 onChange={setAccountFilter}
               />
             </div>

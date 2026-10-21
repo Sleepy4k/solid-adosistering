@@ -68,7 +68,7 @@ export function RegionModal(props: { initial?: RegionRow; onClose: () => void; o
             <label class="mb-1 block text-xs font-medium text-slate-600">Deskripsi</label>
             <input value={desc()} onInput={(e) => setDesc(e.currentTarget.value)} class={inputCls} />
           </div>
-          <div class="grid grid-cols-2 gap-3">
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label class="mb-1 block text-xs font-medium text-slate-600">Latitude</label>
               <input

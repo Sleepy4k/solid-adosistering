@@ -263,6 +263,7 @@ export default function TambahUser() {
                         { value: "ADMIN", label: "Admin" },
                         { value: "SUPERADMIN", label: "Superadmin" },
                       ]}
+                      align="end"
                       onChange={(value) => setRole(value as Role)}
                     />
                   </Field>
@@ -339,6 +340,7 @@ export default function TambahUser() {
                       { value: "Laki-laki", label: "Laki-laki" },
                       { value: "Perempuan", label: "Perempuan" },
                     ]}
+                    align="end"
                     onChange={setGender}
                   />
                 </Field>

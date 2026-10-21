@@ -7,6 +7,7 @@ export function SimpleSelect(props: {
   value: string;
   options: Option[];
   placeholder?: string;
+  align?: "start" | "end";
   onChange: (value: string) => void;
 }) {
   const [open, setOpen] = createSignal(false);
@@ -53,7 +54,9 @@ export function SimpleSelect(props: {
 
       <Show when={open()}>
         <div
-          class="absolute left-0 top-full z-50 mt-1 max-h-60 w-[min(20rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] overflow-x-hidden overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-md max-sm:max-w-full"
+          class={`absolute top-full z-50 mt-1 max-h-60 w-full lg:w-[min(20rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] overflow-x-hidden overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-md max-sm:max-w-[calc(100vw-4rem)] ${
+            props.align === "end" ? "right-0 max-sm:left-0 max-sm:right-auto" : "left-0"
+          }`}
           role="listbox"
         >
           <For each={props.options}>

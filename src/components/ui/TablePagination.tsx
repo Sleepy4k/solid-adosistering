@@ -71,7 +71,7 @@ export function TablePagination(props: TablePaginationProps) {
       </p>
 
       <Show when={props.total > 0}>
-        <nav class="flex items-center justify-between gap-2 sm:justify-end sm:gap-1" aria-label="Pagination">
+        <nav class="flex items-center justify-between gap-2 lg:justify-end lg:gap-1" aria-label="Pagination">
           <button
             type="button"
             disabled={page() === 0}
@@ -81,11 +81,11 @@ export function TablePagination(props: TablePaginationProps) {
             Prev
           </button>
 
-          <span class="text-sm tabular-nums text-slate-500 sm:hidden">
+          <span class="text-sm tabular-nums text-slate-500 lg:hidden">
             Halaman {page() + 1} / {totalPages()}
           </span>
 
-          <div class="hidden items-center gap-1 sm:flex">
+          <div class="hidden items-center gap-1 lg:flex">
             <For each={pages()}>
               {(item) => (
                 <Show

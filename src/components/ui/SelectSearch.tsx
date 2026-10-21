@@ -10,6 +10,7 @@ export function SelectSearch(props: {
   searchPlaceholder?: string;
   disabled?: boolean;
   class?: string;
+  align?: "start" | "end";
   onChange: (value: string) => void;
 }) {
   const [open, setOpen] = createSignal<boolean>(false);
@@ -86,7 +87,11 @@ export function SelectSearch(props: {
       </div>
 
       <Show when={open()}>
-        <div class="absolute left-0 top-full z-50 mt-1 max-h-72 w-[min(20rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg max-sm:max-w-full">
+        <div
+          class={`absolute top-full z-50 mt-1 max-h-72 w-full lg:w-[min(20rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg max-sm:max-w-[calc(100vw-4rem)] ${
+            props.align === "end" ? "right-0 max-sm:left-0 max-sm:right-auto" : "left-0"
+          }`}
+        >
           <div class="flex items-center gap-2 border-b border-slate-100 px-3 py-2">
             <Search size={14} class="shrink-0 text-slate-400" />
             <input

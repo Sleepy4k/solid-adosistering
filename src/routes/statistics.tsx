@@ -329,7 +329,7 @@ export default function Statistik() {
               </div>
               <div class="flex w-full flex-col gap-1 sm:w-40">
                 <label class="text-xs font-medium text-slate-500">Sampai Tanggal</label>
-                <DatePicker value={dateTo()} placeholder="Sampai tanggal" onChange={setDateTo} />
+                <DatePicker value={dateTo()} placeholder="Sampai tanggal" align="end" onChange={setDateTo} />
               </div>
               <Show when={dateFrom() || dateTo()}>
                 <button

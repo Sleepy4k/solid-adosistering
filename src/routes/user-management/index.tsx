@@ -151,6 +151,7 @@ export default function ManajemenUser() {
               <SelectSearch
                 value={roleFilter()}
                 placeholder="Semua Role"
+                align="end"
                 options={[
                   { value: "", label: "Semua Role" },
                   { value: "USER", label: "User" },

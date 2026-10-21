@@ -289,7 +289,7 @@ export function ExportHistoryModal(props: {
                 </div>
                 <div>
                   <label class="mb-1 block text-xs font-medium text-slate-600">Tahun</label>
-                  <SimpleSelect value={year()} options={yearOptions()} onChange={changeYear} />
+                  <SimpleSelect value={year()} options={yearOptions()} align="end" onChange={changeYear} />
                 </div>
               </div>
 

@@ -38,7 +38,12 @@ function formatDisplay(value: string): string {
   return `${String(d.getDate()).padStart(2, "0")} ${MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-export function DatePicker(props: { value: string; placeholder?: string; onChange: (value: string) => void }) {
+export function DatePicker(props: {
+  value: string;
+  placeholder?: string;
+  align?: "start" | "end";
+  onChange: (value: string) => void;
+}) {
   const today = new Date();
   const [open, setOpen] = createSignal(false);
   const [viewYear, setViewYear] = createSignal(today.getFullYear());
@@ -163,7 +168,11 @@ export function DatePicker(props: { value: string; placeholder?: string; onChang
       </button>
 
       <Show when={open()}>
-        <div class="absolute left-0 top-full z-50 mt-1 max-h-[calc(100dvh-2rem)] w-[min(18rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-slate-200 bg-white p-3 shadow-lg max-sm:w-[min(18rem,calc(100vw-4rem))] max-sm:max-w-[calc(100vw-4rem)]">
+        <div
+          class={`absolute top-full z-50 mt-1 max-h-[calc(100dvh-2rem)] w-[min(18rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-slate-200 bg-white p-3 shadow-lg max-sm:w-[min(18rem,calc(100vw-4rem))] max-sm:max-w-[calc(100vw-4rem)] ${
+            props.align === "end" ? "right-0 max-sm:left-0 max-sm:right-auto" : "left-0"
+          }`}
+        >
           <div class="mb-3 flex items-center justify-between">
             <button
               type="button"

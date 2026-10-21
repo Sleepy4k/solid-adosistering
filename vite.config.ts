@@ -34,6 +34,16 @@ function forbidSecretPublicEnv(): Plugin {
 }
 
 export default defineConfig({
+  // Vite's dev SSR externalizes bare imports before SolidStart's
+  // `solid-start:boundary-modules` plugin can resolve them. Node would then load
+  // `server-only` (which throws) or `client-only`'s empty Node entry (silently
+  // accepting a server import) instead of Start's virtual module. Inlining them
+  // lets the plugin enforce the boundary (wrong-environment imports error) and
+  // resolve the marker to an empty module in the allowed environment. Merges
+  // with Start's own `resolve.noExternal`.
+  resolve: {
+    noExternal: ["server-only", "client-only"],
+  },
   server: {
     host: true,
     port: 3000,

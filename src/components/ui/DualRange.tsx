@@ -19,6 +19,7 @@ export function DualRange(props: {
   const unit = () => props.unit ?? "%";
 
   const pos = (pct: number) => `calc(${pct}% + ${(0.5 - pct / 100) * THUMB}px)`;
+  const bubblePos = (pct: number) => `clamp(1.5rem, ${pct}%, calc(100% - 1.5rem))`;
 
   const ticks = () => {
     if (props.max <= 10) {
@@ -31,20 +32,36 @@ export function DualRange(props: {
   };
 
   return (
-    <div class="relative pb-2 pt-8">
+    <div class="relative pb-2 pt-2 sm:pt-8">
       <div
-        class="absolute top-0 z-10 -translate-x-1/2 rounded bg-primary px-2 py-1 text-xs font-semibold text-white"
-        style={{ left: pos(minPct()) }}
+        class="mb-3 flex items-center justify-between text-xs font-semibold text-primary-dark sm:hidden"
+        aria-hidden="true"
       >
-        {clamp(props.minValue)}
-        {unit()}
+        <span>
+          {clamp(props.minValue)}
+          {unit()}
+        </span>
+        <span>
+          {clamp(props.maxValue)}
+          {unit()}
+        </span>
       </div>
-      <div
-        class="absolute top-0 z-10 -translate-x-1/2 rounded bg-primary px-2 py-1 text-xs font-semibold text-white"
-        style={{ left: pos(maxPct()) }}
-      >
-        {clamp(props.maxValue)}
-        {unit()}
+
+      <div class="hidden sm:block" aria-hidden="true">
+        <div
+          class="absolute top-0 z-10 -translate-x-1/2 whitespace-nowrap rounded bg-primary-dark px-2 py-1 text-xs font-semibold text-white"
+          style={{ left: bubblePos(minPct()) }}
+        >
+          {clamp(props.minValue)}
+          {unit()}
+        </div>
+        <div
+          class="absolute top-0 z-10 -translate-x-1/2 whitespace-nowrap rounded bg-primary-dark px-2 py-1 text-xs font-semibold text-white"
+          style={{ left: bubblePos(maxPct()) }}
+        >
+          {clamp(props.maxValue)}
+          {unit()}
+        </div>
       </div>
 
       <div class="relative h-2">
@@ -63,6 +80,7 @@ export function DualRange(props: {
           step={props.step ?? 1}
           value={clamp(props.minValue)}
           disabled={props.disabled}
+          aria-label="Nilai minimum"
           onInput={(e) => props.onMin(Number(e.currentTarget.value))}
           class="dual-range-slider dual-range-min absolute h-2 w-full appearance-none bg-transparent"
         />
@@ -73,21 +91,23 @@ export function DualRange(props: {
           step={props.step ?? 1}
           value={clamp(props.maxValue)}
           disabled={props.disabled}
+          aria-label="Nilai maksimum"
           onInput={(e) => props.onMax(Number(e.currentTarget.value))}
           class="dual-range-slider dual-range-max absolute h-2 w-full appearance-none bg-transparent"
         />
       </div>
 
-      <div class="relative mt-4 h-5">
+      <div class="relative mt-4 h-5" aria-hidden="true">
         <For each={ticks()}>
           {(tick, i) => {
             const pct = ((tick - props.min) / range()) * 100;
             const tickCount = ticks().length;
+            const edge = i() === 0 || i() === tickCount - 1;
             return (
               <span
-                class={`absolute top-0 whitespace-nowrap text-[11px] text-gray-400 ${
+                class={`absolute top-0 whitespace-nowrap text-[11px] text-gray-500 ${
                   i() === 0 ? "" : i() === tickCount - 1 ? "-translate-x-full" : "-translate-x-1/2"
-                }`}
+                } ${edge ? "" : "hidden sm:block"}`}
                 style={{ left: pos(pct) }}
               >
                 {tick}

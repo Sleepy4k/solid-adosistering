@@ -162,12 +162,14 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
           <p class="truncate text-sm text-[#808080]">
             {[props.user.domicile, props.user.city].filter(Boolean).join(", ") || "-"}
           </p>
-          <p class="mt-0.5 text-xs text-slate-400">{props.user.regions.map((r) => r.name).join(", ")}</p>
+          <p class="mt-0.5 line-clamp-2 break-anywhere text-xs text-slate-400">
+            {props.user.regions.map((r) => r.name).join(", ")}
+          </p>
         </div>
-        <div class="relative">
+        <div class="relative shrink-0">
           <button
             type="button"
-            class="rounded-lg p-1 text-[#467A30] hover:bg-gray-100"
+            class="inline-flex h-10 w-10 items-center justify-center rounded-lg text-[#467A30] hover:bg-gray-100"
             aria-label={`Menu pengguna ${props.user.name}`}
             aria-haspopup="menu"
             aria-expanded={menuOpen()}
@@ -179,7 +181,7 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
             <div
               role="menu"
               aria-label={`Menu pengguna ${props.user.name}`}
-              class="absolute right-0 top-8 z-20 w-44 rounded-xl border border-gray-200 bg-white py-2 text-sm shadow-lg"
+              class="absolute right-0 top-10 z-20 w-44 rounded-xl border border-gray-200 bg-white py-2 text-sm shadow-lg"
             >
               <A
                 href={`${ROUTES.adminView}/${props.user.id}`}
@@ -212,7 +214,7 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
         </div>
       </div>
 
-      <div class="mb-3 flex items-center justify-between">
+      <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
         <p class="font-semibold text-[#4F4F4F]">Sensor Data (Agregat)</p>
         <Badge tone={liveSummary().tone}>{liveSummary().label}</Badge>
       </div>
@@ -229,17 +231,17 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
             </div>
           }
         >
-          <div class="flex justify-between gap-3">
-            <span class="text-[#4F4F4F]">Kelembaban Rata-Rata</span>
-            <span class="font-semibold text-[#4F8936]">{moistureText()}</span>
+          <div class="flex flex-wrap justify-between gap-x-3 gap-y-1">
+            <span class="min-w-0 text-[#4F4F4F]">Kelembaban Rata-Rata</span>
+            <span class="min-w-0 break-words text-right font-semibold text-[#4F8936]">{moistureText()}</span>
           </div>
-          <div class="flex justify-between gap-3">
-            <span class="text-[#4F4F4F]">Total Volume Air</span>
-            <span class="font-semibold text-[#4F8936]">{volumeText()}</span>
+          <div class="flex flex-wrap justify-between gap-x-3 gap-y-1">
+            <span class="min-w-0 text-[#4F4F4F]">Total Volume Air</span>
+            <span class="min-w-0 break-words text-right font-semibold text-[#4F8936]">{volumeText()}</span>
           </div>
-          <div class="flex justify-between gap-3">
-            <span class="text-[#4F4F4F]">Pompa Aktif</span>
-            <span class="font-semibold text-[#4F8936]">{pumpText()}</span>
+          <div class="flex flex-wrap justify-between gap-x-3 gap-y-1">
+            <span class="min-w-0 text-[#4F4F4F]">Pompa Aktif</span>
+            <span class="min-w-0 break-words text-right font-semibold text-[#4F8936]">{pumpText()}</span>
           </div>
         </Show>
       </div>

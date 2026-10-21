@@ -278,7 +278,7 @@ export default function CmsSubscribers() {
                         config: emailBrand(),
                         unsubscribeUrl: "/newsletter/unsubscribe?token=PREVIEW",
                       })}
-                      class="h-[480px] w-full rounded-lg border border-slate-200"
+                      class="h-[clamp(280px,60dvh,480px)] w-full rounded-lg border border-slate-200"
                       sandbox=""
                       referrerpolicy="no-referrer"
                       title="Preview email"
@@ -362,14 +362,14 @@ export default function CmsSubscribers() {
                 <For each={subscribers()}>
                   {(item) => (
                     <div
-                      class={`flex items-center gap-4 px-5 py-3.5 transition-opacity ${
+                      class={`flex flex-wrap items-center gap-3 px-4 py-3.5 transition-opacity sm:gap-4 sm:px-5 ${
                         resendingId() === item.id ? "opacity-60" : ""
                       }`}
                     >
                       <Mail size={16} class="shrink-0 text-slate-400" />
                       <div class="min-w-0 flex-1">
                         <div class="flex flex-wrap items-center gap-2">
-                          <span class="text-sm font-medium text-slate-800">{item.email}</span>
+                          <span class="min-w-0 break-anywhere text-sm font-medium text-slate-800">{item.email}</span>
                           <Badge tone={STATUS_META[item.status].tone}>{STATUS_META[item.status].label}</Badge>
                         </div>
                         <p class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-400">
@@ -382,29 +382,31 @@ export default function CmsSubscribers() {
                           </Show>
                         </p>
                       </div>
-                      <Show when={item.status === "PENDING"}>
+                      <div class="flex w-full shrink-0 flex-wrap items-center justify-end gap-1.5 sm:w-auto">
+                        <Show when={item.status === "PENDING"}>
+                          <button
+                            type="button"
+                            title="Kirim ulang email konfirmasi"
+                            aria-label={`Kirim ulang email konfirmasi ke ${item.email}`}
+                            aria-busy={resendingId() === item.id}
+                            disabled={resendingId() === item.id}
+                            class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            onClick={() => handleResend(item)}
+                          >
+                            <RefreshCw size={16} class={resendingId() === item.id ? "animate-spin" : undefined} />
+                          </button>
+                        </Show>
                         <button
                           type="button"
-                          title="Kirim ulang email konfirmasi"
-                          aria-label={`Kirim ulang email konfirmasi ke ${item.email}`}
-                          aria-busy={resendingId() === item.id}
+                          title="Hapus"
+                          aria-label={`Hapus ${item.email}`}
                           disabled={resendingId() === item.id}
-                          class="shrink-0 rounded-lg border border-slate-200 p-2 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                          onClick={() => handleResend(item)}
+                          class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-rose-200 text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          onClick={() => handleDelete(item)}
                         >
-                          <RefreshCw size={14} class={resendingId() === item.id ? "animate-spin" : undefined} />
+                          <Trash2 size={16} />
                         </button>
-                      </Show>
-                      <button
-                        type="button"
-                        title="Hapus"
-                        aria-label={`Hapus ${item.email}`}
-                        disabled={resendingId() === item.id}
-                        class="shrink-0 rounded-lg border border-rose-200 p-2 text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
-                        onClick={() => handleDelete(item)}
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      </div>
                     </div>
                   )}
                 </For>

@@ -84,11 +84,7 @@ export default function LandingFooter(props: LandingFooterProps) {
           </h2>
           <div class="lg:text-right">
             <p class="mb-4 text-sm font-semibold text-white sm:text-base">Dapatkan Informasi Terkini</p>
-            <form
-              class="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center"
-              noValidate
-              onSubmit={submitNewsletter}
-            >
+            <form class="flex flex-col gap-2 sm:flex-row sm:items-center" noValidate onSubmit={submitNewsletter}>
               <input
                 ref={inputRef}
                 type="email"
@@ -98,12 +94,12 @@ export default function LandingFooter(props: LandingFooterProps) {
                 autocomplete="email"
                 aria-label="Alamat email untuk berlangganan informasi"
                 disabled={newsletterState() === "loading" || newsletterState() === "success"}
-                class="h-12 flex-1 rounded-full border border-[#3a5a3a] bg-[#2a3f2a] px-6 text-sm text-white placeholder:text-white/50 focus:border-[#67b744] focus:outline-none disabled:opacity-60"
+                class="h-12 w-full min-w-0 flex-1 rounded-full border border-[#3a5a3a] bg-[#2a3f2a] px-6 text-sm text-white placeholder:text-white/50 focus:border-[#67b744] focus:outline-none disabled:opacity-60"
               />
               <button
                 type="submit"
                 disabled={newsletterState() === "loading" || newsletterState() === "success"}
-                class="h-12 whitespace-nowrap rounded-full bg-amber-400 px-8 text-sm font-semibold text-neutral-900 transition-colors duration-200 hover:bg-amber-300 disabled:opacity-60"
+                class="h-12 w-full whitespace-nowrap rounded-full bg-amber-400 px-8 text-sm font-semibold text-neutral-900 transition-colors duration-200 hover:bg-amber-300 disabled:opacity-60 sm:w-auto"
               >
                 {newsletterState() === "loading"
                   ? "Mengirim..."
@@ -131,17 +127,17 @@ export default function LandingFooter(props: LandingFooterProps) {
       <div class="container mx-auto max-w-screen-xl px-4 pb-10 pt-10 sm:px-6 lg:px-12 xl:px-16 md:pt-14">
         <div class="grid gap-10 md:grid-cols-2 lg:grid-cols-[2fr_1fr_2fr] lg:gap-12">
           <div>
-            <div class="mb-6 inline-flex items-center gap-2.5 rounded-full bg-white px-5 py-2.5">
+            <div class="mb-6 inline-flex max-w-full items-center gap-2.5 rounded-full bg-white px-5 py-2.5">
               <img
                 src={props.config.logoUrl ?? "/landing/logo.svg"}
                 alt=""
-                class="h-9 w-auto"
+                class="h-9 w-auto shrink-0"
                 loading="lazy"
                 decoding="async"
                 fetchpriority="low"
               />
               <span
-                class="font-semibold uppercase leading-none text-neutral-900"
+                class="min-w-0 truncate font-semibold uppercase leading-none text-neutral-900"
                 style="font-family:'Oswald',sans-serif;font-size:1.15rem;letter-spacing:0.05em"
               >
                 {props.config.projectName}
@@ -192,9 +188,9 @@ export default function LandingFooter(props: LandingFooterProps) {
               >
                 <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
               </svg>
-              <div>
+              <div class="min-w-0">
                 <p class="mb-0.5 text-sm font-semibold text-amber-400">Telepon</p>
-                <p class="text-sm text-white/60">{CONTACT_INFO.phone}</p>
+                <p class="break-anywhere text-sm text-white/60">{CONTACT_INFO.phone}</p>
               </div>
             </div>
             <div class="flex items-start gap-3">
@@ -210,9 +206,9 @@ export default function LandingFooter(props: LandingFooterProps) {
                 <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
                 <polyline points="22,6 12,13 2,6" />
               </svg>
-              <div>
+              <div class="min-w-0">
                 <p class="mb-0.5 text-sm font-semibold text-amber-400">Email</p>
-                <p class="text-sm text-white/60">{CONTACT_INFO.email}</p>
+                <p class="break-anywhere text-sm text-white/60">{CONTACT_INFO.email}</p>
               </div>
             </div>
             <div class="flex items-start gap-3">
@@ -228,9 +224,9 @@ export default function LandingFooter(props: LandingFooterProps) {
                 <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
                 <circle cx="12" cy="10" r="3" />
               </svg>
-              <div>
+              <div class="min-w-0">
                 <p class="mb-0.5 text-sm font-semibold text-amber-400">Alamat</p>
-                <p class="text-sm leading-relaxed text-white/60">{CONTACT_INFO.address}</p>
+                <p class="break-anywhere text-sm leading-relaxed text-white/60">{CONTACT_INFO.address}</p>
               </div>
             </div>
           </div>

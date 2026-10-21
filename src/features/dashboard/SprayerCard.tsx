@@ -35,12 +35,12 @@ export function SprayerCard(props: {
   return (
     <div class="rounded-xl border border-gray-200 bg-white p-5">
       <div class="mb-4">
-        <h3 class="text-lg font-bold text-[#4F8936]">
+        <h3 class="break-words text-lg font-bold text-[#4F8936]">
           {props.meta?.displayName ?? props.data?.sprayerId ?? "Sprayer"}
         </h3>
       </div>
 
-      <div class="mb-4 flex items-center justify-between border-b border-[#C2C2C2] pb-4">
+      <div class="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-[#C2C2C2] pb-4">
         <span class="text-sm font-medium text-[#4F4F4F]">Sensor Data</span>
         <Badge tone={statusMeta().tone}>{statusMeta().label}</Badge>
       </div>
@@ -55,33 +55,35 @@ export function SprayerCard(props: {
       </Show>
 
       <div class="space-y-3 text-sm">
-        <div class="flex items-center justify-between gap-3">
-          <span class="inline-flex items-center gap-2 text-[#4F4F4F]">
-            <Gauge size={16} /> Kelembaban Tanah
+        <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <span class="inline-flex min-w-0 items-center gap-2 text-[#4F4F4F]">
+            <Gauge size={16} class="shrink-0" /> Kelembaban Tanah
           </span>
-          <span class="font-semibold text-[#186D3C]">
+          <span class="min-w-0 break-words text-right font-semibold text-[#186D3C]">
             {props.data ? `${props.data.moisturePercent.toFixed(2)}%` : "-"}
           </span>
         </div>
-        <div class="flex items-center justify-between gap-3">
-          <span class="inline-flex items-center gap-2 text-[#4F4F4F]">
-            <Droplets size={16} /> Debit Air Rata-Rata
+        <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <span class="inline-flex min-w-0 items-center gap-2 text-[#4F4F4F]">
+            <Droplets size={16} class="shrink-0" /> Debit Air Rata-Rata
           </span>
-          <span class="font-semibold text-[#186D3C]">
+          <span class="min-w-0 break-words text-right font-semibold text-[#186D3C]">
             {props.data ? `${props.data.flowLmin.toFixed(2)} L / Menit` : "-"}
           </span>
         </div>
         <Show when={props.showWindDirection}>
-          <div class="flex items-center justify-between gap-3">
-            <span class="inline-flex items-center gap-2 text-[#4F4F4F]">
-              <Wind size={16} /> Arah Angin
+          <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <span class="inline-flex min-w-0 items-center gap-2 text-[#4F4F4F]">
+              <Wind size={16} class="shrink-0" /> Arah Angin
             </span>
-            <span class="font-semibold text-[#186D3C]">{props.data ? (props.data.windDirection ?? "-") : "-"}</span>
+            <span class="min-w-0 break-words text-right font-semibold text-[#186D3C]">
+              {props.data ? (props.data.windDirection ?? "-") : "-"}
+            </span>
           </div>
         </Show>
-        <div class="flex items-center justify-between gap-3">
-          <span class="inline-flex items-center gap-2 text-[#4F4F4F]">
-            <Power size={16} /> Pompa
+        <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <span class="inline-flex min-w-0 items-center gap-2 text-[#4F4F4F]">
+            <Power size={16} class="shrink-0" /> Pompa
           </span>
           <Show when={props.data} fallback={<Badge tone="muted">Tidak Diketahui</Badge>}>
             {(data) => <Badge tone={pumpBadgeTone(data().pumpStatus)}>{data().pumpOn ? "Aktif" : "Mati"}</Badge>}
@@ -89,11 +91,13 @@ export function SprayerCard(props: {
         </div>
         <Show when={lastWateredAt()}>
           {(value) => (
-            <div class="flex items-center justify-between gap-3">
-              <span class="inline-flex items-center gap-2 text-[#4F4F4F]">
-                <CalendarClock size={16} /> Terakhir siram
+            <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+              <span class="inline-flex min-w-0 items-center gap-2 text-[#4F4F4F]">
+                <CalendarClock size={16} class="shrink-0" /> Terakhir siram
               </span>
-              <span class="font-semibold text-[#186D3C]">{formatJakartaDateTime(value())}</span>
+              <span class="min-w-0 break-words text-right font-semibold text-[#186D3C]">
+                {formatJakartaDateTime(value())}
+              </span>
             </div>
           )}
         </Show>

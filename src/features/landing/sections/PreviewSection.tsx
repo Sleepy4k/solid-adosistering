@@ -25,7 +25,7 @@ export default function PreviewSection() {
             </a>
           </div>
         </div>
-        <div class="relative mt-14 flex min-h-[460px] items-end justify-center sm:min-h-[520px] md:mt-16 md:min-h-[600px]">
+        <div class="relative mt-14 flex min-h-[clamp(320px,50vw,600px)] items-end justify-center md:mt-16">
           <img
             src="/landing/laptop-mockup.webp"
             alt="Dashboard platform ADOSISTERING ditampilkan di layar laptop"

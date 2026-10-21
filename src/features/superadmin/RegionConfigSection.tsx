@@ -34,14 +34,14 @@ export function RegionConfigSection() {
                 fallback={<div class="p-8 text-center text-sm text-[#6B6B6B]">Belum ada region.</div>}
               >
                 <div class="overflow-x-auto">
-                  <table class="w-full text-sm">
+                  <table class="w-full min-w-[720px] text-sm">
                     <thead class="border-b border-gray-100 bg-gray-50 text-xs font-medium text-[#6B6B6B]">
                       <tr>
-                        <th class="px-5 py-3 text-left">Nama Region</th>
-                        <th class="px-5 py-3 text-left">Pembagi Volume</th>
-                        <th class="px-5 py-3 text-left">Arah Angin</th>
-                        <th class="px-5 py-3 text-left">Irigasi Otomatis</th>
-                        <th class="px-5 py-3 text-left" />
+                        <th class="whitespace-nowrap px-5 py-3 text-left">Nama Region</th>
+                        <th class="whitespace-nowrap px-5 py-3 text-left">Pembagi Volume</th>
+                        <th class="whitespace-nowrap px-5 py-3 text-left">Arah Angin</th>
+                        <th class="whitespace-nowrap px-5 py-3 text-left">Irigasi Otomatis</th>
+                        <th class="whitespace-nowrap px-5 py-3 text-left" />
                       </tr>
                     </thead>
                     <tbody>

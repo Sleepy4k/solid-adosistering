@@ -53,41 +53,48 @@ export function SelectSearch(props: {
   });
 
   return (
-    <div ref={containerRef} class={`relative ${props.class ?? ""}`}>
-      <button
-        type="button"
-        disabled={props.disabled}
-        class="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 disabled:opacity-50"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span class={selected() ? "text-slate-800" : "text-slate-400"}>
-          {selected()?.label ?? props.placeholder ?? "Pilih..."}
-        </span>
-        <div class="flex items-center gap-1 text-slate-400">
-          <Show when={props.value}>
-            <span
-              role="button"
-              tabindex="0"
-              class="rounded p-0.5 hover:text-slate-600"
-              onClick={clear}
-              aria-label="Hapus"
-            >
-              <X size={14} />
-            </span>
-          </Show>
-          <ChevronDown size={16} class={`transition-transform ${open() ? "rotate-180" : ""}`} />
-        </div>
-      </button>
+    <div ref={containerRef} class={`relative min-w-0 ${props.class ?? ""}`}>
+      <div class="flex w-full min-w-0 items-center rounded-lg border border-slate-200 bg-white text-sm text-slate-700 transition-colors focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/30">
+        <button
+          type="button"
+          disabled={props.disabled}
+          aria-haspopup="listbox"
+          aria-expanded={open()}
+          class="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg px-3 py-2 text-left focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => setOpen((v) => !v)}
+        >
+          <span
+            class={`min-w-0 flex-1 truncate text-left ${selected() ? "text-slate-800" : "text-slate-400"}`}
+            title={selected()?.label}
+          >
+            {selected()?.label ?? props.placeholder ?? "Pilih..."}
+          </span>
+          <ChevronDown size={16} class={`shrink-0 text-slate-400 transition-transform ${open() ? "rotate-180" : ""}`} />
+        </button>
+
+        <Show when={props.value}>
+          <button
+            type="button"
+            disabled={props.disabled}
+            class="mr-1 grid h-8 w-8 shrink-0 place-items-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={clear}
+            aria-label="Hapus"
+          >
+            <X size={14} />
+          </button>
+        </Show>
+      </div>
 
       <Show when={open()}>
-        <div class="absolute left-0 top-full z-50 mt-1 w-full min-w-[200px] rounded-xl border border-slate-200 bg-white shadow-lg">
+        <div class="absolute left-0 top-full z-50 mt-1 max-h-72 w-[min(20rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg max-sm:max-w-full">
           <div class="flex items-center gap-2 border-b border-slate-100 px-3 py-2">
             <Search size={14} class="shrink-0 text-slate-400" />
             <input
               ref={inputRef}
               type="text"
-              class="w-full text-sm outline-none placeholder:text-slate-400"
+              class="min-w-0 flex-1 text-sm outline-none placeholder:text-slate-400"
               placeholder={props.searchPlaceholder ?? "Cari..."}
+              aria-label={props.searchPlaceholder ?? "Cari"}
               value={query()}
               onInput={(e) => setQuery(e.currentTarget.value)}
             />
@@ -102,7 +109,8 @@ export function SelectSearch(props: {
                   <li>
                     <button
                       type="button"
-                      class={`w-full px-4 py-2 text-left text-sm hover:bg-emerald-50 ${opt.value === props.value ? "font-semibold text-emerald-700" : "text-slate-700"}`}
+                      title={opt.label}
+                      class={`block w-full truncate px-4 py-2 text-left text-sm hover:bg-emerald-50 ${opt.value === props.value ? "font-semibold text-emerald-700" : "text-slate-700"}`}
                       onClick={() => pick(opt.value)}
                     >
                       {opt.label}

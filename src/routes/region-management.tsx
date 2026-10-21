@@ -181,15 +181,15 @@ export default function ManajemenRegion() {
               }
             >
               <div class="overflow-x-auto">
-                <table class="w-full text-sm">
+                <table class="w-full min-w-[900px] text-sm">
                   <thead class="border-b border-slate-100 bg-slate-50 text-xs font-medium text-slate-500">
                     <tr>
-                      <th class="px-5 py-3 text-left">Nama Region</th>
-                      <th class="px-5 py-3 text-left">Blok</th>
-                      <th class="px-5 py-3 text-left">Admin</th>
-                      <th class="px-5 py-3 text-left">Mode Otomatis</th>
-                      <th class="px-5 py-3 text-left">Firebase</th>
-                      <th class="px-5 py-3 text-left">Aksi</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left">Nama Region</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left">Blok</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left">Admin</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left">Mode Otomatis</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left">Firebase</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left">Aksi</th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-slate-100">
@@ -200,9 +200,9 @@ export default function ManajemenRegion() {
                           <tr class="hover:bg-slate-50">
                             <td class="px-5 py-3">
                               <p class="font-medium text-slate-900">{region.name}</p>
-                              <p class="text-xs text-slate-400">{region.description ?? "—"}</p>
+                              <p class="break-anywhere text-xs text-slate-400">{region.description ?? "—"}</p>
                             </td>
-                            <td class="px-5 py-3 text-slate-600">{region._count.blocks}</td>
+                            <td class="whitespace-nowrap px-5 py-3 text-slate-600">{region._count.blocks}</td>
                             <td class="px-5 py-3">
                               <Show
                                 when={region.adminAssignments.length > 0}
@@ -210,18 +210,20 @@ export default function ManajemenRegion() {
                               >
                                 <div class="flex flex-col gap-0.5">
                                   <For each={region.adminAssignments}>
-                                    {(a) => <span class="text-xs text-slate-700">{a.admin.name}</span>}
+                                    {(a) => <span class="break-anywhere text-xs text-slate-700">{a.admin.name}</span>}
                                   </For>
                                 </div>
                               </Show>
                             </td>
                             <td class="px-5 py-3">
                               <div class="flex flex-col gap-2">
-                                <div class="flex items-center gap-2">
+                                <div class="flex flex-wrap items-center gap-2">
                                   <Badge tone={region.automaticMode ? "success" : "muted"}>
                                     {region.automaticMode ? "Aktif" : "Nonaktif"}
                                   </Badge>
-                                  <span class="text-xs text-slate-400">{region.sprayerCount} sprayer aktif</span>
+                                  <span class="whitespace-nowrap text-xs text-slate-400">
+                                    {region.sprayerCount} sprayer aktif
+                                  </span>
                                 </div>
                                 <button
                                   type="button"
@@ -248,13 +250,13 @@ export default function ManajemenRegion() {
                                 </button>
                               </div>
                             </td>
-                            <td class="px-5 py-3">
+                            <td class="whitespace-nowrap px-5 py-3">
                               <span class={`rounded-full px-2 py-0.5 text-xs font-semibold ${badge.cls}`}>
                                 {badge.label}
                               </span>
                             </td>
                             <td class="px-5 py-3">
-                              <div class="flex items-center gap-2">
+                              <div class="flex flex-wrap items-center gap-2">
                                 <button
                                   type="button"
                                   onClick={() => setEditTarget(region)}

@@ -193,10 +193,10 @@ export function AdminDashboard(props: { users: AdminUserCard[]; regions: Dashboa
                 onInput={(event) => setSearch(event.currentTarget.value)}
               />
             </div>
-            <div class="flex flex-wrap items-center gap-2">
+            <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto">
               <button
                 type="button"
-                class="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[#C2C2C2] bg-white px-4 text-sm font-medium text-[#4F4F4F] hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                class="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-[#C2C2C2] bg-white px-4 text-sm font-medium text-[#4F4F4F] hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
                 onClick={resetFilters}
                 disabled={!hasActiveFilters()}
               >
@@ -205,7 +205,7 @@ export function AdminDashboard(props: { users: AdminUserCard[]; regions: Dashboa
               </button>
               <A
                 href={ROUTES.userCreate}
-                class="btn-3d-green inline-flex h-11 items-center justify-center gap-2 px-4 text-sm font-medium text-white"
+                class="btn-3d-green inline-flex h-11 flex-1 items-center justify-center gap-2 px-4 text-sm font-medium text-white sm:flex-none"
               >
                 <Plus size={16} />
                 Tambah Pengguna

@@ -56,14 +56,14 @@ export default function ContactSubmissionsRoute() {
               fallback={<div class="p-8 text-center text-sm text-[#6B6B6B]">Tidak ada pesan.</div>}
             >
               <div class="overflow-x-auto">
-                <table class="w-full text-sm">
+                <table class="w-full min-w-[840px] text-sm">
                   <thead class="border-b border-gray-100 bg-gray-50 text-xs font-medium text-[#6B6B6B]">
                     <tr>
-                      <th class="px-5 py-3 text-left">Pengirim</th>
-                      <th class="px-5 py-3 text-left">Tipe Pengguna</th>
-                      <th class="px-5 py-3 text-left">Pesan</th>
-                      <th class="px-5 py-3 text-left">Waktu</th>
-                      <th class="px-5 py-3 text-left">Status</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left">Pengirim</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left">Tipe Pengguna</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left">Pesan</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left">Waktu</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left">Status</th>
                     </tr>
                   </thead>
                   <tbody>

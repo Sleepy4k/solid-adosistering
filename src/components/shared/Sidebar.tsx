@@ -91,11 +91,12 @@ const NAV_GROUPS: NavGroup[] = [
 function Logo(props: { collapsed?: boolean }) {
   const config = useWebConfig();
   return (
-    <div class={`flex items-center justify-center ${props.collapsed ? "" : "px-2"}`}>
+    <div class={`flex min-w-0 items-center justify-center ${props.collapsed ? "" : "px-2"}`}>
       <img
         src={config().logoUrl || fallbackLogo}
         alt={config().projectName}
-        class={`${props.collapsed ? "h-10" : "h-14"} w-auto shrink-0`}
+        title={config().projectName}
+        class={`${props.collapsed ? "h-10" : "h-14"} w-auto max-w-full shrink-0 object-contain`}
         loading="lazy"
         decoding="async"
       />
@@ -149,18 +150,18 @@ export default function Sidebar(props: SidebarProps) {
 
   return (
     <aside
-      class={`flex h-full flex-col overflow-hidden border-r border-gray-200 bg-white transition-all duration-300 ${
+      class={`flex h-full min-w-0 flex-col overflow-hidden border-r border-gray-200 bg-white transition-all duration-300 ${
         props.mobile ? "w-full" : isCollapsed() ? "w-20" : "w-64"
       }`}
     >
-      <div class={`shrink-0 px-4 py-5 ${isCollapsed() ? "px-2" : ""}`}>
+      <div class={`shrink-0 py-5 ${isCollapsed() ? "px-2" : "px-4"}`}>
         <Logo collapsed={isCollapsed()} />
         <div class="mx-auto mt-4 h-px w-4/5 bg-gray-200" />
         <Show when={!props.mobile}>
           <div class={`mt-3 flex ${isCollapsed() ? "justify-center" : "justify-end"}`}>
             <button
               type="button"
-              class={`grid h-9 w-9 place-items-center rounded-xl border border-gray-200 text-[#4F4F4F] transition-transform hover:bg-gray-50 ${
+              class={`grid h-11 w-11 place-items-center rounded-xl border border-gray-200 text-[#4F4F4F] transition-transform hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 ${
                 isCollapsed() ? "rotate-180" : ""
               }`}
               aria-label="Toggle sidebar"
@@ -197,15 +198,16 @@ export default function Sidebar(props: SidebarProps) {
                               props.onNavigate?.();
                             }}
                             title={isCollapsed() ? item.label : undefined}
+                            aria-label={item.label}
                             aria-current={active() ? "page" : undefined}
                             aria-disabled={active() ? "true" : undefined}
-                            class={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] font-medium transition-colors ${
+                            class={`flex min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] font-medium transition-colors ${
                               active() ? "cursor-default bg-[#67B744] text-white" : "text-[#111827] hover:bg-gray-50"
                             } ${isCollapsed() ? "justify-center" : ""}`}
                           >
                             <Icon size={20} class="shrink-0" aria-hidden="true" />
                             <Show when={!isCollapsed()}>
-                              <span class="truncate">{item.label}</span>
+                              <span class="min-w-0 truncate">{item.label}</span>
                             </Show>
                           </A>
                         </li>
@@ -230,28 +232,30 @@ export default function Sidebar(props: SidebarProps) {
             props.onNavigate?.();
           }}
           title={isCollapsed() ? "Pusat Bantuan" : undefined}
+          aria-label="Pusat Bantuan"
           aria-current={helpActive() ? "page" : undefined}
           aria-disabled={helpActive() ? "true" : undefined}
-          class={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] font-medium transition-colors ${
+          class={`flex min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] font-medium transition-colors ${
             helpActive() ? "cursor-default bg-[#67B744] text-white" : "text-[#111827] hover:bg-gray-50"
           } ${isCollapsed() ? "justify-center" : ""}`}
         >
           <CircleQuestionMark size={20} class="shrink-0" aria-hidden="true" />
           <Show when={!isCollapsed()}>
-            <span class="truncate">Pusat Bantuan</span>
+            <span class="min-w-0 truncate">Pusat Bantuan</span>
           </Show>
         </A>
         <button
           type="button"
-          class={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-medium text-[#111827] transition-colors hover:bg-red-50 hover:text-red-600 ${
+          class={`flex w-full min-w-0 items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[14px] font-medium text-[#111827] transition-colors hover:bg-red-50 hover:text-red-600 ${
             isCollapsed() ? "justify-center" : ""
           }`}
           title={isCollapsed() ? "Log Out" : undefined}
+          aria-label="Log Out"
           onClick={handleLogout}
         >
           <LogOut size={20} class="shrink-0" aria-hidden="true" />
           <Show when={!isCollapsed()}>
-            <span>Log Out</span>
+            <span class="min-w-0 truncate">Log Out</span>
           </Show>
         </button>
       </div>

@@ -24,12 +24,12 @@ export default function UseCasesSection() {
           <br />
           &amp; Uji Lapangan
         </h2>
-        <div class="relative flex min-h-[600px] items-center pb-20 pt-4 md:min-h-[700px] md:pb-28 lg:min-h-[800px] lg:pb-36">
+        <div class="relative flex min-h-[clamp(480px,80vw,800px)] items-center pb-20 pt-4 md:pb-28 lg:pb-36">
           <div class="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden="true">
             <img
               src="/landing/map-background.webp"
               alt=""
-              class="object-cover"
+              class="absolute inset-0 h-full w-full object-cover"
               loading="lazy"
               decoding="async"
               fetchpriority="low"

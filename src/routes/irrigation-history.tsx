@@ -197,7 +197,7 @@ export default function RiwayatIrigasi() {
               </p>
               <button
                 type="button"
-                class="btn-3d-green inline-flex h-9 items-center justify-center gap-1.5 px-3 text-sm font-medium text-white"
+                class="btn-3d-green inline-flex h-10 items-center justify-center gap-1.5 px-3 text-sm font-medium text-white"
                 onClick={() => setExportOpen(true)}
               >
                 <Download size={16} />
@@ -213,7 +213,7 @@ export default function RiwayatIrigasi() {
           </div>
         </Show>
 
-        <div class="grid gap-4 rounded-2xl border border-[#C2C2C2] bg-white p-5 sm:grid-cols-2 lg:grid-cols-6">
+        <div class="grid gap-4 rounded-2xl border border-[#C2C2C2] bg-white p-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <Show when={(regions()?.length ?? 0) > 1}>
             <div class="flex flex-col gap-1.5">
               <label class="text-xs font-medium text-[#4F4F4F]">Region</label>
@@ -315,7 +315,7 @@ export default function RiwayatIrigasi() {
                       <div class="h-1 bg-[#67B744]" />
                       <div class="p-5">
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                          <div>
+                          <div class="min-w-0">
                             <p class="text-sm font-semibold text-[#4F4F4F]">
                               {event.block.region.name} - {event.block.name}
                             </p>
@@ -328,7 +328,7 @@ export default function RiwayatIrigasi() {
                           </div>
                         </div>
 
-                        <div class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                        <div class="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
                           <div class="rounded-xl border border-[#DDECD7] bg-[#F7FBF5] p-4">
                             <p class="mb-1 inline-flex items-center gap-2 text-xs font-medium text-[#6B7280]">
                               <WavesHorizontal size={15} /> Kelembaban
@@ -357,18 +357,18 @@ export default function RiwayatIrigasi() {
                             </p>
                             <p class="text-sm font-semibold text-[#4F4F4F]">{formatDuration(event.durationSeconds)}</p>
                           </div>
-                          <div class="rounded-xl border border-[#DDECD7] bg-[#F7FBF5] p-4 sm:col-span-2 xl:col-span-2">
+                          <div class="rounded-xl border border-[#DDECD7] bg-[#F7FBF5] p-4 sm:col-span-2 2xl:col-span-2">
                             <p class="mb-1 inline-flex items-center gap-2 text-xs font-medium text-[#6B7280]">
                               <Droplets size={15} /> Total &amp; Rata-rata Air
                             </p>
-                            <div class="grid grid-cols-2 gap-3">
-                              <div>
+                            <div class="grid min-w-0 grid-cols-2 gap-3">
+                              <div class="min-w-0">
                                 <p class="text-[11px] text-[#6B7280]">Total</p>
                                 <p class="text-sm font-semibold text-[#4F4F4F]">
                                   {totalVolumeText(event.totalVolumeLiter)}
                                 </p>
                               </div>
-                              <div>
+                              <div class="min-w-0">
                                 <p class="text-[11px] text-[#6B7280]">Rata-rata</p>
                                 <p class="text-sm font-semibold text-[#4F4F4F]">
                                   {avgFlow} {avgFlow !== "-" ? "L/mnt" : ""}

@@ -39,8 +39,12 @@ export function RegionConfigRow(props: { region: RegionRow; onSaved: () => void 
 
   return (
     <tr class="border-b border-gray-100 last:border-0">
-      <td class="px-5 py-4 font-medium text-[#333]">{props.region.name}</td>
-      <td class="px-5 py-4">
+      <td class="px-5 py-4 font-medium text-[#333]">
+        <div class="max-w-[14rem] truncate" title={props.region.name}>
+          {props.region.name}
+        </div>
+      </td>
+      <td class="whitespace-nowrap px-5 py-4">
         <input
           type="number"
           min="0.0001"
@@ -50,7 +54,7 @@ export function RegionConfigRow(props: { region: RegionRow; onSaved: () => void 
           class="form-input h-9 w-28 rounded-lg text-sm"
         />
       </td>
-      <td class="px-5 py-4">
+      <td class="whitespace-nowrap px-5 py-4">
         <label class="flex cursor-pointer items-center gap-2">
           <input
             type="checkbox"
@@ -61,7 +65,7 @@ export function RegionConfigRow(props: { region: RegionRow; onSaved: () => void 
           <span class="text-sm text-[#4F4F4F]">Tampilkan</span>
         </label>
       </td>
-      <td class="px-5 py-4">
+      <td class="whitespace-nowrap px-5 py-4">
         <label class="flex cursor-pointer items-center gap-2">
           <input
             type="checkbox"

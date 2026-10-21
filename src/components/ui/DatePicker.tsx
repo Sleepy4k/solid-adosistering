@@ -143,7 +143,7 @@ export function DatePicker(props: { value: string; placeholder?: string; onChang
           setOpen((v) => !v);
         }}
       >
-        <span class={props.value ? "text-slate-800" : "text-slate-400"}>
+        <span class={`min-w-0 flex-1 truncate text-left ${props.value ? "text-slate-800" : "text-slate-400"}`}>
           {props.value ? formatDisplay(props.value) : (props.placeholder ?? "Pilih tanggal")}
         </span>
         <div class="flex shrink-0 items-center gap-1 text-slate-400">
@@ -163,11 +163,11 @@ export function DatePicker(props: { value: string; placeholder?: string; onChang
       </button>
 
       <Show when={open()}>
-        <div class="absolute left-0 top-full z-50 mt-1 w-72 rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
+        <div class="absolute left-0 top-full z-50 mt-1 max-h-[calc(100dvh-2rem)] w-[min(18rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-slate-200 bg-white p-3 shadow-lg max-sm:w-[min(18rem,calc(100vw-4rem))] max-sm:max-w-[calc(100vw-4rem)]">
           <div class="mb-3 flex items-center justify-between">
             <button
               type="button"
-              class="grid h-7 w-7 place-items-center rounded-lg text-slate-600 hover:bg-slate-100"
+              class="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 sm:h-7 sm:w-7"
               onClick={() => (showYearPicker() ? setYearCenter((c) => c - 12) : goMonth(-1))}
               aria-label="Sebelumnya"
             >
@@ -197,7 +197,7 @@ export function DatePicker(props: { value: string; placeholder?: string; onChang
 
             <button
               type="button"
-              class="grid h-7 w-7 place-items-center rounded-lg text-slate-600 hover:bg-slate-100"
+              class="grid h-9 w-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 sm:h-7 sm:w-7"
               onClick={() => (showYearPicker() ? setYearCenter((c) => c + 12) : goMonth(1))}
               aria-label="Berikutnya"
             >
@@ -212,7 +212,7 @@ export function DatePicker(props: { value: string; placeholder?: string; onChang
                   <button
                     type="button"
                     onClick={() => selectYear(y)}
-                    class={`rounded-lg py-2 text-sm font-medium transition-colors ${
+                    class={`min-h-10 rounded-lg py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 ${
                       y === viewYear()
                         ? "bg-emerald-600 text-white"
                         : y === today.getFullYear()
@@ -227,7 +227,7 @@ export function DatePicker(props: { value: string; placeholder?: string; onChang
             </div>
             <button
               type="button"
-              class="mt-2 w-full rounded-lg py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-100"
+              class="mt-2 min-h-10 w-full rounded-lg py-2 text-xs font-medium text-slate-500 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
               onClick={() => setShowYearPicker(false)}
             >
               ← Kembali ke Kalender
@@ -248,7 +248,7 @@ export function DatePicker(props: { value: string; placeholder?: string; onChang
                     <button
                       type="button"
                       onClick={() => select(day!)}
-                      class={`m-0.5 flex h-8 w-full items-center justify-center rounded-lg text-sm transition-colors ${
+                      class={`m-0.5 flex h-10 items-center justify-center rounded-lg text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 sm:h-8 ${
                         isSelected(day!)
                           ? "bg-emerald-600 font-semibold text-white"
                           : isToday(day!)
@@ -267,7 +267,7 @@ export function DatePicker(props: { value: string; placeholder?: string; onChang
               <button
                 type="button"
                 onClick={selectToday}
-                class="w-full rounded-lg py-1.5 text-xs font-medium text-emerald-600 hover:bg-emerald-50"
+                class="min-h-10 w-full rounded-lg py-2 text-xs font-medium text-emerald-600 hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40"
               >
                 Hari Ini
               </button>

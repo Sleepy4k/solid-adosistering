@@ -99,7 +99,7 @@ function PartnerModal(props: { initial?: Item; onClose: () => void; onSaved: () 
             placeholder="https://mitra.ac.id (opsional)"
           />
         </div>
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div class="flex flex-col gap-1.5">
             <label class="text-xs font-medium text-slate-600">Urutan Tampil</label>
             <input
@@ -196,8 +196,8 @@ export default function CmsPartners() {
               <div class="divide-y divide-slate-100">
                 <For each={items()}>
                   {(item) => (
-                    <div class="flex items-center gap-4 px-5 py-4">
-                      <div class="flex h-14 w-20 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-neutral-100 p-2">
+                    <div class="flex flex-wrap items-center gap-3 px-4 py-4 sm:gap-4 sm:px-5">
+                      <div class="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-neutral-100 p-2 sm:h-20 sm:w-20">
                         <Show when={item.logoUrl} fallback={<span class="text-xs text-slate-400">No logo</span>}>
                           <img
                             src={item.logoUrl!}
@@ -220,28 +220,30 @@ export default function CmsPartners() {
                             href={item.websiteUrl!}
                             target="_blank"
                             rel="noopener noreferrer"
-                            class="mt-0.5 text-xs text-emerald-600 hover:underline"
+                            class="mt-0.5 block break-anywhere text-xs text-emerald-600 hover:underline"
                           >
                             {item.websiteUrl}
                           </a>
                         </Show>
                       </div>
-                      <div class="flex shrink-0 gap-1.5">
+                      <div class="flex w-full shrink-0 flex-wrap items-center justify-end gap-1.5 sm:w-auto">
                         <button
                           type="button"
                           title="Edit"
-                          class="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50"
+                          aria-label={`Edit mitra ${item.name}`}
+                          class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
                           onClick={() => setEditing(item)}
                         >
-                          <Pencil size={14} />
+                          <Pencil size={16} />
                         </button>
                         <button
                           type="button"
                           title="Hapus"
-                          class="rounded-lg border border-rose-200 p-2 text-rose-600 hover:bg-rose-50"
+                          aria-label={`Hapus mitra ${item.name}`}
+                          class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50"
                           onClick={() => handleDelete(item)}
                         >
-                          <Trash2 size={14} />
+                          <Trash2 size={16} />
                         </button>
                       </div>
                     </div>

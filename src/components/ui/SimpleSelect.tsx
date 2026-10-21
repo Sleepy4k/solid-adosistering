@@ -29,15 +29,20 @@ export function SimpleSelect(props: {
   };
 
   return (
-    <div ref={containerRef} class="relative">
+    <div ref={containerRef} class="relative min-w-0">
       <button
         type="button"
-        class="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+        class="flex w-full min-w-0 items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30"
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="listbox"
         aria-expanded={open()}
       >
-        <span class={selected()?.value !== undefined && selected()?.value !== "" ? "text-slate-700" : "text-slate-400"}>
+        <span
+          class={`min-w-0 flex-1 truncate text-left ${
+            selected()?.value !== undefined && selected()?.value !== "" ? "text-slate-700" : "text-slate-400"
+          }`}
+          title={selected()?.label}
+        >
           {selected()?.label ?? props.placeholder ?? "Pilih"}
         </span>
         <ChevronDown
@@ -48,7 +53,7 @@ export function SimpleSelect(props: {
 
       <Show when={open()}>
         <div
-          class="absolute left-0 top-full z-50 mt-1 min-w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-md"
+          class="absolute left-0 top-full z-50 mt-1 max-h-60 w-[min(20rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)] overflow-x-hidden overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-md max-sm:max-w-full"
           role="listbox"
         >
           <For each={props.options}>
@@ -57,12 +62,13 @@ export function SimpleSelect(props: {
                 type="button"
                 role="option"
                 aria-selected={props.value === opt.value}
+                title={opt.label}
                 class={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-slate-50 ${
                   props.value === opt.value ? "font-medium text-emerald-700" : "text-slate-700"
                 }`}
                 onClick={() => choose(opt.value)}
               >
-                <span class="flex-1">{opt.label}</span>
+                <span class="min-w-0 flex-1 truncate">{opt.label}</span>
                 <Show when={props.value === opt.value && opt.value !== ""}>
                   <Check size={13} class="shrink-0 text-emerald-600" />
                 </Show>

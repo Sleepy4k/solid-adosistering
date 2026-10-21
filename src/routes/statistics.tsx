@@ -95,7 +95,9 @@ function toMessage(error: unknown) {
 
 function StatBadge(props: { label: string; value: string; sub?: string; accent?: boolean }) {
   return (
-    <div class={`flex-1 rounded-xl p-5 text-white ${props.accent ? "bg-emerald-600" : "bg-emerald-500"}`}>
+    <div
+      class={`min-w-0 flex-1 basis-full rounded-xl p-5 text-white sm:basis-auto ${props.accent ? "bg-emerald-600" : "bg-emerald-500"}`}
+    >
       <p class="text-sm opacity-90">{props.label}</p>
       <p class="mt-1 text-3xl font-bold">{props.value}</p>
       <Show when={props.sub}>
@@ -183,7 +185,7 @@ function LineChart(props: { labels: string[]; data: (number | null)[]; label: st
   });
 
   return (
-    <div class="animate-in relative h-48">
+    <div class="animate-in relative h-48 sm:h-56">
       <canvas ref={canvas} />
     </div>
   );
@@ -320,19 +322,19 @@ export default function Statistik() {
               </Show>
             </div>
 
-            <div class="flex flex-wrap items-end gap-3">
-              <div class="flex w-40 flex-col gap-1">
+            <div class="grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-2">
+              <div class="flex w-full flex-col gap-1 sm:w-40">
                 <label class="text-xs font-medium text-slate-500">Dari Tanggal</label>
                 <DatePicker value={dateFrom()} placeholder="Dari tanggal" onChange={setDateFrom} />
               </div>
-              <div class="flex w-40 flex-col gap-1">
+              <div class="flex w-full flex-col gap-1 sm:w-40">
                 <label class="text-xs font-medium text-slate-500">Sampai Tanggal</label>
                 <DatePicker value={dateTo()} placeholder="Sampai tanggal" onChange={setDateTo} />
               </div>
               <Show when={dateFrom() || dateTo()}>
                 <button
                   type="button"
-                  class="flex h-[38px] items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50"
+                  class="flex h-[38px] w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 sm:col-span-2 sm:w-40"
                   onClick={clearRange}
                 >
                   <X size={14} />
@@ -364,7 +366,7 @@ export default function Statistik() {
             <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4">
               <h2 class="font-semibold text-slate-900">Ringkasan Statistik</h2>
             </div>
-            <div class="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
+            <div class="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4">
               <MiniStat
                 label="Frekuensi Irigasi Aktif"
                 value={String(irrigationCount())}

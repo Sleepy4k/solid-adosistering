@@ -13,17 +13,17 @@ export const route = { preload: () => loadProfile() };
 
 function InfoRow(props: { label: string; value: string | null | undefined }) {
   return (
-    <div>
+    <div class="min-w-0">
       <p class="text-xs text-slate-500">{props.label}</p>
-      <p class="mt-0.5 font-medium text-slate-900">{props.value || "-"}</p>
+      <p class="mt-0.5 break-anywhere font-medium text-slate-900">{props.value || "-"}</p>
     </div>
   );
 }
 
 function SectionCard(props: { title: string; onEdit?: () => void; children: unknown }) {
   return (
-    <div class="rounded-xl border border-slate-200 bg-white p-6">
-      <div class="mb-5 flex items-center justify-between">
+    <div class="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
+      <div class="mb-5 flex flex-wrap items-center justify-between gap-2">
         <h2 class="font-semibold text-slate-900">{props.title}</h2>
         <Show when={props.onEdit}>
           <button
@@ -250,13 +250,13 @@ export default function Profil() {
           <Show when={profile()}>
             {(p) => (
               <>
-                <div class="rounded-xl border border-slate-200 bg-white p-6">
+                <div class="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
                   <h2 class="mb-4 font-semibold text-slate-900">Profil Saya</h2>
-                  <div class="flex items-center gap-4">
+                  <div class="flex min-w-0 items-center gap-4">
                     <div class="grid h-16 w-16 shrink-0 place-items-center rounded-full bg-emerald-100 text-xl font-bold text-emerald-700">
                       {p().name.slice(0, 2).toUpperCase()}
                     </div>
-                    <div>
+                    <div class="min-w-0 flex-1 break-anywhere">
                       <p class="font-bold text-emerald-700">{p().name}</p>
                       <p class="text-sm text-slate-500">{p().profile?.address || "-"}</p>
                       <p class="text-sm text-slate-500">{p().profile?.whatsapp || "-"}</p>

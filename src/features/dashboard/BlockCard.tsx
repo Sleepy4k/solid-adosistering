@@ -214,7 +214,7 @@ export function BlockCard(props: {
             </Show>
             <button
               type="button"
-              class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-[#4F4F4F] transition hover:bg-gray-50"
+              class="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-gray-200 text-[#4F4F4F] transition hover:bg-gray-50"
               aria-expanded={expanded()}
               aria-label={expanded() ? "Sembunyikan block" : "Tampilkan block"}
               onClick={() => setExpanded((value) => !value)}
@@ -229,7 +229,7 @@ export function BlockCard(props: {
         <div class="grid gap-4 bg-gray-50 px-5 py-4 md:grid-cols-3">
           <div class="rounded-xl border border-gray-200 bg-white p-4">
             <p class="mb-1 text-sm text-gray-600">Kelembaban Tanah Rata-Rata</p>
-            <div class="flex items-end justify-between gap-2">
+            <div class="flex flex-wrap items-end justify-between gap-2">
               <p class="text-2xl font-bold text-[#4F4F4F]">{avgMoistureText()}</p>
               <Badge tone={moisture().tone}>{moisture().label}</Badge>
             </div>

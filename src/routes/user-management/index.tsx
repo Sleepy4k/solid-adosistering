@@ -113,12 +113,12 @@ export default function ManajemenUser() {
       <PageMeta page="userManagement" />
 
       <div class="flex flex-col gap-5">
-        <div class="flex items-center justify-between gap-3">
+        <div class="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h1 class="text-2xl font-bold text-slate-900">Manajemen User</h1>
           <button
             type="button"
             onClick={() => navigate("/user-management/create")}
-            class="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+            class="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 sm:w-auto"
           >
             <Plus size={16} />
             Tambah User
@@ -126,20 +126,20 @@ export default function ManajemenUser() {
         </div>
 
         <div class="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-5">
-          <form onSubmit={handleSearch} class="flex items-end gap-2">
-            <div class="flex flex-col gap-1.5">
+          <form onSubmit={handleSearch} class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-end">
+            <div class="flex w-full flex-col gap-1.5 sm:w-auto">
               <label class="text-xs font-medium text-slate-600">Cari</label>
               <input
                 type="text"
                 placeholder="Nama, email, atau WhatsApp..."
                 value={searchInput()}
                 onInput={(e) => setSearchInput(e.currentTarget.value)}
-                class="w-56 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                class="w-full min-w-0 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 sm:w-56"
               />
             </div>
             <button
               type="submit"
-              class="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+              class="w-full rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700 sm:w-auto"
             >
               Cari
             </button>
@@ -201,17 +201,17 @@ export default function ManajemenUser() {
               fallback={<div class="p-10 text-center text-sm text-slate-500">Tidak ada pengguna ditemukan.</div>}
             >
               <div class="overflow-x-auto">
-                <table class="w-full text-sm">
+                <table class="w-full min-w-[960px] text-sm">
                   <thead class="border-b border-slate-100 bg-slate-50 text-xs font-medium text-slate-500">
                     <tr>
-                      <th class="px-5 py-3 text-left">Nama</th>
-                      <th class="px-5 py-3 text-left">Email</th>
-                      <th class="px-5 py-3 text-left">WhatsApp</th>
-                      <th class="px-5 py-3 text-left">Role</th>
-                      <th class="px-5 py-3 text-left">Region</th>
-                      <th class="px-5 py-3 text-left">Status</th>
-                      <th class="px-5 py-3 text-left">Bergabung</th>
-                      <th class="px-5 py-3 text-left">Aksi</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left">Nama</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left">Email</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left">WhatsApp</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left">Role</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left">Region</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left">Status</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left">Bergabung</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left">Aksi</th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-slate-100">
@@ -219,20 +219,20 @@ export default function ManajemenUser() {
                       {(user) => (
                         <tr class="hover:bg-slate-50">
                           <td class="px-5 py-3 font-medium text-slate-900">{user.name}</td>
-                          <td class="px-5 py-3 text-slate-600">{user.email}</td>
-                          <td class="px-5 py-3 text-slate-500">{user.whatsapp ?? "-"}</td>
-                          <td class="px-5 py-3">{roleBadge(user.role)}</td>
+                          <td class="break-anywhere px-5 py-3 text-slate-600">{user.email}</td>
+                          <td class="whitespace-nowrap px-5 py-3 text-slate-500">{user.whatsapp ?? "-"}</td>
+                          <td class="whitespace-nowrap px-5 py-3">{roleBadge(user.role)}</td>
                           <td class="px-5 py-3 text-slate-600">{regionLabel(user.regions)}</td>
-                          <td class="px-5 py-3">
+                          <td class="whitespace-nowrap px-5 py-3">
                             <span
                               class={`rounded-full px-2 py-0.5 text-xs font-semibold ${user.isActive ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}
                             >
                               {user.isActive ? "Aktif" : "Nonaktif"}
                             </span>
                           </td>
-                          <td class="px-5 py-3 text-slate-500">{formatDate(user.createdAt)}</td>
+                          <td class="whitespace-nowrap px-5 py-3 text-slate-500">{formatDate(user.createdAt)}</td>
                           <td class="px-5 py-3">
-                            <div class="flex items-center gap-2">
+                            <div class="flex flex-wrap items-center gap-2">
                               <button
                                 type="button"
                                 onClick={() => setEditTarget(user)}

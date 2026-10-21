@@ -56,12 +56,15 @@ export function ToastProvider(props: { children: JSX.Element }) {
   return (
     <ToastContext.Provider value={{ notify }}>
       {props.children}
-      <div class="fixed right-4 top-4 z-[100] flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2" aria-live="polite">
+      <div
+        class="fixed right-4 top-[max(1rem,env(safe-area-inset-top,0px))] z-[100] flex max-h-[calc(100dvh-2rem)] w-[min(380px,calc(100vw-2rem))] flex-col gap-2 overflow-x-clip overflow-y-auto"
+        aria-live="polite"
+      >
         <For each={toasts()}>
           {(toast) => (
             <div
               class={`flex items-start gap-3 rounded-xl border px-4 py-3 shadow-lg transition-all duration-300 ${styles[toast.kind]} ${
-                toast.exiting ? "translate-x-full opacity-0" : "translate-x-0 opacity-100"
+                toast.exiting ? "translate-x-2 opacity-0" : "translate-x-0 opacity-100"
               }`}
               style={{ animation: toast.exiting ? undefined : "slide-in-right 250ms ease" }}
             >
@@ -71,13 +74,13 @@ export function ToastProvider(props: { children: JSX.Element }) {
                 {icons[toast.kind]}
               </span>
               <div class="min-w-0 flex-1">
-                <p class="text-sm font-semibold leading-5">{toast.title}</p>
-                {toast.message && <p class="mt-0.5 text-xs leading-5 opacity-80">{toast.message}</p>}
+                <p class="break-anywhere text-sm font-semibold leading-5">{toast.title}</p>
+                {toast.message && <p class="mt-0.5 break-anywhere text-xs leading-5 opacity-80">{toast.message}</p>}
               </div>
               <button
                 type="button"
                 aria-label="Tutup notifikasi"
-                class="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded text-xs opacity-60 hover:opacity-100"
+                class="-mr-1 -mt-1 grid h-9 w-9 shrink-0 place-items-center rounded-lg text-xs opacity-60 transition-opacity hover:bg-black/5 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/40"
                 onClick={() => dismiss(toast.id)}
               >
                 ✕

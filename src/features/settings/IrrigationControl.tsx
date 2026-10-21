@@ -72,15 +72,15 @@ export function IrrigationControl(props: { region: SettingsRegion; readOnly?: bo
 
   return (
     <div class="overflow-hidden rounded-2xl border border-[#C2C2C2] bg-white">
-      <div class="flex items-center justify-between border-b border-[#E5E5E5] px-6 py-4">
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-[#E5E5E5] px-4 py-4 sm:px-6">
         <h2 class="text-lg font-bold text-[#4F4F4F]">Kontrol Irigasi</h2>
         <Show when={!props.readOnly}>
           <EditButton editing={editing()} onClick={() => setEditing((value) => !value)} />
         </Show>
       </div>
 
-      <div class="grid gap-6 p-6 lg:grid-cols-2">
-        <div class="rounded-xl border border-[#E5E5E5] p-5">
+      <div class="grid gap-6 p-4 sm:p-6 lg:grid-cols-2">
+        <div class="rounded-xl border border-[#E5E5E5] p-4 sm:p-5">
           <h3 class="mb-2 text-base font-bold text-[#4F4F4F]">Kelembaban Tanah</h3>
           <p class="mb-6 text-sm text-[#6B7280]">
             Tentukan batas nilai kelembaban tanah untuk mengatur nyala atau mati pompa secara otomatis.
@@ -119,13 +119,13 @@ export function IrrigationControl(props: { region: SettingsRegion; readOnly?: bo
           </Show>
         </div>
 
-        <div class="rounded-xl border border-[#E5E5E5] p-5">
+        <div class="rounded-xl border border-[#E5E5E5] p-4 sm:p-5">
           <h3 class="mb-2 text-base font-medium text-[#4F4F4F]">Kondisi Lahan</h3>
           <p class="mb-6 text-sm text-[#6B7280]">
             Tentukan batas label kondisi lahan untuk tampilan Dashboard dan Riwayat. Nilai ini hanya disimpan di
             database SQL.
           </p>
-          <div class="mb-6 flex justify-center gap-4">
+          <div class="mb-6 flex flex-wrap justify-center gap-2 sm:gap-4">
             <For each={Object.entries(preferenceLabels) as [Preference, string][]}>
               {([value, label]) => (
                 <button

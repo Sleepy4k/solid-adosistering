@@ -56,7 +56,7 @@ export default function LogAutentikasi() {
         <h1 class="text-2xl font-bold text-slate-900">Log Autentikasi</h1>
 
         <div class="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-5">
-          <div class="flex min-w-56 flex-col gap-1.5">
+          <div class="flex w-full min-w-0 flex-col gap-1.5 sm:w-auto sm:min-w-56">
             <label class="text-xs font-medium text-slate-600">Tipe Aksi</label>
             <SelectSearch
               value={actionFilter()}
@@ -119,27 +119,29 @@ export default function LogAutentikasi() {
               fallback={<div class="p-10 text-center text-sm text-slate-500">Tidak ada log ditemukan.</div>}
             >
               <div class="overflow-x-auto">
-                <table class="w-full text-sm">
+                <table class="w-full min-w-[760px] text-sm">
                   <thead class="border-b border-slate-100 bg-slate-50 text-xs font-medium text-slate-500">
                     <tr>
-                      <th class="px-5 py-3 text-left">Waktu</th>
-                      <th class="px-5 py-3 text-left">Aktor</th>
-                      <th class="px-5 py-3 text-left">Aksi</th>
-                      <th class="px-5 py-3 text-left">Entitas</th>
-                      <th class="px-5 py-3 text-left">ID Entitas</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left">Waktu</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left">Aktor</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left">Aksi</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left">Entitas</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left">ID Entitas</th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-slate-100">
                     <For each={data()?.logs}>
                       {(log: ActivityLogItem) => (
                         <tr class="hover:bg-slate-50">
-                          <td class="px-5 py-3 font-mono text-xs text-slate-500">{formatDate(log.createdAt)}</td>
+                          <td class="whitespace-nowrap px-5 py-3 font-mono text-xs text-slate-500">
+                            {formatDate(log.createdAt)}
+                          </td>
                           <td class="px-5 py-3">
                             <Show when={log.actor} fallback={<span class="italic text-slate-400">Sistem</span>}>
                               {(a) => (
                                 <div>
                                   <p class="font-medium text-slate-900">{a().name}</p>
-                                  <p class="text-xs text-slate-400">{a().email}</p>
+                                  <p class="break-anywhere text-xs text-slate-400">{a().email}</p>
                                 </div>
                               )}
                             </Show>
@@ -148,7 +150,9 @@ export default function LogAutentikasi() {
                             <ActionBadge action={log.action} />
                           </td>
                           <td class="px-5 py-3 text-slate-600">{log.entityType}</td>
-                          <td class="px-5 py-3 font-mono text-xs text-slate-400">{log.entityId ?? "-"}</td>
+                          <td class="break-anywhere px-5 py-3 font-mono text-xs text-slate-400">
+                            {log.entityId ?? "-"}
+                          </td>
                         </tr>
                       )}
                     </For>

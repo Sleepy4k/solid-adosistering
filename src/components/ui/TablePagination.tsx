@@ -1,5 +1,4 @@
 import { createMemo, For, Show } from "solid-js";
-import { SelectSearch } from "./SelectSearch";
 
 export const TABLE_PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 
@@ -36,14 +35,22 @@ function numberedPages(currentPage: number, totalPages: number) {
 
 export function PageSizeSelect(props: PageSizeSelectProps) {
   return (
-    <div class="flex flex-col gap-1.5">
-      <label class="text-xs font-medium text-slate-600">Tampilkan</label>
-      <SelectSearch
-        value={String(props.value)}
-        options={TABLE_PAGE_SIZE_OPTIONS.map((option) => ({ value: String(option), label: `${option} data` }))}
-        onChange={(value) => props.onChange(Number(value))}
-      />
-    </div>
+    <label class="flex min-w-0 flex-col gap-1.5 text-xs font-medium text-slate-600">
+      <span>Tampilkan</span>
+      <select
+        class="min-h-10 w-full cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition-colors hover:border-slate-300 focus:border-emerald-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+        value={props.value}
+        onChange={(event) => props.onChange(Number(event.currentTarget.value))}
+      >
+        <For each={TABLE_PAGE_SIZE_OPTIONS}>
+          {(option) => (
+            <option value={option} selected={option === props.value}>
+              {option} data
+            </option>
+          )}
+        </For>
+      </select>
+    </label>
   );
 }
 
@@ -55,7 +62,7 @@ export function TablePagination(props: TablePaginationProps) {
   const end = createMemo(() => Math.min(props.total, (page() + 1) * props.pageSize));
 
   const buttonClass =
-    "min-w-9 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40";
+    "inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-slate-200 px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 disabled:cursor-not-allowed disabled:opacity-40";
 
   return (
     <div class="flex flex-col gap-3 border-t border-slate-100 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -64,7 +71,7 @@ export function TablePagination(props: TablePaginationProps) {
       </p>
 
       <Show when={props.total > 0}>
-        <nav class="flex flex-wrap items-center justify-end gap-1" aria-label="Pagination">
+        <nav class="flex items-center justify-between gap-2 sm:justify-end sm:gap-1" aria-label="Pagination">
           <button
             type="button"
             disabled={page() === 0}
@@ -73,23 +80,42 @@ export function TablePagination(props: TablePaginationProps) {
           >
             Prev
           </button>
-          <For each={pages()}>
-            {(item) => (
-              <Show when={item !== "ellipsis"} fallback={<span class="px-2 py-1.5 text-sm text-slate-400">...</span>}>
-                <button
-                  type="button"
-                  onClick={() => props.onPageChange(item as number)}
-                  class={`min-w-9 rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
-                    item === page()
-                      ? "border-emerald-600 bg-emerald-600 text-white"
-                      : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                  }`}
+
+          <span class="text-sm tabular-nums text-slate-500 sm:hidden">
+            Halaman {page() + 1} / {totalPages()}
+          </span>
+
+          <div class="hidden items-center gap-1 sm:flex">
+            <For each={pages()}>
+              {(item) => (
+                <Show
+                  when={item !== "ellipsis"}
+                  fallback={
+                    <span
+                      class="inline-flex h-10 w-8 items-center justify-center text-sm text-slate-400"
+                      aria-hidden="true"
+                    >
+                      …
+                    </span>
+                  }
                 >
-                  {(item as number) + 1}
-                </button>
-              </Show>
-            )}
-          </For>
+                  <button
+                    type="button"
+                    onClick={() => props.onPageChange(item as number)}
+                    aria-current={item === page() ? "page" : undefined}
+                    class={`inline-flex h-10 min-w-10 items-center justify-center rounded-lg border px-3 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/40 ${
+                      item === page()
+                        ? "border-emerald-600 bg-emerald-600 text-white"
+                        : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    {(item as number) + 1}
+                  </button>
+                </Show>
+              )}
+            </For>
+          </div>
+
           <button
             type="button"
             disabled={page() >= totalPages() - 1}

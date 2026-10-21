@@ -65,16 +65,21 @@ export default function LandingHeader(props: LandingHeaderProps) {
               : "border border-white/20 bg-white/15 backdrop-blur-xl"
           }`}
         >
-          <a href="#beranda" class="flex shrink-0 items-center gap-2.5" onClick={(e) => handleNavClick(e, "#beranda")}>
+          <a
+            href="#beranda"
+            class="flex min-w-0 shrink items-center gap-2.5"
+            title={props.config.projectName}
+            onClick={(e) => handleNavClick(e, "#beranda")}
+          >
             <img
               src={props.config.logoUrl ?? "/landing/logo.svg"}
               alt=""
-              class="h-10 w-auto"
+              class="h-10 w-auto shrink-0"
               loading="eager"
               decoding="async"
             />
             <span
-              class="text-white font-semibold uppercase tracking-wide leading-none"
+              class="min-w-0 max-w-[45vw] truncate text-white font-semibold uppercase tracking-wide leading-none sm:max-w-none"
               style="font-family:'Oswald',sans-serif;font-size:1.25rem;letter-spacing:0.05em"
             >
               {props.config.projectName}
@@ -166,7 +171,7 @@ export default function LandingHeader(props: LandingHeaderProps) {
       <Show when={mobileOpen()}>
         <div
           id="landing-mobile-menu"
-          class="mx-4 mt-2 sm:mx-6"
+          class="mx-4 mt-2 max-h-[calc(100dvh-4rem)] overflow-y-auto pb-[env(safe-area-inset-bottom)] sm:mx-6"
           ref={(el) => {
             menuRef = el;
           }}

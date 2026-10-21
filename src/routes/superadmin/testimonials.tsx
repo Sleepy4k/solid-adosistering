@@ -112,7 +112,7 @@ function TestimonialModal(props: { initial?: Item; onClose: () => void; onSaved:
             previewImgClass="h-full w-full object-contain"
           />
         </div>
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div class="flex flex-col gap-1.5">
             <label class="text-xs font-medium text-slate-600">Urutan Tampil</label>
             <input
@@ -209,7 +209,7 @@ export default function CmsTestimonials() {
               <div class="divide-y divide-slate-100">
                 <For each={items()}>
                   {(item) => (
-                    <div class="flex items-start gap-4 px-5 py-4">
+                    <div class="flex flex-wrap items-start gap-3 px-4 py-4 sm:gap-4 sm:px-5">
                       <Show when={item.imageUrl}>
                         <img
                           src={item.imageUrl!}
@@ -227,24 +227,26 @@ export default function CmsTestimonials() {
                           </Badge>
                           <span class="text-xs text-slate-400">Urutan: {item.sortOrder}</span>
                         </div>
-                        <p class="mt-1 line-clamp-2 text-sm text-slate-600">"{item.quote}"</p>
+                        <p class="mt-1 line-clamp-2 break-anywhere text-sm text-slate-600">"{item.quote}"</p>
                       </div>
-                      <div class="flex shrink-0 gap-1.5">
+                      <div class="flex w-full shrink-0 flex-wrap items-center justify-end gap-1.5 sm:w-auto">
                         <button
                           type="button"
                           title="Edit"
-                          class="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50"
+                          aria-label={`Edit testimoni ${item.name}`}
+                          class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
                           onClick={() => setEditing(item)}
                         >
-                          <Pencil size={14} />
+                          <Pencil size={16} />
                         </button>
                         <button
                           type="button"
                           title="Hapus"
-                          class="rounded-lg border border-rose-200 p-2 text-rose-600 hover:bg-rose-50"
+                          aria-label={`Hapus testimoni ${item.name}`}
+                          class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50"
                           onClick={() => handleDelete(item)}
                         >
-                          <Trash2 size={14} />
+                          <Trash2 size={16} />
                         </button>
                       </div>
                     </div>

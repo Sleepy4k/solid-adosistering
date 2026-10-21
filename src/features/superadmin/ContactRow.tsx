@@ -36,16 +36,16 @@ export default function ContactRow(props: ContactRowProps) {
 
   return (
     <tr class={`border-b border-gray-100 last:border-0 ${props.contact.isRead ? "opacity-60" : ""}`}>
-      <td class="px-5 py-4">
+      <td class="min-w-0 px-5 py-4">
         <p class="font-medium text-[#333]">{props.contact.name}</p>
-        <p class="text-xs text-[#6B6B6B]">{props.contact.email}</p>
+        <p class="break-anywhere text-xs text-[#6B6B6B]">{props.contact.email}</p>
         <Show when={props.contact.phone}>
-          <p class="text-xs text-[#6B6B6B]">{props.contact.phone}</p>
+          <p class="break-anywhere text-xs text-[#6B6B6B]">{props.contact.phone}</p>
         </Show>
       </td>
-      <td class="px-5 py-4 text-xs text-[#6B6B6B]">{props.contact.userType ?? "-"}</td>
+      <td class="whitespace-nowrap px-5 py-4 text-xs text-[#6B6B6B]">{props.contact.userType ?? "-"}</td>
       <td class="max-w-xs px-5 py-4 text-sm text-[#4F4F4F]">
-        <p class="line-clamp-3 whitespace-pre-wrap">{props.contact.message}</p>
+        <p class="line-clamp-3 whitespace-pre-wrap break-anywhere">{props.contact.message}</p>
       </td>
       <td class="whitespace-nowrap px-5 py-4 text-xs text-[#6B6B6B]">{date}</td>
       <td class="px-5 py-4">
@@ -53,7 +53,7 @@ export default function ContactRow(props: ContactRowProps) {
           type="button"
           disabled={loading()}
           onClick={toggle}
-          class={`rounded-full px-2.5 py-1 text-xs font-semibold transition-colors disabled:opacity-50 ${
+          class={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold transition-colors disabled:opacity-50 ${
             props.contact.isRead
               ? "bg-gray-100 text-gray-600 hover:bg-gray-200"
               : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"

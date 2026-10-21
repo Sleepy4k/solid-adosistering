@@ -53,13 +53,13 @@ export function SuperadminDashboard(props: { summary: SuperadminSummary }) {
           fallback={<div class="p-8 text-center text-sm text-[#6B6B6B]">Belum ada region.</div>}
         >
           <div class="overflow-x-auto">
-            <table class="w-full text-sm">
+            <table class="w-full min-w-[640px] text-sm">
               <thead class="border-b border-gray-100 bg-gray-50 text-xs font-medium text-[#6B6B6B]">
                 <tr>
-                  <th class="px-5 py-3 text-left">Nama Wilayah</th>
-                  <th class="px-5 py-3 text-left">Blok</th>
-                  <th class="px-5 py-3 text-left">Admin</th>
-                  <th class="px-5 py-3 text-left">Sinkronisasi</th>
+                  <th class="whitespace-nowrap px-5 py-3 text-left">Nama Wilayah</th>
+                  <th class="whitespace-nowrap px-5 py-3 text-left">Blok</th>
+                  <th class="whitespace-nowrap px-5 py-3 text-left">Admin</th>
+                  <th class="whitespace-nowrap px-5 py-3 text-left">Sinkronisasi</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-100">
@@ -68,11 +68,11 @@ export function SuperadminDashboard(props: { summary: SuperadminSummary }) {
                     <tr class="hover:bg-gray-50">
                       <td class="px-5 py-3">
                         <p class="font-medium text-[#333]">{region.name}</p>
-                        <p class="text-xs text-[#808080]">{region.description ?? "-"}</p>
+                        <p class="break-anywhere text-xs text-[#808080]">{region.description ?? "-"}</p>
                       </td>
-                      <td class="px-5 py-3 text-[#4F4F4F]">{region.blockCount}</td>
-                      <td class="px-5 py-3 text-[#4F4F4F]">{region.adminCount}</td>
-                      <td class="px-5 py-3">
+                      <td class="whitespace-nowrap px-5 py-3 text-[#4F4F4F]">{region.blockCount}</td>
+                      <td class="whitespace-nowrap px-5 py-3 text-[#4F4F4F]">{region.adminCount}</td>
+                      <td class="whitespace-nowrap px-5 py-3">
                         <Badge tone={syncTone(region.syncStatus)}>{syncLabel(region.syncStatus)}</Badge>
                       </td>
                     </tr>

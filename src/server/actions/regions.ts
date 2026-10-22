@@ -9,6 +9,7 @@ import { firebaseAdminDb, provisionRegionNode, renameRegionNode } from "../integ
 import { assertSuperadmin } from "../auth/security";
 import { getSession } from "../auth/session";
 import { decimalCoordinate, getScopedRegionIds, logActivity, type CoordinateInput } from "../domain";
+import { loadRegionList } from "../domain/regionList";
 import {
   assignAdminSchema,
   createRegionSchema,
@@ -23,51 +24,7 @@ export async function getRegions() {
   if (!session) throw redirect("/login");
   assertSuperadmin(session);
 
-  const regions = await prisma.region.findMany({
-    orderBy: { name: "asc" },
-    select: {
-      id: true,
-      name: true,
-      description: true,
-      latitude: true,
-      longitude: true,
-      firebaseSyncStatus: true,
-      firebaseSyncedAt: true,
-      automaticMode: true,
-      createdAt: true,
-      _count: { select: { blocks: true, adminAssignments: true } },
-      adminAssignments: {
-        select: { admin: { select: { id: true, name: true, email: true } } },
-      },
-    },
-  });
-
-  const blockCounts = await prisma.block.findMany({
-    where: { regionId: { in: regions.map((region) => region.id) } },
-    select: {
-      regionId: true,
-      _count: { select: { sprayers: { where: { isActive: true } } } },
-    },
-  });
-  const sprayerCountByRegion = new Map<string, number>();
-  for (const block of blockCounts) {
-    sprayerCountByRegion.set(block.regionId, (sprayerCountByRegion.get(block.regionId) ?? 0) + block._count.sprayers);
-  }
-
-  return regions.map((region) => ({
-    id: region.id,
-    name: region.name,
-    description: region.description,
-    latitude: region.latitude === null ? null : Number(region.latitude),
-    longitude: region.longitude === null ? null : Number(region.longitude),
-    firebaseSyncStatus: region.firebaseSyncStatus,
-    firebaseSyncedAt: region.firebaseSyncedAt?.toISOString() ?? null,
-    automaticMode: region.automaticMode,
-    sprayerCount: sprayerCountByRegion.get(region.id) ?? 0,
-    createdAt: region.createdAt.toISOString(),
-    _count: region._count,
-    adminAssignments: region.adminAssignments,
-  }));
+  return loadRegionList();
 }
 
 export async function createRegion(input: {

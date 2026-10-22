@@ -9,6 +9,7 @@ import { serverConfig } from "../config";
 import { assertAdminOrHigher, hashPassword, newOpaqueToken } from "../auth/security";
 import { destroyAllUserSessions, getSession } from "../auth/session";
 import { assertRegionsAssignable, displayThresholdDefaults, getScopedRegionIds, logActivity } from "../domain";
+import { buildUserListWhere } from "../domain/userListQuery";
 import {
   createUserSchema,
   deleteUserSchema,
@@ -17,8 +18,6 @@ import {
   updateUserSchema,
   userListFiltersSchema,
 } from "../validation";
-
-const LIKE_ESCAPE_CHAR = "!";
 
 function isUniqueConstraint(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
@@ -54,11 +53,6 @@ function isLengthConstraint(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2000";
 }
 
-/** Escape LIKE wildcards so user input is matched literally (`!` is the ESCAPE char). */
-function escapeLikePattern(value: string) {
-  return value.replace(/[!%_]/g, (char) => `${LIKE_ESCAPE_CHAR}${char}`);
-}
-
 function mapKnownUserErrors(error: unknown): never {
   if (isUniqueConstraint(error)) throw new Response(uniqueConstraintMessage(error), { status: 409 });
   if (isLengthConstraint(error)) throw new Response("Data yang dikirim terlalu panjang.", { status: 400 });
@@ -89,27 +83,8 @@ export async function getUsers(filters?: { role?: Role; search?: string }) {
   if (!session) throw redirect("/login");
   assertAdminOrHigher(session);
 
-  const scopedRegionIds = await getScopedRegionIds(session);
-  const where: Prisma.UserWhereInput = {
-    deletedAt: null,
-    ...(session.role === "ADMIN"
-      ? { role: "USER", assignedRegions: { some: { regionId: { in: scopedRegionIds ?? [] } } } }
-      : {}),
-  };
-  if (parsedFilters.role && session.role === "SUPERADMIN") where.role = parsedFilters.role;
-  if (parsedFilters.search) {
-    const term = `%${escapeLikePattern(parsedFilters.search)}%`;
-    const matchingIds = await prisma.$queryRaw<{ id: string }[]>`
-      SELECT u.id FROM \`user\` u
-      LEFT JOIN user_detail p ON p.user_id = u.id
-      WHERE (u.name LIKE ${term} ESCAPE '!'
-         OR u.email LIKE ${term} ESCAPE '!'
-         OR p.whatsapp LIKE ${term} ESCAPE '!')
-        AND u.deleted_at IS NULL
-    `;
-    if (matchingIds.length === 0) return [];
-    where.id = { in: matchingIds.map((r) => r.id) };
-  }
+  const where = await buildUserListWhere(session, parsedFilters);
+  if (!where) return [];
 
   const users = await prisma.user.findMany({
     where,

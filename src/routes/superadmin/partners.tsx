@@ -1,6 +1,7 @@
 import { query, createAsync, revalidate } from "@solidjs/router";
 import { createSignal, For, Show, Suspense } from "solid-js";
-import { Pencil, Plus, Trash2 } from "lucide-solid";
+import { Download, Pencil, Plus, Trash2 } from "lucide-solid";
+import { ExportDataModal } from "~/features/export/ExportDataModal";
 import { PageMeta } from "~/components/shared/PageMeta";
 import { PageHeader } from "~/components/ui/PageHeader";
 import { ModalFrame } from "~/components/shared/ModalFrame";
@@ -148,6 +149,7 @@ export default function CmsPartners() {
   const confirm = useConfirm();
   const items = createAsync(() => load());
   const [adding, setAdding] = createSignal<boolean>(false);
+  const [exportOpen, setExportOpen] = createSignal<boolean>(false);
   const [editing, setEditing] = createSignal<Item | null>(null);
 
   const handleDelete = async (item: Item) => {
@@ -176,10 +178,16 @@ export default function CmsPartners() {
           title="CMS Mitra"
           description={<p class="mt-0.5 text-sm text-slate-500">Kelola logo mitra yang tampil di landing page.</p>}
           actions={
-            <Button tone="primary" onClick={() => setAdding(true)}>
-              <Plus size={16} />
-              Tambah Mitra
-            </Button>
+            <div class="flex flex-col gap-2 sm:flex-row">
+              <Button tone="outline" onClick={() => setExportOpen(true)}>
+                <Download size={16} />
+                Export
+              </Button>
+              <Button tone="primary" onClick={() => setAdding(true)}>
+                <Plus size={16} />
+                Tambah Mitra
+              </Button>
+            </div>
           }
         />
         <Card>
@@ -261,6 +269,14 @@ export default function CmsPartners() {
       <Show when={editing()}>
         <PartnerModal initial={editing()!} onClose={() => setEditing(null)} onSaved={() => setEditing(null)} />
       </Show>
+      <ExportDataModal
+        open={exportOpen()}
+        onClose={() => setExportOpen(false)}
+        dataset="partners"
+        title="Mitra"
+        dateRange="optional"
+        dateLabel="Tanggal dibuat"
+      />
     </>
   );
 }

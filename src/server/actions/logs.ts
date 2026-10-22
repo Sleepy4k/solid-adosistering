@@ -1,11 +1,10 @@
 "use server";
 
-import type { Prisma } from "@prisma/client";
-import { ActivityAction } from "@prisma/client";
+import type { ActivityAction } from "@prisma/client";
 import { redirect } from "@solidjs/router";
 import { prisma } from "../db/prisma";
 import { getSession } from "../auth/session";
-import { getScopedRegionIds } from "../domain";
+import { buildActivityLogWhere } from "../domain/activityLogQuery";
 import { activityLogFiltersSchema, parseInput } from "../validation";
 import type { ActivityLogItem } from "~/types/logs";
 
@@ -22,41 +21,11 @@ export async function getActivityLogs(input?: {
   if (!session) throw redirect("/login");
   if (session.role === "USER") return { logs: [], total: 0, forbidden: true };
 
-  const authActions = [
-    ActivityAction.AUTH_LOGIN,
-    ActivityAction.AUTH_LOGOUT,
-    ActivityAction.AUTH_PASSWORD_RESET_REQUEST,
-    ActivityAction.AUTH_PASSWORD_RESET_COMPLETE,
-  ];
-  const baseWhere: Prisma.ActivityLogWhereInput = data.action
-    ? { action: data.action as ActivityAction }
-    : data.category === "auth"
-      ? { action: { in: authActions } }
-      : data.category === "system"
-        ? { action: { notIn: authActions } }
-        : {};
-
-  let where: Prisma.ActivityLogWhereInput = baseWhere;
-
-  if (session.role === "ADMIN") {
-    const regionIds = await getScopedRegionIds(session);
-    if (!regionIds || regionIds.length === 0) return { logs: [], total: 0 };
-
-    const users = await prisma.userRegionAssignment.findMany({
-      where: { regionId: { in: regionIds } },
-      select: { userId: true },
-    });
-    const allowedUserIds = [...new Set([session.id, ...users.map((row) => row.userId)])];
-
-    where = {
-      AND: [
-        baseWhere,
-        {
-          OR: [{ actorId: { in: allowedUserIds } }, { AND: [{ actorId: null }, { regionId: { in: regionIds } }] }],
-        },
-      ],
-    };
-  }
+  const where = await buildActivityLogWhere(session, {
+    ...(data.action ? { action: data.action as ActivityAction } : {}),
+    ...(data.category ? { category: data.category } : {}),
+  });
+  if (!where) return { logs: [], total: 0 };
 
   const [logs, total] = await Promise.all([
     prisma.activityLog.findMany({

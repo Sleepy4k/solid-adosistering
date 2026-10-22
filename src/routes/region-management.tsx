@@ -1,6 +1,7 @@
 import { query, createAsync, revalidate } from "@solidjs/router";
 import { createEffect, createMemo, createSignal, For, lazy, Show, Suspense } from "solid-js";
-import { Plus } from "lucide-solid";
+import { Download, Plus } from "lucide-solid";
+import { ExportDataModal } from "~/features/export/ExportDataModal";
 import { PageMeta } from "~/components/shared/PageMeta";
 import { PageSizeSelect, TablePagination } from "~/components/ui/TablePagination";
 import { Badge } from "~/components/ui/Badge";
@@ -34,6 +35,7 @@ export default function ManajemenRegion() {
   const confirm = useConfirm();
   const [editTarget, setEditTarget] = createSignal<RegionRow | null>(null);
   const [showCreate, setShowCreate] = createSignal<boolean>(false);
+  const [exportOpen, setExportOpen] = createSignal<boolean>(false);
   const [adminTarget, setAdminTarget] = createSignal<RegionRow | null>(null);
   const [refreshKey, setRefreshKey] = createSignal<number>(0);
   const [loadError, setLoadError] = createSignal<string>("");
@@ -145,6 +147,14 @@ export default function ManajemenRegion() {
                 setPage(0);
               }}
             />
+            <button
+              type="button"
+              onClick={() => setExportOpen(true)}
+              class="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              <Download size={16} />
+              Export
+            </button>
             <button
               type="button"
               onClick={() => setShowCreate(true)}
@@ -310,6 +320,14 @@ export default function ManajemenRegion() {
           />
         )}
       </Show>
+      <ExportDataModal
+        open={exportOpen()}
+        onClose={() => setExportOpen(false)}
+        dataset="regions"
+        title="Region"
+        dateRange="optional"
+        dateLabel="Tanggal dibuat"
+      />
     </>
   );
 }

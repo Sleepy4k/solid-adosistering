@@ -2,6 +2,7 @@ import "server-only";
 
 import { formatJakartaDateTime } from "~/lib/shared/datetime";
 import type { HistoryItem } from "~/server/domain/historyData";
+import type { ExportFormat, ExportRow, ExportValue } from "./table";
 
 /**
  * Canonical column order shared by every export format. The headers match the
@@ -25,13 +26,13 @@ export const HISTORY_EXPORT_HEADERS = [
   "Operator",
 ] as const;
 
-export type HistoryExportValue = string | number | null;
+export type HistoryExportValue = ExportValue;
 
 /** One canonical export row, aligned with `HISTORY_EXPORT_HEADERS`. */
-export type HistoryExportRow = HistoryExportValue[];
+export type HistoryExportRow = ExportRow;
 
 /** All formats accepted by the export endpoint. */
-export type HistoryExportFormat = "csv" | "xlsx" | "pdf";
+export type HistoryExportFormat = ExportFormat;
 
 /**
  * Tabular formats buffer the whole file in memory, so they get the higher cap.
@@ -115,9 +116,4 @@ export function toHistoryExportRow(item: HistoryItem): HistoryExportValue[] {
     item.sensor ? moistureLabel(item.sensor.moistureStatus) : null,
     item.actor?.name ?? null,
   ];
-}
-
-/** Plain display text for tabular formats that have no null cell type. */
-export function displayExportValue(value: HistoryExportValue): string {
-  return value === null ? "" : String(value);
 }

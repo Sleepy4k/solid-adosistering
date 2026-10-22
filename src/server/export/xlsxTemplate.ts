@@ -4,24 +4,44 @@ import { PassThrough } from "node:stream";
 import ExcelJS from "exceljs";
 import { throwIfAborted, yieldToEventLoop } from "./heavyExport";
 import { HISTORY_EXPORT_HEADERS, type HistoryExportRow } from "./historyRows";
-
-const WORKSHEET_NAME = "Riwayat Irigasi";
+import type { ExportColumn, ExportRow } from "./table";
 
 /** Human-scaled widths for the 15 canonical columns, in Excel character units. */
-const COLUMN_WIDTHS = [20, 18, 20, 20, 26, 26, 14, 16, 14, 18, 16, 22, 15, 16, 20] as const;
+const HISTORY_COLUMN_WIDTHS = [20, 18, 20, 20, 26, 26, 14, 16, 14, 18, 16, 22, 15, 16, 20] as const;
+const HISTORY_DURATION_COLUMN = 6;
+
+const HISTORY_COLUMNS: readonly ExportColumn[] = HISTORY_EXPORT_HEADERS.map((header, index) => ({
+  header,
+  xlsxWidth: HISTORY_COLUMN_WIDTHS[index] ?? 18,
+  pdfWeight: 1,
+  ...(index === HISTORY_DURATION_COLUMN ? { numeric: true } : {}),
+}));
 
 /** Keep each synchronous cell-writing burst short so other requests stay responsive. */
 const YIELD_BUDGET_MS = 10;
 const ROWS_PER_YIELD = 128;
 
-function xlsxCellValue(value: HistoryExportRow[number]): string | number {
+function xlsxCellValue(value: ExportRow[number]): string | number {
   if (value === null) return "";
   if (typeof value === "number") return Number.isFinite(value) ? value : "";
   return value;
 }
 
+/** Monthly irrigation history workbook; see `buildTableXlsx`. */
+export async function buildIrrigationHistoryXlsx(input: {
+  rows: readonly HistoryExportRow[];
+  signal?: AbortSignal;
+}): Promise<Uint8Array> {
+  return buildTableXlsx({
+    sheetName: "Riwayat Irigasi",
+    columns: HISTORY_COLUMNS,
+    rows: input.rows,
+    ...(input.signal ? { signal: input.signal } : {}),
+  });
+}
+
 /**
- * Build a styled XLSX workbook for the monthly irrigation history export.
+ * Build a styled single-sheet XLSX workbook from export rows.
  *
  * Rows are written through ExcelJS's streaming writer into a `PassThrough`:
  * every committed row is serialised immediately and streamed into the zip
@@ -32,8 +52,10 @@ function xlsxCellValue(value: HistoryExportRow[number]): string | number {
  * literal text. Unlike CSV, no apostrophe prefix is needed and the original
  * value is preserved.
  */
-export async function buildIrrigationHistoryXlsx(input: {
-  rows: readonly HistoryExportRow[];
+export async function buildTableXlsx(input: {
+  sheetName: string;
+  columns: readonly ExportColumn[];
+  rows: readonly ExportRow[];
   signal?: AbortSignal;
 }): Promise<Uint8Array> {
   throwIfAborted(input.signal);
@@ -62,28 +84,27 @@ export async function buildIrrigationHistoryXlsx(input: {
   workbook.lastModifiedBy = "Adosistering";
 
   try {
-    const sheet = workbook.addWorksheet(WORKSHEET_NAME, {
+    const sheet = workbook.addWorksheet(input.sheetName, {
       views: [{ state: "frozen", ySplit: 1 }],
       pageSetup: { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
     });
 
-    sheet.columns = HISTORY_EXPORT_HEADERS.map((header, index) => ({
-      header,
+    sheet.columns = input.columns.map((column, index) => ({
+      header: column.header,
       key: `column-${index + 1}`,
-      width: COLUMN_WIDTHS[index] ?? 18,
+      width: column.xlsxWidth,
     }));
 
     // Column styles apply to every cell in the column, so the same font,
     // alignment and number format objects are shared instead of rebuilt for
-    // each of up to 5000 x 15 cells. Header cell styles below override the font
-    // and alignment; their number format is reset to General for parity with
-    // the previous per-cell implementation.
-    for (let index = 1; index <= HISTORY_EXPORT_HEADERS.length; index += 1) {
-      const column = sheet.getColumn(index);
-      const isDuration = index === 7;
+    // each of up to 5000 rows. Header cell styles below override the font and
+    // alignment; their number format is reset to General for parity with the
+    // previous per-cell implementation.
+    for (const [index, definition] of input.columns.entries()) {
+      const column = sheet.getColumn(index + 1);
       column.font = { size: 10 };
-      column.alignment = { vertical: "middle", horizontal: isDuration ? "right" : "left" };
-      column.numFmt = isDuration ? "0" : "@";
+      column.alignment = { vertical: "middle", horizontal: definition.numeric ? "right" : "left" };
+      column.numFmt = definition.numeric ? "0" : "@";
     }
 
     const headerRow = sheet.getRow(1);
@@ -127,7 +148,7 @@ export async function buildIrrigationHistoryXlsx(input: {
 
     sheet.autoFilter = {
       from: { row: 1, column: 1 },
-      to: { row: Math.max(input.rows.length + 1, 1), column: HISTORY_EXPORT_HEADERS.length },
+      to: { row: Math.max(input.rows.length + 1, 1), column: input.columns.length },
     };
 
     throwIfAborted(input.signal);

@@ -2,7 +2,8 @@ import { PageMeta } from "~/components/shared/PageMeta";
 import { query, createAsync } from "@solidjs/router";
 import type { ActivityAction } from "@prisma/client";
 import { createSignal, For, Show, Suspense } from "solid-js";
-import { RotateCcw } from "lucide-solid";
+import { Download, RotateCcw } from "lucide-solid";
+import { ExportDataModal } from "~/features/export/ExportDataModal";
 import { SkTableRow } from "~/components/shared/Skeleton";
 import { SelectSearch } from "~/components/ui/SelectSearch";
 import { PageSizeSelect, TablePagination } from "~/components/ui/TablePagination";
@@ -35,6 +36,7 @@ export default function LogAutentikasi() {
   const [actionFilter, setActionFilter] = createSignal<string>("");
   const [page, setPage] = createSignal<number>(0);
   const [pageSize, setPageSize] = createSignal<number>(10);
+  const [exportOpen, setExportOpen] = createSignal<boolean>(false);
   const data = createAsync<ActivityLogResult>(() => loadLogs("auth", actionFilter(), pageSize(), page() * pageSize()));
 
   const actionOptions = () => {
@@ -82,6 +84,14 @@ export default function LogAutentikasi() {
           >
             <RotateCcw size={16} />
             Reset
+          </button>
+          <button
+            type="button"
+            onClick={() => setExportOpen(true)}
+            class="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+          >
+            <Download size={16} />
+            Export
           </button>
           <Suspense>
             <Show when={data()}>
@@ -165,6 +175,16 @@ export default function LogAutentikasi() {
           </Suspense>
         </div>
       </div>
+      <ExportDataModal
+        open={exportOpen()}
+        onClose={() => setExportOpen(false)}
+        dataset="auth-log"
+        title="Log Autentikasi"
+        dateRange="required"
+        dateLabel="Tanggal"
+        filters={{ action: actionFilter() }}
+        filterNote={actionFilter() ? "Filter tipe aksi yang aktif ikut diterapkan." : undefined}
+      />
     </>
   );
 }

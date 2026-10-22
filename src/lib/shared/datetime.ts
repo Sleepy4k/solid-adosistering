@@ -217,8 +217,11 @@ export function formatJakartaDate(value: Date | string): string {
   return `${weekday}, ${day}/${month}/${year}`;
 }
 
-/** `Selasa, 20/10/2026 17:00 WIB`; returns `"-"` for an invalid value. */
-export function formatJakartaDateTime(value: Date | string): string {
+/**
+ * `Selasa, 20/10/2026 17:00 WIB` (or `17:00:05 WIB` with `seconds`); returns
+ * `"-"` for an invalid value.
+ */
+export function formatJakartaDateTime(value: Date | string, options: { seconds?: boolean } = {}): string {
   const shifted = shiftedToJakarta(value);
   if (!shifted) return "-";
 
@@ -228,8 +231,9 @@ export function formatJakartaDateTime(value: Date | string): string {
   const year = pad(shifted.getUTCFullYear(), 4);
   const hour = pad(shifted.getUTCHours());
   const minute = pad(shifted.getUTCMinutes());
+  const second = options.seconds ? `:${pad(shifted.getUTCSeconds())}` : "";
 
-  return `${weekday}, ${day}/${month}/${year} ${hour}:${minute} WIB`;
+  return `${weekday}, ${day}/${month}/${year} ${hour}:${minute}${second} WIB`;
 }
 
 /** `Januari 2026`; returns `"-"` for an invalid month key. */

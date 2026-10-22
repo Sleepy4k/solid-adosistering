@@ -1,6 +1,7 @@
 import { query, createAsync, useNavigate, useSearchParams } from "@solidjs/router";
 import { createEffect, createMemo, createSignal, For, lazy, Show, Suspense } from "solid-js";
-import { Plus, RotateCcw } from "lucide-solid";
+import { Download, Plus, RotateCcw } from "lucide-solid";
+import { ExportDataModal } from "~/features/export/ExportDataModal";
 import { PageMeta } from "~/components/shared/PageMeta";
 import { PageSizeSelect, TablePagination } from "~/components/ui/TablePagination";
 import { deleteUser, getUserFormOptions, getUsers, setUserActive } from "~/server/actions/users";
@@ -42,6 +43,7 @@ export default function ManajemenUser() {
   const [refreshKey, setRefreshKey] = createSignal<number>(0);
   const [page, setPage] = createSignal<number>(0);
   const [pageSize, setPageSize] = createSignal<number>(10);
+  const [exportOpen, setExportOpen] = createSignal<boolean>(false);
 
   createEffect(() => {
     const value = normalizedSearchParam(params.search);
@@ -115,14 +117,24 @@ export default function ManajemenUser() {
       <div class="flex flex-col gap-5">
         <div class="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
           <h1 class="text-2xl font-bold text-slate-900">Manajemen User</h1>
-          <button
-            type="button"
-            onClick={() => navigate("/user-management/create")}
-            class="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 sm:w-auto"
-          >
-            <Plus size={16} />
-            Tambah User
-          </button>
+          <div class="flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={() => setExportOpen(true)}
+              class="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 w-full sm:w-auto"
+            >
+              <Download size={16} />
+              Export
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/user-management/create")}
+              class="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 sm:w-auto"
+            >
+              <Plus size={16} />
+              Tambah User
+            </button>
+          </div>
         </div>
 
         <div class="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-5">
@@ -277,6 +289,16 @@ export default function ManajemenUser() {
           onSaved={() => setRefreshKey((k) => k + 1)}
         />
       </Show>
+      <ExportDataModal
+        open={exportOpen()}
+        onClose={() => setExportOpen(false)}
+        dataset="users"
+        title="User"
+        dateRange="optional"
+        dateLabel="Tanggal bergabung"
+        filters={{ role: roleFilter(), search: search() }}
+        filterNote={roleFilter() || search() ? "Filter role dan pencarian yang aktif ikut diterapkan." : undefined}
+      />
     </>
   );
 }

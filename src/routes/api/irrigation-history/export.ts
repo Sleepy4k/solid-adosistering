@@ -9,27 +9,23 @@ import {
   startOfNextJakartaMonth,
 } from "~/lib/shared/datetime";
 import { getSession } from "~/server/auth/session";
-import { appOrigin } from "~/server/config";
 import { prisma } from "~/server/db/prisma";
 import { enrichIrrigationEvents, historyEventSelect, type HistoryItem } from "~/server/domain/historyData";
 import { buildIrrigationEventWhere } from "~/server/domain/historyQuery";
+import { acquireHeavyExportSlot, isHeavyExportQueueFull, throwIfAborted } from "~/server/export/heavyExport";
+import { HISTORY_EXPORT_HEADERS, maxRowsFor, toHistoryExportRow } from "~/server/export/historyRows";
 import {
-  acquireHeavyExportSlot,
-  HEAVY_EXPORT_BUSY_MESSAGE,
-  isHeavyExportQueueFull,
-  throwIfAborted,
-} from "~/server/export/heavyExport";
-import {
-  HISTORY_EXPORT_HEADERS,
-  maxRowsFor,
-  neutralizeSpreadsheetFormula,
-  toHistoryExportRow,
-  type HistoryExportValue,
-} from "~/server/export/historyRows";
+  buildCsv,
+  EXPORT_FORMAT_META,
+  EXPORT_FORMATS,
+  exportAbortedResponse,
+  heavyExportBusyResponse,
+  isCrossSiteRequest,
+  jsonResponse,
+  textResponse,
+} from "~/server/export/http";
+import type { ExportFormat } from "~/server/export/table";
 import { checkRateLimit, rateLimitResponse } from "~/server/http/rateLimit";
-
-const EXPORT_FORMATS = ["csv", "xlsx", "pdf"] as const;
-type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 /**
  * Heavy exports share one admission gate: one active build bounds peak RSS
@@ -43,15 +39,6 @@ type ExportFormat = (typeof EXPORT_FORMATS)[number];
  * read and enrichment, so the slot is held across the heavy query work and a
  * queued or aborted request never materialises up to 5,000 rows.
  */
-
-const EXPORT_FORMAT_META: Record<ExportFormat, { readonly extension: string; readonly contentType: string }> = {
-  csv: { extension: "csv", contentType: "text/csv; charset=utf-8" },
-  xlsx: {
-    extension: "xlsx",
-    contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  },
-  pdf: { extension: "pdf", contentType: "application/pdf" },
-};
 
 const idParam = z
   .string()
@@ -82,73 +69,6 @@ type ExportFilters = {
   readonly blockId?: string;
   readonly status?: "ON" | "OFF";
 };
-
-function textResponse(body: string, status: number, headers?: Record<string, string>): Response {
-  return new Response(body, {
-    status,
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "Cache-Control": "private, no-store",
-      "X-Content-Type-Options": "nosniff",
-      ...headers,
-    },
-  });
-}
-
-function heavyExportBusyResponse(): Response {
-  return textResponse(HEAVY_EXPORT_BUSY_MESSAGE, 503, { "Retry-After": "5" });
-}
-
-/** Client went away (or aborted the fetch): stop work without a response body. */
-function exportAbortedResponse(): Response {
-  return new Response(null, {
-    status: 499,
-    headers: {
-      "Cache-Control": "private, no-store",
-      "X-Content-Type-Options": "nosniff",
-    },
-  });
-}
-
-/**
- * GET exports are still CSRF-sensitive because the session cookie rides along.
- * Reject explicit cross-site fetches and mismatched `Origin`/`Referer`. A
- * request with neither header (curl, bookmark, address bar) is allowed: the
- * session check in `GET` still gates the data and the UI download link must
- * keep working without a custom header.
- */
-function isCrossSiteRequest(request: Request): boolean {
-  if (request.headers.get("sec-fetch-site") === "cross-site") return true;
-
-  const origin = request.headers.get("origin");
-  if (origin !== null) return origin !== appOrigin;
-
-  const referer = request.headers.get("referer");
-  if (referer === null) return false;
-
-  try {
-    return new URL(referer).origin !== appOrigin;
-  } catch {
-    // A malformed Referer is treated as hostile rather than as a missing header.
-    return true;
-  }
-}
-
-function csvCell(value: HistoryExportValue): string {
-  if (value === null) return "";
-  const text = String(value);
-  if (text === "") return "";
-
-  return `"${neutralizeSpreadsheetFormula(text).replace(/"/g, '""')}"`;
-}
-
-function buildCsv(items: HistoryItem[]): string {
-  const lines = [
-    HISTORY_EXPORT_HEADERS.map(csvCell).join(","),
-    ...items.map((item) => toHistoryExportRow(item).map(csvCell).join(",")),
-  ];
-  return `\uFEFF${lines.join("\r\n")}\r\n`;
-}
 
 /**
  * Derive the PDF filter summary from the already-scoped rows. The `where`
@@ -194,7 +114,7 @@ async function buildExportBody(
 ): Promise<Uint8Array> {
   if (format === "csv") {
     throwIfAborted(signal);
-    const body = new TextEncoder().encode(buildCsv(items));
+    const body = new TextEncoder().encode(buildCsv(HISTORY_EXPORT_HEADERS, items.map(toHistoryExportRow)));
     throwIfAborted(signal);
     return body;
   }
@@ -277,24 +197,14 @@ export async function GET(event: APIEvent): Promise<Response> {
   // the newest-N truncation plan, so the client can explain that an export
   // keeps at most `maxRows` rows before asking for the file.
   if (preview === "1") {
-    return new Response(
-      JSON.stringify({
-        count,
-        maxRows,
-        filename,
-        format,
-        exportedCount: Math.min(count, maxRows),
-        truncated: count > maxRows,
-      }),
-      {
-        status: 200,
-        headers: {
-          "Content-Type": "application/json; charset=utf-8",
-          "Cache-Control": "private, no-store",
-          "X-Content-Type-Options": "nosniff",
-        },
-      },
-    );
+    return jsonResponse({
+      count,
+      maxRows,
+      filename,
+      format,
+      exportedCount: Math.min(count, maxRows),
+      truncated: count > maxRows,
+    });
   }
 
   if (count === 0) return textResponse(`Tidak ada data riwayat irigasi pada bulan ${month}.`, 404);

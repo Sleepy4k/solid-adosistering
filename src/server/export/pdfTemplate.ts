@@ -3,7 +3,8 @@ import "server-only";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { formatJakartaDateTime, formatJakartaMonthLabel } from "~/lib/shared/datetime";
 import { throwIfAborted, yieldToEventLoop } from "./heavyExport";
-import { HISTORY_EXPORT_HEADERS, displayExportValue, type HistoryExportRow } from "./historyRows";
+import { HISTORY_EXPORT_HEADERS, type HistoryExportRow } from "./historyRows";
+import { displayExportValue, type ExportColumn, type ExportRow } from "./table";
 
 const PAGE_WIDTH = 841.89;
 const PAGE_HEIGHT = 595.28;
@@ -33,33 +34,19 @@ const COLOR_HEADER_TEXT = rgb(1, 1, 1);
 const COLOR_ALT_FILL = rgb(0.97, 0.98, 0.98);
 const COLOR_RULE = rgb(0.89, 0.91, 0.94);
 
-type PdfColumn = {
-  readonly header: string;
-  readonly weight: number;
-  readonly align?: "left" | "right";
-};
-
 /**
- * Compact landscape columns. Widths are relative weights, scaled to the
- * printable A4 width so the same definition works for every page size tweak.
+ * Compact landscape columns for the irrigation history. Widths are relative
+ * weights, scaled to the printable A4 width.
  */
-const PDF_COLUMNS: readonly PdfColumn[] = [
-  { header: HISTORY_EXPORT_HEADERS[0], weight: 56 },
-  { header: HISTORY_EXPORT_HEADERS[1], weight: 50 },
-  { header: HISTORY_EXPORT_HEADERS[2], weight: 58 },
-  { header: HISTORY_EXPORT_HEADERS[3], weight: 64 },
-  { header: HISTORY_EXPORT_HEADERS[4], weight: 76 },
-  { header: HISTORY_EXPORT_HEADERS[5], weight: 76 },
-  { header: HISTORY_EXPORT_HEADERS[6], weight: 34, align: "right" },
-  { header: HISTORY_EXPORT_HEADERS[7], weight: 44 },
-  { header: HISTORY_EXPORT_HEADERS[8], weight: 34 },
-  { header: HISTORY_EXPORT_HEADERS[9], weight: 52 },
-  { header: HISTORY_EXPORT_HEADERS[10], weight: 40, align: "right" },
-  { header: HISTORY_EXPORT_HEADERS[11], weight: 46, align: "right" },
-  { header: HISTORY_EXPORT_HEADERS[12], weight: 46, align: "right" },
-  { header: HISTORY_EXPORT_HEADERS[13], weight: 42 },
-  { header: HISTORY_EXPORT_HEADERS[14], weight: 48 },
-];
+const HISTORY_PDF_WEIGHTS = [56, 50, 58, 64, 76, 76, 34, 44, 34, 52, 40, 46, 46, 42, 48] as const;
+const HISTORY_PDF_RIGHT_ALIGNED = new Set([6, 10, 11, 12]);
+
+const HISTORY_PDF_COLUMNS: readonly ExportColumn[] = HISTORY_EXPORT_HEADERS.map((header, index) => ({
+  header,
+  xlsxWidth: 18,
+  pdfWeight: HISTORY_PDF_WEIGHTS[index] ?? 40,
+  ...(HISTORY_PDF_RIGHT_ALIGNED.has(index) ? { align: "right" as const } : {}),
+}));
 
 /**
  * Characters outside this set are not encodable by the standard Helvetica
@@ -111,9 +98,31 @@ export function sanitizePdfText(value: string): string {
 }
 
 type TableLayout = {
+  readonly columns: readonly ExportColumn[];
   readonly widths: number[];
   readonly headerLines: string[][];
   readonly headerHeight: number;
+};
+
+export type TablePdfOptions = {
+  /** Document and first-page title, e.g. `Log Sistem`. */
+  readonly title: string;
+  readonly subject: string;
+  /** Lines under the title, before the generated-at and row-count lines. */
+  readonly introLines: readonly string[];
+  /** Right-aligned label on continuation pages, e.g. the period. */
+  readonly continuationLabel: string;
+  readonly columns: readonly ExportColumn[];
+  readonly rows: readonly ExportRow[];
+  /**
+   * Full scoped row count when the caller kept only the newest `rows`. Omitted
+   * or equal to `rows.length` means the document is complete.
+   */
+  readonly totalRows?: number;
+  /** Noun for a truncated document, `Menampilkan 10 dari 20 <label>`; defaults to `baris terbaru`. */
+  readonly truncatedRowsLabel?: string;
+  readonly generatedAt: Date;
+  readonly signal?: AbortSignal;
 };
 
 export type IrrigationHistoryPdfOptions = {
@@ -170,29 +179,25 @@ function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): 
   return lines.length > 0 ? lines : [""];
 }
 
-function buildTableLayout(font: PDFFont): TableLayout {
-  const totalWeight = PDF_COLUMNS.reduce((sum, column) => sum + column.weight, 0);
-  const widths = PDF_COLUMNS.map((column) => (column.weight / totalWeight) * CONTENT_WIDTH);
-  const headerLines = PDF_COLUMNS.map((column, index) =>
+function buildTableLayout(font: PDFFont, columns: readonly ExportColumn[]): TableLayout {
+  const totalWeight = columns.reduce((sum, column) => sum + column.pdfWeight, 0);
+  const widths = columns.map((column) => (column.pdfWeight / totalWeight) * CONTENT_WIDTH);
+  const headerLines = columns.map((column, index) =>
     wrapText(column.header, font, HEADER_FONT_SIZE, (widths[index] ?? 0) - CELL_PADDING_X * 2),
   );
   const maxLineCount = Math.max(...headerLines.map((lines) => lines.length), 1);
 
   return {
+    columns,
     widths,
     headerLines,
     headerHeight: maxLineCount * HEADER_LINE_HEIGHT + HEADER_PADDING_Y * 2,
   };
 }
 
-function drawIntro(
-  page: PDFPage,
-  options: IrrigationHistoryPdfOptions,
-  regularFont: PDFFont,
-  boldFont: PDFFont,
-): number {
+function drawIntro(page: PDFPage, options: TablePdfOptions, regularFont: PDFFont, boldFont: PDFFont): number {
   let y = CONTENT_TOP;
-  page.drawText("Riwayat Irigasi", {
+  page.drawText(sanitizePdfText(options.title), {
     x: MARGIN,
     y: y - 14,
     size: TITLE_FONT_SIZE,
@@ -201,14 +206,12 @@ function drawIntro(
   });
   y -= 28;
 
-  const filterSummary = options.filters.length > 0 ? options.filters.join(" | ") : "Semua region, lahan, dan status";
   const totalRows = options.totalRows ?? options.rows.length;
   const metaLines = [
-    `Periode: ${formatJakartaMonthLabel(options.month)}`,
-    `Filter: ${filterSummary}`,
+    ...options.introLines,
     `Dibuat: ${formatJakartaDateTime(options.generatedAt)}`,
     totalRows > options.rows.length
-      ? `Menampilkan ${options.rows.length} dari ${totalRows} baris terbaru`
+      ? `Menampilkan ${options.rows.length} dari ${totalRows} ${options.truncatedRowsLabel ?? "baris terbaru"}`
       : `Total: ${options.rows.length} baris`,
   ];
 
@@ -239,11 +242,11 @@ function drawIntro(
 
 function drawContinuationHeader(
   page: PDFPage,
-  options: IrrigationHistoryPdfOptions,
+  options: TablePdfOptions,
   regularFont: PDFFont,
   boldFont: PDFFont,
 ): number {
-  page.drawText("Riwayat Irigasi", {
+  page.drawText(sanitizePdfText(options.title), {
     x: MARGIN,
     y: CONTENT_TOP - 10,
     size: 10,
@@ -251,12 +254,7 @@ function drawContinuationHeader(
     color: COLOR_TEXT,
   });
 
-  const period = fitText(
-    sanitizePdfText(`Periode: ${formatJakartaMonthLabel(options.month)}`),
-    regularFont,
-    8,
-    CONTENT_WIDTH / 2,
-  );
+  const period = fitText(sanitizePdfText(options.continuationLabel), regularFont, 8, CONTENT_WIDTH / 2);
   if (period) {
     const width = regularFont.widthOfTextAtSize(period, 8);
     page.drawText(period, {
@@ -282,7 +280,7 @@ function drawTableHeader(page: PDFPage, topY: number, layout: TableLayout, boldF
   });
 
   let x = MARGIN;
-  for (let index = 0; index < PDF_COLUMNS.length; index += 1) {
+  for (let index = 0; index < layout.columns.length; index += 1) {
     const width = layout.widths[index] ?? 0;
     const lines = layout.headerLines[index] ?? [];
     let baseline = topY - HEADER_PADDING_Y - HEADER_FONT_SIZE;
@@ -310,7 +308,7 @@ function drawTableHeader(page: PDFPage, topY: number, layout: TableLayout, boldF
 function drawTableRow(
   page: PDFPage,
   topY: number,
-  row: HistoryExportRow,
+  row: ExportRow,
   rowIndex: number,
   layout: TableLayout,
   font: PDFFont,
@@ -335,14 +333,15 @@ function drawTableRow(
   });
 
   let x = MARGIN;
-  for (let index = 0; index < PDF_COLUMNS.length; index += 1) {
+  for (let index = 0; index < layout.columns.length; index += 1) {
     const width = layout.widths[index] ?? 0;
     const value = row[index] ?? null;
     const text = fitText(sanitizePdfText(displayExportValue(value)), font, TABLE_FONT_SIZE, width - CELL_PADDING_X * 2);
 
     if (text) {
       const textWidth = font.widthOfTextAtSize(text, TABLE_FONT_SIZE);
-      const drawX = PDF_COLUMNS[index]?.align === "right" ? x + width - CELL_PADDING_X - textWidth : x + CELL_PADDING_X;
+      const drawX =
+        layout.columns[index]?.align === "right" ? x + width - CELL_PADDING_X - textWidth : x + CELL_PADDING_X;
       page.drawText(text, {
         x: drawX,
         y: topY - TABLE_ROW_HEIGHT + 4.2,
@@ -371,20 +370,37 @@ function drawFooters(pages: readonly PDFPage[], font: PDFFont): void {
   });
 }
 
-/**
- * Render the monthly irrigation history as a landscape A4 PDF. The table
- * repeats its header on every page and truncates each cell to its column with
- * an ellipsis. An empty row list still produces a valid one-page document.
- */
+/** Monthly irrigation history PDF; see `buildTablePdf`. */
 export async function buildIrrigationHistoryPdf(options: IrrigationHistoryPdfOptions): Promise<Uint8Array> {
+  const filterSummary = options.filters.length > 0 ? options.filters.join(" | ") : "Semua region, lahan, dan status";
+  const period = `Periode: ${formatJakartaMonthLabel(options.month)}`;
+  return buildTablePdf({
+    title: "Riwayat Irigasi",
+    subject: `Riwayat irigasi ${formatJakartaMonthLabel(options.month)}`,
+    introLines: [period, `Filter: ${filterSummary}`],
+    continuationLabel: period,
+    columns: HISTORY_PDF_COLUMNS,
+    rows: options.rows,
+    ...(options.totalRows !== undefined ? { totalRows: options.totalRows } : {}),
+    generatedAt: options.generatedAt,
+    ...(options.signal ? { signal: options.signal } : {}),
+  });
+}
+
+/**
+ * Render export rows as a landscape A4 PDF. The table repeats its header on
+ * every page and truncates each cell to its column with an ellipsis. An empty
+ * row list still produces a valid one-page document.
+ */
+export async function buildTablePdf(options: TablePdfOptions): Promise<Uint8Array> {
   throwIfAborted(options.signal);
 
   const document = await PDFDocument.create();
   const generatedAt = Number.isFinite(options.generatedAt.getTime()) ? options.generatedAt : new Date();
 
-  document.setTitle("Riwayat Irigasi");
+  document.setTitle(options.title);
   document.setAuthor("Adosistering");
-  document.setSubject(`Riwayat irigasi ${formatJakartaMonthLabel(options.month)}`);
+  document.setSubject(options.subject);
   document.setCreator("Adosistering");
   document.setProducer("Adosistering");
   document.setCreationDate(generatedAt);
@@ -392,7 +408,7 @@ export async function buildIrrigationHistoryPdf(options: IrrigationHistoryPdfOpt
 
   const regularFont = await document.embedFont(StandardFonts.Helvetica);
   const boldFont = await document.embedFont(StandardFonts.HelveticaBold);
-  const layout = buildTableLayout(boldFont);
+  const layout = buildTableLayout(boldFont, options.columns);
   const pages: PDFPage[] = [];
 
   const startPage = (first: boolean) => {

@@ -249,7 +249,7 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
       <p class="mt-4 text-right text-xs italic text-[#808080]">
         {latestDeviceUpdate() === null
           ? "Belum ada data"
-          : `Terakhir update ${formatLastUpdated(latestDeviceUpdate(), nowMs())}`}
+          : `Terakhir update ${formatLastUpdated(latestDeviceUpdate())}`}
       </p>
     </Card>
   );

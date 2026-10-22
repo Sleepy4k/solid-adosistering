@@ -1,5 +1,6 @@
 import type { LiveSprayerData } from "~/lib/shared/irrigation";
 import { calculateMoistureStatus, type Threshold } from "~/lib/shared/irrigation";
+import { formatJakartaDateTime } from "~/lib/shared/datetime";
 
 export function pumpBadgeTone(status: string) {
   return status === "ON" || status === "AKTIF" || status === "Aktif" ? "success" : "danger";
@@ -71,18 +72,16 @@ export function liveStatusMeta(status: LiveStatus): {
 }
 
 /**
- * Relative timestamp; `Date` values are milliseconds. Numbers are epoch seconds,
- * but legacy firmware wrote milliseconds, so values above 1e12 are milliseconds
- * (the same rule `deriveLiveStatus` uses).
+ * Absolute WIB timestamp such as `Selasa, 20/10/2026 18:42 WIB`; `Date` values
+ * are milliseconds. Numbers are epoch seconds, but legacy firmware wrote
+ * milliseconds, so values above 1e12 are milliseconds (the same rule
+ * `deriveLiveStatus` uses).
  */
-export function formatLastUpdated(value: Date | number | null, nowMs = Date.now()) {
+export function formatLastUpdated(value: Date | number | null) {
   if (!value) return "Belum ada data";
   const time = typeof value === "number" ? (value > 1e12 ? value : value * 1000) : value.getTime();
   if (!Number.isFinite(time)) return "Belum ada data";
-  const diff = Math.max(0, Math.floor((nowMs - time) / 1000));
-  if (diff < 60) return `${diff} detik yang lalu`;
-  if (diff < 3600) return `${Math.floor(diff / 60)} menit yang lalu`;
-  return `${Math.floor(diff / 3600)} jam yang lalu`;
+  return formatJakartaDateTime(new Date(time));
 }
 
 export function aggregateLive(sprayers: LiveSprayerData[]) {

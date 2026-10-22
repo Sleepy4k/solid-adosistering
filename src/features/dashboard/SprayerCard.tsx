@@ -111,7 +111,7 @@ export function SprayerCard(props: {
       </Show>
 
       <p class="mt-4 text-right text-xs italic text-[#4F4F4F]">
-        Terakhir update {formatLastUpdated(props.data?.lastUpdated ?? null, props.nowMs)}
+        Terakhir update {formatLastUpdated(props.data?.lastUpdated ?? null)}
       </p>
 
       <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#C2C2C2] pt-4">

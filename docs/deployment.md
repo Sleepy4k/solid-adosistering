@@ -192,9 +192,9 @@ bun run db:deploy   # or: npm run db:deploy
 The script applies every pending migration in filename order through `prisma migrate deploy`, with these safeguards:
 
 - **No `DATABASE_URL`**: the build fails instead of shipping code against an unmigrated database. Set `SKIP_DB_MIGRATE=1` for builds that intentionally have no database, such as CI.
-- **No `_prisma_migrations` table** (a database created from an SQL import): migrations whose tables and columns already exist are marked applied, and the rest run. A schema that does not match a known migration prefix stops the build for a manual baseline.
+- **Schema changes applied outside `prisma migrate`** (`prisma db push`, an SQL import, or manual SQL, with or without a `_prisma_migrations` table): each pending migration is compared with the live schema using the tables, columns, and indexes it creates and removes. Migrations that are already fully present are recorded as applied, including one an earlier deploy marked failed with `Duplicate column name`; the rest run. A migration that is only partly present, or a later migration's objects appearing before an earlier one's, stops the build and lists the objects involved. A migration added in future must get an entry in `MANIFESTS` in `scripts/migrate-deploy.mjs` to take part in this check; without one it is simply left to `migrate deploy`.
 - **Values too long for the BCNF widths**: the build stops before any migration starts and lists each column with the number of rows to shorten (the same check as step 2 of the pre-deploy checklist).
-- **A BCNF run that previously failed in its column-width block**: it is marked rolled back and retried automatically. Any other failed migration stops the build with a pointer to the recovery steps.
+- **A migration that previously failed before changing anything** (for example the BCNF migration failing in its column-width block): it is marked rolled back and retried automatically. A failed migration that left part of its changes behind stops the build with a pointer to the recovery steps.
 - **Drift**: after migrating, the database is compared with `prisma/schema.prisma` and any difference is printed as a warning.
 
 When the build fails at this step, the host keeps serving the previous release. Never use `bun run db:migrate` in production; it is the development command and requires a shadow database.

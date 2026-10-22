@@ -2,16 +2,19 @@
  * Applies pending Prisma migrations as part of the release build.
  *
  * `prisma migrate deploy` alone is not enough for this project's production
- * history, so this wrapper first:
+ * history, so this wrapper first reconciles `_prisma_migrations` with the
+ * live schema, using the objects each migration creates and removes:
  *
- * 1. Baselines a database that was created without `_prisma_migrations`
- *    (for example from an SQL import) by marking the migrations whose objects
- *    already exist as applied. Anything that is not a clean prefix aborts.
- * 2. Recovers a BCNF migration that failed inside its column-width block.
- *    Nothing is added or dropped before that block finishes, so marking it
- *    rolled back and rerunning is safe.
- * 3. Refuses to start the BCNF migration while legacy values are too long for
- *    its narrower columns, listing the rows instead of failing midway.
+ * 1. Pending migrations whose changes are already in the schema (applied with
+ *    `prisma db push`, an SQL import, or by hand) are recorded as applied,
+ *    including one that `migrate deploy` previously marked failed.
+ * 2. A failed migration with none of its changes in the schema is marked
+ *    rolled back and retried. Every migration's first non-idempotent statement
+ *    creates a tracked object, so "nothing present" means nothing applied.
+ * 3. A partially applied migration, or a later migration's objects appearing
+ *    before an earlier one's, stops the build with the objects involved.
+ * 4. The BCNF migration is not started while legacy values are too long for
+ *    its narrower columns; the offending columns are listed instead.
  *
  * It finishes with a drift check against `prisma/schema.prisma`.
  *
@@ -20,7 +23,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import prismaClientPackage from "@prisma/client";
 import dotenv from "dotenv";
@@ -65,25 +68,119 @@ const NARROWED_COLUMNS = [
 ];
 
 /**
- * How to recognise each migration in a database that has no
- * `_prisma_migrations` table. The region-precision migration only re-applies
- * the initial column types, so it shares the initial fingerprint.
+ * Objects each migration creates and removes, as `table:t`, `column:t.c`, or
+ * `index:t.i`. Objects a later migration drops again are left out of
+ * `creates`. The region-precision migration only re-applies column types, so
+ * it has no objects and counts as applied once the initial migration is.
  */
-const FINGERPRINTS = {
-  "20260516233000_initial_snake_case": (s) => s.hasTable("user") && s.hasTable("sensor_reading"),
-  "20260517103000_region_coordinate_precision": (s) => s.hasTable("user") && s.hasTable("sensor_reading"),
-  "20260523100000_features_and_fixes": (s) =>
-    s.hasTable("contact_submission") && s.hasColumn("region", "volume_divider"),
-  "20260526042105_add_landing_cms_tables": (s) => s.hasTable("landing_testimonial"),
-  "20260526050107_add_newsletter_subscriber": (s) => s.hasTable("newsletter_subscriber"),
-  "20261020120000_security_hardening_and_indexes": (s) => s.hasTable("login_throttle"),
-  [BCNF_MIGRATION]: (s) =>
-    s.hasColumn("region", "dry_max_percent") &&
-    s.hasTable("alert_notification_target") &&
-    !s.hasColumn("sensor_reading", "block_id"),
-  "20261021130000_drop_redundant_event_indexes": (s) =>
-    s.hasTable("irrigation_event") && !s.hasIndex("irrigation_event", "irrigation_event_firebase_event_id_idx"),
-  "20261021140000_newsletter_double_opt_in_and_drop_api_key": (s) => s.hasColumn("newsletter_subscriber", "status"),
+export const MANIFESTS = {
+  "20260516233000_initial_snake_case": {
+    creates: [
+      "table:user",
+      "table:session",
+      "table:password_reset_token",
+      "table:region",
+      "table:block",
+      "table:sprayer",
+      "table:admin_region_assignment",
+      "table:user_region_assignment",
+      "table:indicator_threshold",
+      "table:sensor_reading",
+      "table:irrigation_event",
+      "table:map_layer",
+      "table:activity_log",
+      "table:alert_notification",
+      "table:email_delivery",
+      "table:system_setting",
+      "table:user_detail",
+    ],
+  },
+  "20260517103000_region_coordinate_precision": {},
+  "20260523100000_features_and_fixes": {
+    creates: [
+      "column:region.volume_divider",
+      "column:region.show_wind_direction",
+      "column:region.show_auto_irrigation",
+      "table:contact_submission",
+      "index:contact_submission.contact_submission_created_at_idx",
+      "index:contact_submission.contact_submission_is_read_idx",
+    ],
+  },
+  "20260526042105_add_landing_cms_tables": {
+    creates: ["table:landing_testimonial", "table:landing_location", "table:landing_partner"],
+  },
+  "20260526050107_add_newsletter_subscriber": {
+    creates: ["table:newsletter_subscriber"],
+  },
+  "20261020120000_security_hardening_and_indexes": {
+    creates: [
+      "column:session.absolute_expires_at",
+      "column:session.last_seen_at",
+      "column:session.ip_address",
+      "column:session.user_agent",
+      "index:session.session_absolute_expires_at_idx",
+      "index:session.session_last_seen_at_idx",
+      "table:login_throttle",
+      "index:sprayer.sprayer_block_id_is_active_idx",
+      "index:sensor_reading.sensor_reading_recorded_at_idx",
+      "index:irrigation_event.irrigation_event_sprayer_id_relay_ended_at_idx",
+      "index:irrigation_event.irrigation_event_mode_started_at_idx",
+      "index:activity_log.activity_log_created_at_idx",
+      "index:activity_log.activity_log_entity_type_created_at_idx",
+      "index:contact_submission.contact_submission_is_read_created_at_idx",
+      "index:email_delivery.email_delivery_created_at_idx",
+    ],
+  },
+  [BCNF_MIGRATION]: {
+    creates: [
+      "column:region.dry_max_percent",
+      "column:region.wet_min_percent",
+      "column:region.automatic_mode",
+      "column:region.safety_timeout_min",
+      "column:region.safety_timeout_max",
+      "column:sensor_reading.source_key",
+      "index:sensor_reading.sensor_reading_sprayer_id_source_key_key",
+      "index:irrigation_event.irrigation_event_started_at_id_idx",
+      "table:alert_notification_target",
+      "column:user.deleted_at",
+      "index:user.user_deleted_at_idx",
+    ],
+    removes: [
+      "column:indicator_threshold.dry_max_percent",
+      "column:indicator_threshold.wet_min_percent",
+      "column:sensor_reading.block_id",
+      "column:irrigation_event.block_id",
+      "column:activity_log.block_id",
+      "column:alert_notification.region_id",
+      "column:alert_notification.block_id",
+      "column:alert_notification.sprayer_id",
+    ],
+  },
+  "20261021130000_drop_redundant_event_indexes": {
+    removes: [
+      "index:irrigation_event.irrigation_event_firebase_event_id_idx",
+      "index:irrigation_event.irrigation_event_started_at_idx",
+    ],
+  },
+  "20261021140000_newsletter_double_opt_in_and_drop_api_key": {
+    creates: [
+      "column:newsletter_subscriber.status",
+      "column:newsletter_subscriber.confirmed_at",
+      "column:newsletter_subscriber.confirmation_token_hash",
+      "column:newsletter_subscriber.confirmation_expires_at",
+      "column:newsletter_subscriber.last_confirmation_sent_at",
+      "column:newsletter_subscriber.consent_source",
+      "index:newsletter_subscriber.newsletter_subscriber_status_subscribed_at_idx",
+      "index:newsletter_subscriber.newsletter_subscriber_confirmation_expires_at_idx",
+      "index:newsletter_subscriber.newsletter_subscriber_confirmation_token_hash_idx",
+    ],
+    removes: [
+      "column:newsletter_subscriber.is_active",
+      "index:newsletter_subscriber.newsletter_subscriber_is_active_subscribed_at_idx",
+      "column:user_detail.api_key",
+      "index:user_detail.user_detail_api_key_key",
+    ],
+  },
 };
 
 const log = (message) => console.log(`[db:deploy] ${message}`);
@@ -110,7 +207,7 @@ function prisma(args, { allowExitCodes = [0], quiet = false } = {}) {
   return result;
 }
 
-async function readSchema(db) {
+export async function readSchema(db) {
   const rows = (sql) => db.$queryRawUnsafe(sql);
   const tables = new Set(
     (await rows("SELECT table_name AS t FROM information_schema.tables WHERE table_schema = DATABASE()")).map(
@@ -135,7 +232,31 @@ async function readSchema(db) {
     tableCount: tables.size,
     hasTable: (table) => tables.has(table),
     hasColumn: (table, column) => columns.has(`${table}.${column}`),
-    hasIndex: (table, index) => indexes.has(`${table}.${index}`),
+    has: (object) => {
+      const [kind, name] = object.split(":");
+      return (kind === "table" ? tables : kind === "column" ? columns : indexes).has(name);
+    },
+  };
+}
+
+/**
+ * `present` when every created object exists and every removed one is gone,
+ * `absent` when no created object exists and every removed one remains,
+ * otherwise `partial` with the objects that disagree with either state.
+ * Migrations without a manifest are `unknown` and left to `migrate deploy`.
+ */
+export function migrationState(schema, name) {
+  const manifest = MANIFESTS[name];
+  if (!manifest) return { state: "unknown" };
+  const { creates = [], removes = [] } = manifest;
+  const created = creates.filter((object) => schema.has(object));
+  const remaining = removes.filter((object) => schema.has(object));
+  if (created.length === creates.length && remaining.length === 0) return { state: "present" };
+  if (created.length === 0 && remaining.length === removes.length) return { state: "absent" };
+  return {
+    state: "partial",
+    missing: creates.filter((object) => !schema.has(object)),
+    leftover: remaining,
   };
 }
 
@@ -145,27 +266,70 @@ async function readMigrationRows(db) {
   );
 }
 
-async function baseline(schema, migrations) {
-  const applied = migrations.map((name) => {
-    const fingerprint = FINGERPRINTS[name];
-    if (!fingerprint) fail(`No baseline fingerprint for ${name}; baseline this database manually.`);
-    return fingerprint(schema);
-  });
-  const count = applied.indexOf(false) === -1 ? applied.length : applied.indexOf(false);
-  if (applied.slice(count).some(Boolean)) {
+/**
+ * Brings `_prisma_migrations` in line with the schema and returns the
+ * migrations `migrate deploy` still has to run.
+ */
+function reconcile(schema, migrations, rows) {
+  const finished = new Set(rows.filter((r) => r.finishedAt && !r.rolledBackAt).map((r) => r.name));
+  const failed = new Set(rows.filter((r) => !r.finishedAt && !r.rolledBackAt).map((r) => r.name));
+  const pending = migrations.filter((name) => !finished.has(name));
+  const describe = ({ missing, leftover }) =>
+    [
+      missing.length ? `missing: ${missing.join(", ")}` : "",
+      leftover.length ? `still present: ${leftover.join(", ")}` : "",
+    ]
+      .filter(Boolean)
+      .join("; ");
+
+  // Record the leading pending migrations that are already in the schema.
+  let next = 0;
+  for (; next < pending.length; next++) {
+    const name = pending[next];
+    if (migrationState(schema, name).state !== "present") break;
+    if (failed.has(name)) prisma(["migrate", "resolve", "--rolled-back", name]);
+    log(`${name} is already in the schema (applied outside prisma migrate); recording it as applied.`);
+    prisma(["migrate", "resolve", "--applied", name]);
+  }
+  const remaining = pending.slice(next);
+  if (remaining.length === 0) return remaining;
+
+  const [first, ...later] = remaining;
+  const firstState = migrationState(schema, first);
+  if (firstState.state === "partial") {
     fail(
-      "The database has no _prisma_migrations table and its schema does not match a known migration prefix. " +
-        "Baseline it manually with `prisma migrate resolve --applied <migration>` (see docs/deployment.md).",
+      `Migration ${first} is only partly in the database (${describe(firstState)}). ` +
+        "It cannot be applied or skipped automatically. Restore the backup, or finish or undo the listed " +
+        "changes by hand and run `prisma migrate resolve` (see docs/normalization.md, Irreversibility and rollback).",
     );
   }
-  if (count === 0) {
+  if (first === migrations[0] && schema.tableCount > (schema.hasTable("_prisma_migrations") ? 1 : 0)) {
     fail(
-      "The database has tables but none match the initial migration. " +
+      "The database has tables but not the initial migration's. " +
         "Point DATABASE_URL at the application database or baseline it manually.",
     );
   }
-  log(`No _prisma_migrations table; baselining ${count} migration(s) already present in the schema.`);
-  for (const name of migrations.slice(0, count)) prisma(["migrate", "resolve", "--applied", name]);
+  for (const name of later) {
+    const { creates = [] } = MANIFESTS[name] ?? {};
+    const early = creates.filter((object) => schema.has(object));
+    if (early.length) {
+      fail(
+        `Objects from ${name} (${early.join(", ")}) exist although the earlier migration ${first} is not applied. ` +
+          "Reconcile the schema by hand before deploying.",
+      );
+    }
+  }
+  if (failed.has(first)) {
+    if (firstState.state === "unknown") {
+      fail(
+        `Migration ${first} previously failed. Check how far it got, then run ` +
+          "`prisma migrate resolve --rolled-back` or `--applied` for it (see docs/deployment.md).",
+      );
+    }
+    log(`${first} previously failed before changing the schema; marking it rolled back to retry.`);
+    prisma(["migrate", "resolve", "--rolled-back", first]);
+  }
+  return remaining;
 }
 
 async function assertNarrowedColumnsFit(db, schema) {
@@ -212,23 +376,8 @@ async function main() {
 
     // An empty database needs no checks: `migrate deploy` builds it from scratch.
     if (schema.tableCount > 0) {
-      if (!schema.hasTable("_prisma_migrations")) await baseline(schema, migrations);
-
-      const rows = await readMigrationRows(db);
-      for (const row of rows.filter((r) => !r.finishedAt && !r.rolledBackAt)) {
-        if (row.name === BCNF_MIGRATION && !schema.hasColumn("region", "dry_max_percent")) {
-          log(`${BCNF_MIGRATION} previously failed in its column-width block; marking it rolled back to retry.`);
-          prisma(["migrate", "resolve", "--rolled-back", BCNF_MIGRATION]);
-        } else {
-          fail(
-            `Migration ${row.name} previously failed partway through and cannot be retried automatically. ` +
-              "Follow the recovery steps in docs/normalization.md (Irreversibility and rollback).",
-          );
-        }
-      }
-
-      const finished = new Set(rows.filter((r) => r.finishedAt && !r.rolledBackAt).map((r) => r.name));
-      const pending = migrations.filter((name) => !finished.has(name));
+      const rows = schema.hasTable("_prisma_migrations") ? await readMigrationRows(db) : [];
+      const pending = reconcile(schema, migrations, rows);
       if (pending.length === 0) {
         log("Database is up to date; no pending migrations.");
       } else {
@@ -257,4 +406,6 @@ async function main() {
   }
 }
 
-main().catch((error) => fail(error instanceof Error ? (error.stack ?? error.message) : String(error)));
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => fail(error instanceof Error ? (error.stack ?? error.message) : String(error)));
+}

@@ -40,7 +40,7 @@ export default function FeaturesGrid() {
                     {feature.title}
                   </h3>
                   <p class="mb-10 text-base leading-relaxed text-slate-500 sm:text-lg">{feature.desc}</p>
-                  <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 sm:gap-8">
+                  <div class="grid grid-cols-2 gap-6 sm:gap-8">
                     {feature.subs.map((sub) => (
                       <div>
                         <div class="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600">

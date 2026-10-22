@@ -84,7 +84,7 @@ export default function LandingFooter(props: LandingFooterProps) {
           </h2>
           <div class="lg:text-right">
             <p class="mb-4 text-sm font-semibold text-white sm:text-base">Dapatkan Informasi Terkini</p>
-            <form class="flex flex-col gap-2 sm:flex-row sm:items-center" noValidate onSubmit={submitNewsletter}>
+            <form class="flex flex-col gap-3 sm:flex-row sm:items-center" noValidate onSubmit={submitNewsletter}>
               <input
                 ref={inputRef}
                 type="email"
@@ -94,7 +94,7 @@ export default function LandingFooter(props: LandingFooterProps) {
                 autocomplete="email"
                 aria-label="Alamat email untuk berlangganan informasi"
                 disabled={newsletterState() === "loading" || newsletterState() === "success"}
-                class="h-12 w-full min-w-0 flex-1 rounded-full border border-[#3a5a3a] bg-[#2a3f2a] px-6 text-sm text-white placeholder:text-white/50 focus:border-[#67b744] focus:outline-none disabled:opacity-60"
+                class="h-12 w-full min-w-0 rounded-full sm:flex-1 border border-[#3a5a3a] bg-[#2a3f2a] px-6 text-sm text-white placeholder:text-white/50 focus:border-[#67b744] focus:outline-none disabled:opacity-60"
               />
               <button
                 type="submit"

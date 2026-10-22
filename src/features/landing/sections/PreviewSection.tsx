@@ -25,7 +25,7 @@ export default function PreviewSection() {
             </a>
           </div>
         </div>
-        <div class="relative mt-14 flex min-h-[clamp(320px,50vw,600px)] items-end justify-center md:mt-16">
+        <div class="relative mt-14 flex min-h-[460px] items-end justify-center sm:min-h-[520px] md:mt-16 md:min-h-[600px]">
           <img
             src="/landing/laptop-mockup.webp"
             alt="Dashboard platform ADOSISTERING ditampilkan di layar laptop"
@@ -34,7 +34,7 @@ export default function PreviewSection() {
             decoding="async"
             fetchpriority="low"
             width={1600}
-            height={1280}
+            height={1600}
           />
         </div>
       </div>

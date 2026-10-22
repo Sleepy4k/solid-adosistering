@@ -277,7 +277,7 @@ html.landing-scrollbar::-webkit-scrollbar-thumb:hover {
 }
 
 .landing-page .container {
-  max-width: min(100%, 80rem);
+  max-width: 100%;
 }
 
 /* ─── Pointer cursor on interactive elements ─────────── */

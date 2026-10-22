@@ -24,24 +24,52 @@ Store database credentials in the defaults file or a secret manager, not in shel
 
 Record the restore command and verify it on a staging copy before the production window. Keep the previous release artifact and its environment available until the new release passes verification; restoring the backup and redeploying that artifact is the rollback path.
 
-### 2. Confirm strict SQL mode
+### 2. Confirm strict SQL mode and column widths
 
 ```sql
 SELECT @@GLOBAL.sql_mode, @@SESSION.sql_mode;
 ```
 
-`STRICT_TRANS_TABLES` or `STRICT_ALL_TABLES` should be enabled. Do not disable strict mode to force the migration through. The BCNF migration resizes string columns to match the validators, and some targets are narrower than the legacy `VARCHAR(191)` columns. A value that exceeds a new width will fail under strict mode; find and fix it first.
+`STRICT_TRANS_TABLES` or `STRICT_ALL_TABLES` should be enabled. Do not disable strict mode to force the migration through. The BCNF migration resizes string columns to match the validators, and 29 targets are narrower than the legacy `VARCHAR(191)` columns. Several of them (profile fields, block and sprayer names, wind direction, Firebase date keys) held free text or Firebase keys with no length limit in the previous release.
+
+Run this against the production database before the window. It lists every narrowed column that still has rows too long for its new width:
 
 ```sql
-SELECT MAX(CHAR_LENGTH(email)) AS max_email FROM `user`;
-SELECT MAX(CHAR_LENGTH(name)) AS max_name FROM `user`;
-SELECT MAX(CHAR_LENGTH(name)) AS max_region_name FROM `region`;
-SELECT MAX(CHAR_LENGTH(entity_type)) AS max_entity_type FROM `activity_log`;
-SELECT MAX(CHAR_LENGTH(entity_id)) AS max_entity_id FROM `activity_log`;
-SELECT MAX(CHAR_LENGTH(token_hash)) AS max_token_hash FROM `session`;
+SELECT * FROM (
+  SELECT 'user.name' AS `column`, 100 AS max_chars, COUNT(*) AS rows_too_long FROM `user` WHERE CHAR_LENGTH(`name`) > 100
+  UNION ALL SELECT 'user_detail.whatsapp', 32, COUNT(*) FROM `user_detail` WHERE CHAR_LENGTH(`whatsapp`) > 32
+  UNION ALL SELECT 'user_detail.nickname', 100, COUNT(*) FROM `user_detail` WHERE CHAR_LENGTH(`nickname`) > 100
+  UNION ALL SELECT 'user_detail.gender', 32, COUNT(*) FROM `user_detail` WHERE CHAR_LENGTH(`gender`) > 32
+  UNION ALL SELECT 'user_detail.alt_phone', 32, COUNT(*) FROM `user_detail` WHERE CHAR_LENGTH(`alt_phone`) > 32
+  UNION ALL SELECT 'user_detail.occupation', 120, COUNT(*) FROM `user_detail` WHERE CHAR_LENGTH(`occupation`) > 120
+  UNION ALL SELECT 'user_detail.domicile', 120, COUNT(*) FROM `user_detail` WHERE CHAR_LENGTH(`domicile`) > 120
+  UNION ALL SELECT 'user_detail.country', 100, COUNT(*) FROM `user_detail` WHERE CHAR_LENGTH(`country`) > 100
+  UNION ALL SELECT 'user_detail.province', 100, COUNT(*) FROM `user_detail` WHERE CHAR_LENGTH(`province`) > 100
+  UNION ALL SELECT 'user_detail.city', 100, COUNT(*) FROM `user_detail` WHERE CHAR_LENGTH(`city`) > 100
+  UNION ALL SELECT 'user_detail.postal_code', 20, COUNT(*) FROM `user_detail` WHERE CHAR_LENGTH(`postal_code`) > 20
+  UNION ALL SELECT 'user_detail.device_username', 100, COUNT(*) FROM `user_detail` WHERE CHAR_LENGTH(`device_username`) > 100
+  UNION ALL SELECT 'session.token_hash', 64, COUNT(*) FROM `session` WHERE CHAR_LENGTH(`token_hash`) > 64
+  UNION ALL SELECT 'password_reset_token.token_hash', 64, COUNT(*) FROM `password_reset_token` WHERE CHAR_LENGTH(`token_hash`) > 64
+  UNION ALL SELECT 'region.name', 100, COUNT(*) FROM `region` WHERE CHAR_LENGTH(`name`) > 100
+  UNION ALL SELECT 'block.name', 100, COUNT(*) FROM `block` WHERE CHAR_LENGTH(`name`) > 100
+  UNION ALL SELECT 'sprayer.hardware_id', 100, COUNT(*) FROM `sprayer` WHERE CHAR_LENGTH(`hardware_id`) > 100
+  UNION ALL SELECT 'sprayer.display_name', 100, COUNT(*) FROM `sprayer` WHERE CHAR_LENGTH(`display_name`) > 100
+  UNION ALL SELECT 'map_layer.name', 100, COUNT(*) FROM `map_layer` WHERE CHAR_LENGTH(`name`) > 100
+  UNION ALL SELECT 'sensor_reading.pump_status', 16, COUNT(*) FROM `sensor_reading` WHERE CHAR_LENGTH(`pump_status`) > 16
+  UNION ALL SELECT 'sensor_reading.wind_direction', 100, COUNT(*) FROM `sensor_reading` WHERE CHAR_LENGTH(`wind_direction`) > 100
+  UNION ALL SELECT 'irrigation_event.firebase_date_key', 64, COUNT(*) FROM `irrigation_event` WHERE CHAR_LENGTH(`firebase_date_key`) > 64
+  UNION ALL SELECT 'activity_log.entity_type', 64, COUNT(*) FROM `activity_log` WHERE CHAR_LENGTH(`entity_type`) > 64
+  UNION ALL SELECT 'activity_log.ip_address', 64, COUNT(*) FROM `activity_log` WHERE CHAR_LENGTH(`ip_address`) > 64
+  UNION ALL SELECT 'email_delivery.provider', 32, COUNT(*) FROM `email_delivery` WHERE CHAR_LENGTH(`provider`) > 32
+  UNION ALL SELECT 'contact_submission.name', 100, COUNT(*) FROM `contact_submission` WHERE CHAR_LENGTH(`name`) > 100
+  UNION ALL SELECT 'contact_submission.phone', 32, COUNT(*) FROM `contact_submission` WHERE CHAR_LENGTH(`phone`) > 32
+  UNION ALL SELECT 'contact_submission.user_type', 64, COUNT(*) FROM `contact_submission` WHERE CHAR_LENGTH(`user_type`) > 64
+  UNION ALL SELECT 'landing_testimonial.role', 120, COUNT(*) FROM `landing_testimonial` WHERE CHAR_LENGTH(`role`) > 120
+) AS preflight
+WHERE rows_too_long > 0;
 ```
 
-Compare the results with the target widths in `prisma/schema.prisma`. A mismatch is a data-cleanup task before the release, not a reason to relax `sql_mode`.
+An empty result means the migration's width block will pass. Any row is a data-cleanup task before the release, not a reason to relax `sql_mode`; for profile text, move the full value into `user_detail.internal_notes` before shortening it. If a value is missed, the migration still fails safely: all resizes run before anything is added or dropped (see [Apply migrations](#apply-migrations)).
 
 ### 3. Set lock wait behavior
 
@@ -148,7 +176,11 @@ After that install, confirm `node_modules/.prisma/client` and `node_modules/fire
 
 ### Generate the Prisma client
 
-Prisma 7 does not generate the client automatically during `migrate` or `db push`. Run `bun run db:generate` before the build. If the release artifact already contains a generated client for the same schema, this is a no-op.
+Prisma 7 does not generate the client automatically during install, `migrate`, or `db push`. The `build` script runs `prisma generate` first, so every build compiles against the current schema; `DATABASE_URL` is not needed for this step. A stale client fails at the first request with `SyntaxError: Named export '<Enum>' not found ... '@prisma/client' is a CommonJS module`.
+
+### npm-only hosts
+
+Hosts that only run npm (for example a Git webhook that runs `npm install`, `npm run build`, then `node .output/server/index.mjs`) work with the same scripts. `.npmrc` sets `legacy-peer-deps=true` because `eslint-plugin-solid` still declares an ESLint 9 peer range; without it a clean `npm install` fails with `ERESOLVE`. npm ignores `bun.lock`, so dependency versions resolve from the ranges in `package.json`. Migrations are not part of that flow; run `npx prisma migrate deploy` from one release job as described below.
 
 ### Apply migrations
 
@@ -167,7 +199,14 @@ A production database can have up to four pending migrations if earlier waves we
 
 Apply the pending migrations from this set in filename order from the single release job. Do not start application instances until every pending migration is recorded in `_prisma_migrations`.
 
-If a migration fails, stop the release. MySQL/MariaDB DDL commits implicitly, so the schema can be partially transformed. Follow the rollback guidance in [normalization.md](./normalization.md#irreversibility-and-rollback) instead of rerunning the migration.
+If a migration fails, stop the release. MySQL/MariaDB DDL commits implicitly, so the schema can be partially transformed. The one exception is a `Data too long` failure in the first block of `20261021120000_bcnf_normalization`: those statements only resize columns and run before anything is added or dropped. Fix the reported rows, then:
+
+```bash
+npx prisma migrate resolve --rolled-back 20261021120000_bcnf_normalization
+npx prisma migrate deploy
+```
+
+For any other failure, follow the rollback guidance in [normalization.md](./normalization.md#irreversibility-and-rollback) instead of rerunning the migration.
 
 Do not run the seed automatically. Production data is not created by a deploy.
 

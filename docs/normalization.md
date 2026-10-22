@@ -64,13 +64,17 @@ SensorReading -> Sprayer -> Block
 
 ### IrrigationEvent and ActivityLog drop duplicated block scope
 
-`IrrigationEvent` no longer stores `blockId`; block and region scope come from its `sprayer`. The migration also widens `firebase_event_id` to `VARCHAR(512)`, `firebase_date_key` to `VARCHAR(64)`, and `reason` to `VARCHAR(255)`.
+`IrrigationEvent` no longer stores `blockId`; block and region scope come from its `sprayer`. The migration also widens `firebase_event_id` to `VARCHAR(512)` and `reason` to `VARCHAR(255)`, and narrows `firebase_date_key` to `VARCHAR(64)`.
 
-`ActivityLog` no longer stores `blockId`. Before the column is dropped, any non-null value is copied to `metadata.legacyBlockId`:
+`ActivityLog` no longer stores `blockId`. Before the column is dropped, any non-null value is copied to `metadata.legacyBlockId`. Object metadata gains the key; null metadata becomes `{"legacyBlockId": ...}`; array or JSON-`null` metadata, which `JSON_SET` cannot extend, is kept under `legacyMetadata` next to the new key:
 
 ```sql
 UPDATE `activity_log`
-SET `metadata` = JSON_SET(COALESCE(`metadata`, '{}'), '$.legacyBlockId', `block_id`)
+SET `metadata` = CASE
+    WHEN `metadata` IS NULL THEN JSON_OBJECT('legacyBlockId', `block_id`)
+    WHEN JSON_TYPE(`metadata`) = 'OBJECT' THEN JSON_SET(`metadata`, '$.legacyBlockId', `block_id`)
+    ELSE JSON_OBJECT('legacyBlockId', `block_id`, 'legacyMetadata', JSON_EXTRACT(`metadata`, '$'))
+END
 WHERE `block_id` IS NOT NULL;
 ```
 
@@ -99,11 +103,15 @@ Existing activity, irrigation, email, and alert rows keep their references. Rela
 
 ### String widths
 
-The same migration aligns string widths with the validators, including `user.email` (`254`), `user.name` (`100`), `region.name` (`100`), `session.token_hash` (`64`), `activity_log.entity_type` (`64`), `activity_log.entity_id` (`191`), and `activity_log.user_agent` (`512`). Check for overlong values before applying the migration under strict SQL mode.
+The same migration aligns string widths with the validators, including `user.email` (`254`), `user.name` (`100`), `region.name` (`100`), `session.token_hash` (`64`), `activity_log.entity_type` (`64`), `activity_log.entity_id` (`191`), and `activity_log.user_agent` (`512`). 29 columns become narrower than the legacy `VARCHAR(191)`; run the preflight query in [deployment.md](./deployment.md#2-confirm-strict-sql-mode-and-column-widths) before applying the migration under strict SQL mode.
 
 ## Migration sequence
 
-The SQL follows an expand, backfill, contract order. This is what makes the change data-preserving on a non-empty production database.
+The SQL follows a widths, expand, backfill, contract order. This is what makes the change data-preserving on a non-empty production database.
+
+### 0. Widths
+
+Every column resize runs first, before any column, index, or row is added or removed. A legacy value that does not fit a narrower width therefore fails the migration while the schema is still in its legacy shape. Each resize is idempotent, so after fixing the offending rows the migration can be marked rolled back and deployed again (see [Irreversibility and rollback](#irreversibility-and-rollback)).
 
 ### 1. Expand
 
@@ -111,9 +119,9 @@ New region columns are added with defaults. `sensor_reading.source_key` is added
 
 ### 2. Backfill
 
-- Region limits are copied from `region_settings:<region name>`. `JSON_TYPE` guards ensure malformed or missing JSON values leave the defaults in place.
+- Region limits are copied from `region_settings:<region name>`, a verbatim copy of the Firebase node the devices read. JSON numbers and numeric strings are accepted, rounded to the nearest integer, and clamped to `0`-`100` (for example `42.7` becomes `43` and `"78"` becomes `78`). `JSON_TYPE` guards ensure malformed or missing values leave the defaults in place. `mode_otomatis` is on for `true`, `"true"`, or `1`.
 - Regions without a `region_settings` row inherit the latest `indicator_threshold` row for that region, ordered by `updated_at DESC, id DESC`.
-- Safety timeouts come from `safetyTimeout:<region id>`, then the global `safetyTimeout` key, then the `1`/`3` defaults.
+- Safety timeouts follow the legacy reader: only JSON numbers count, each field comes from `safetyTimeout:<region id>`, then the global `safetyTimeout` key, then the `1`/`3` defaults, and values are rounded and clamped to `1`-`10`. A resulting pair with `min >= max` falls back to the global pair, or to `1`/`3` when the global pair is invalid too.
 - `sensor_reading.source_key` is filled with `legacy:<id>` where it is still null.
 - `activity_log.metadata.legacyBlockId` receives the old block identifier.
 - `alert_notification_target` receives the most specific legacy scope.
@@ -287,6 +295,9 @@ The BCNF migration is irreversible. There is no down migration, and MySQL/MariaD
 3. Record row counts and legacy setting values.
 4. Schedule a maintenance window; stop the old application before the contract phase.
 
-If the migration fails, do not rerun it blindly. Inspect `_prisma_migrations` and the actual schema, then either restore the backup and redeploy the previous release or forward-fix with a reviewed migration. Restoring the backup is the rollback path.
+If the migration fails, do not rerun it blindly. Inspect `_prisma_migrations`, the error's query number, and the actual schema.
+
+- **Failure in the widths block** (a `Data too long` error from one of the first `ALTER TABLE ... MODIFY COLUMN` statements): nothing has been added or dropped yet. Fix or shorten the reported rows, then run `prisma migrate resolve --rolled-back 20261021120000_bcnf_normalization` and deploy again.
+- **Any later failure**: the schema may be partially transformed. Restore the backup and redeploy the previous release, or forward-fix with a reviewed migration. Restoring the backup is the rollback path.
 
 See [deployment.md](./deployment.md) for the full release procedure.

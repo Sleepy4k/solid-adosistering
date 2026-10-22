@@ -7,9 +7,102 @@
 -- 3. Replace alert scope columns with a 1:1 normalized target row.
 -- 4. Align string widths with the application validators.
 --
--- Ordering is add -> backfill -> drop so the migration is safe on a non-empty
--- production database: no legacy column is removed before its value has been
--- copied to its new location.
+-- Ordering is widths -> add -> backfill -> drop so the migration is safe on a
+-- non-empty production database: no legacy column is removed before its value
+-- has been copied to its new location.
+
+-- ---------------------------------------------------------------------------
+-- String widths first. Several targets are narrower than the legacy
+-- VARCHAR(191) columns, so a legacy value that does not fit fails here under
+-- strict SQL mode, before any column, index, or row has been dropped. Every
+-- statement in this block is idempotent: after fixing the offending rows,
+-- mark the migration rolled back and deploy again.
+-- ---------------------------------------------------------------------------
+ALTER TABLE `user`
+    MODIFY COLUMN `email` VARCHAR(254) NOT NULL,
+    MODIFY COLUMN `name` VARCHAR(100) NOT NULL,
+    MODIFY COLUMN `password_hash` VARCHAR(255) NOT NULL;
+
+ALTER TABLE `user_detail`
+    MODIFY COLUMN `whatsapp` VARCHAR(32) NULL,
+    MODIFY COLUMN `nickname` VARCHAR(100) NULL,
+    MODIFY COLUMN `gender` VARCHAR(32) NULL,
+    MODIFY COLUMN `alt_phone` VARCHAR(32) NULL,
+    MODIFY COLUMN `occupation` VARCHAR(120) NULL,
+    MODIFY COLUMN `domicile` VARCHAR(120) NULL,
+    MODIFY COLUMN `address` VARCHAR(500) NULL,
+    MODIFY COLUMN `country` VARCHAR(100) NULL,
+    MODIFY COLUMN `province` VARCHAR(100) NULL,
+    MODIFY COLUMN `city` VARCHAR(100) NULL,
+    MODIFY COLUMN `postal_code` VARCHAR(20) NULL,
+    MODIFY COLUMN `device_username` VARCHAR(100) NULL,
+    MODIFY COLUMN `api_key` VARCHAR(255) NULL;
+
+ALTER TABLE `session`
+    MODIFY COLUMN `token_hash` VARCHAR(64) NOT NULL;
+
+ALTER TABLE `password_reset_token`
+    MODIFY COLUMN `token_hash` VARCHAR(64) NOT NULL;
+
+ALTER TABLE `region`
+    MODIFY COLUMN `name` VARCHAR(100) NOT NULL,
+    MODIFY COLUMN `description` VARCHAR(1000) NULL;
+
+ALTER TABLE `block`
+    MODIFY COLUMN `name` VARCHAR(100) NOT NULL;
+
+ALTER TABLE `sprayer`
+    MODIFY COLUMN `hardware_id` VARCHAR(100) NOT NULL,
+    MODIFY COLUMN `display_name` VARCHAR(100) NOT NULL;
+
+ALTER TABLE `map_layer`
+    MODIFY COLUMN `name` VARCHAR(100) NOT NULL;
+
+ALTER TABLE `sensor_reading`
+    MODIFY COLUMN `pump_status` VARCHAR(16) NOT NULL,
+    MODIFY COLUMN `wind_direction` VARCHAR(100) NULL;
+
+ALTER TABLE `irrigation_event`
+    MODIFY COLUMN `reason` VARCHAR(255) NULL,
+    MODIFY COLUMN `firebase_event_id` VARCHAR(512) NULL,
+    MODIFY COLUMN `firebase_date_key` VARCHAR(64) NULL;
+
+ALTER TABLE `activity_log`
+    MODIFY COLUMN `entity_type` VARCHAR(64) NOT NULL,
+    MODIFY COLUMN `entity_id` VARCHAR(191) NULL,
+    MODIFY COLUMN `ip_address` VARCHAR(64) NULL,
+    MODIFY COLUMN `user_agent` VARCHAR(512) NULL;
+
+ALTER TABLE `alert_notification`
+    MODIFY COLUMN `title` VARCHAR(191) NOT NULL,
+    MODIFY COLUMN `message` TEXT NOT NULL;
+
+ALTER TABLE `email_delivery`
+    MODIFY COLUMN `to_email` VARCHAR(254) NOT NULL,
+    MODIFY COLUMN `subject` VARCHAR(200) NOT NULL,
+    MODIFY COLUMN `provider` VARCHAR(32) NOT NULL,
+    MODIFY COLUMN `provider_id` VARCHAR(255) NULL,
+    MODIFY COLUMN `error` TEXT NULL;
+
+ALTER TABLE `contact_submission`
+    MODIFY COLUMN `name` VARCHAR(100) NOT NULL,
+    MODIFY COLUMN `email` VARCHAR(254) NOT NULL,
+    MODIFY COLUMN `phone` VARCHAR(32) NULL,
+    MODIFY COLUMN `user_type` VARCHAR(64) NULL;
+
+ALTER TABLE `landing_testimonial`
+    MODIFY COLUMN `role` VARCHAR(120) NOT NULL,
+    MODIFY COLUMN `image_url` VARCHAR(2048) NULL;
+
+ALTER TABLE `landing_location`
+    MODIFY COLUMN `image_url` VARCHAR(2048) NULL;
+
+ALTER TABLE `landing_partner`
+    MODIFY COLUMN `logo_url` VARCHAR(2048) NULL,
+    MODIFY COLUMN `website_url` VARCHAR(2048) NULL;
+
+ALTER TABLE `newsletter_subscriber`
+    MODIFY COLUMN `email` VARCHAR(254) NOT NULL;
 
 -- ---------------------------------------------------------------------------
 -- Region settings: columns first, then backfill, then legacy keys removed.
@@ -21,20 +114,27 @@ ALTER TABLE `region`
     ADD COLUMN `safety_timeout_min` INTEGER NOT NULL DEFAULT 1,
     ADD COLUMN `safety_timeout_max` INTEGER NOT NULL DEFAULT 3;
 
--- Backfill from region_settings:<region name>. Numeric extraction is guarded
--- by JSON_TYPE so malformed legacy values leave the new default in place.
+-- Backfill from region_settings:<region name>, a verbatim copy of the Firebase
+-- node the devices read. Numbers and numeric strings are accepted, rounded,
+-- and clamped to the validator range (0-100); anything else keeps the new
+-- default. ROUND on the unquoted text avoids CAST(... AS SIGNED), which
+-- strict mode rejects for fractional input such as 42.7.
 UPDATE `region` AS r
 INNER JOIN `system_setting` AS s
     ON s.`key` = CONCAT('region_settings:', r.`name`)
 SET
     r.`dry_max_percent` = CASE
-        WHEN JSON_TYPE(JSON_EXTRACT(s.`value`, '$.batas_kering')) IN ('INTEGER', 'DOUBLE', 'DECIMAL')
-            THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(s.`value`, '$.batas_kering')) AS SIGNED)
+        WHEN JSON_TYPE(JSON_EXTRACT(s.`value`, '$.batas_kering')) IN ('INTEGER', 'UNSIGNED INTEGER', 'DOUBLE', 'DECIMAL')
+          OR (JSON_TYPE(JSON_EXTRACT(s.`value`, '$.batas_kering')) = 'STRING'
+              AND JSON_UNQUOTE(JSON_EXTRACT(s.`value`, '$.batas_kering')) REGEXP '^[0-9]+([.][0-9]+)?$')
+            THEN LEAST(100, GREATEST(0, ROUND(JSON_UNQUOTE(JSON_EXTRACT(s.`value`, '$.batas_kering')))))
         ELSE r.`dry_max_percent`
     END,
     r.`wet_min_percent` = CASE
-        WHEN JSON_TYPE(JSON_EXTRACT(s.`value`, '$.batas_basah')) IN ('INTEGER', 'DOUBLE', 'DECIMAL')
-            THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(s.`value`, '$.batas_basah')) AS SIGNED)
+        WHEN JSON_TYPE(JSON_EXTRACT(s.`value`, '$.batas_basah')) IN ('INTEGER', 'UNSIGNED INTEGER', 'DOUBLE', 'DECIMAL')
+          OR (JSON_TYPE(JSON_EXTRACT(s.`value`, '$.batas_basah')) = 'STRING'
+              AND JSON_UNQUOTE(JSON_EXTRACT(s.`value`, '$.batas_basah')) REGEXP '^[0-9]+([.][0-9]+)?$')
+            THEN LEAST(100, GREATEST(0, ROUND(JSON_UNQUOTE(JSON_EXTRACT(s.`value`, '$.batas_basah')))))
         ELSE r.`wet_min_percent`
     END,
     r.`automatic_mode` = CASE
@@ -61,7 +161,10 @@ WHERE s.`key` IS NULL
       LIMIT 1
   );
 
--- Safety timeouts: per-region key, then global key, then 1/3 defaults.
+-- Safety timeouts mirror the legacy reader: only JSON numbers count; each
+-- per-region field falls back to the global safetyTimeout document, whose own
+-- fields fall back to 1/3; a pair with min >= max falls back as a whole.
+-- Values are rounded and clamped to the validator range (1-10).
 UPDATE `region` AS r
 LEFT JOIN `system_setting` AS rs
     ON rs.`key` = CONCAT('safetyTimeout:', r.`id`)
@@ -70,26 +173,51 @@ LEFT JOIN `system_setting` AS gs
 SET
     r.`safety_timeout_min` = COALESCE(
         CASE
-            WHEN JSON_TYPE(JSON_EXTRACT(rs.`value`, '$.min')) IN ('INTEGER', 'DOUBLE', 'DECIMAL')
-                THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(rs.`value`, '$.min')) AS SIGNED)
+            WHEN JSON_TYPE(JSON_EXTRACT(rs.`value`, '$.min')) IN ('INTEGER', 'UNSIGNED INTEGER', 'DOUBLE', 'DECIMAL')
+                THEN LEAST(10, GREATEST(1, ROUND(JSON_UNQUOTE(JSON_EXTRACT(rs.`value`, '$.min')))))
         END,
         CASE
-            WHEN JSON_TYPE(JSON_EXTRACT(gs.`value`, '$.min')) IN ('INTEGER', 'DOUBLE', 'DECIMAL')
-                THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(gs.`value`, '$.min')) AS SIGNED)
+            WHEN JSON_TYPE(JSON_EXTRACT(gs.`value`, '$.min')) IN ('INTEGER', 'UNSIGNED INTEGER', 'DOUBLE', 'DECIMAL')
+                THEN LEAST(10, GREATEST(1, ROUND(JSON_UNQUOTE(JSON_EXTRACT(gs.`value`, '$.min')))))
         END,
         1
     ),
     r.`safety_timeout_max` = COALESCE(
         CASE
-            WHEN JSON_TYPE(JSON_EXTRACT(rs.`value`, '$.max')) IN ('INTEGER', 'DOUBLE', 'DECIMAL')
-                THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(rs.`value`, '$.max')) AS SIGNED)
+            WHEN JSON_TYPE(JSON_EXTRACT(rs.`value`, '$.max')) IN ('INTEGER', 'UNSIGNED INTEGER', 'DOUBLE', 'DECIMAL')
+                THEN LEAST(10, GREATEST(1, ROUND(JSON_UNQUOTE(JSON_EXTRACT(rs.`value`, '$.max')))))
         END,
         CASE
-            WHEN JSON_TYPE(JSON_EXTRACT(gs.`value`, '$.max')) IN ('INTEGER', 'DOUBLE', 'DECIMAL')
-                THEN CAST(JSON_UNQUOTE(JSON_EXTRACT(gs.`value`, '$.max')) AS SIGNED)
+            WHEN JSON_TYPE(JSON_EXTRACT(gs.`value`, '$.max')) IN ('INTEGER', 'UNSIGNED INTEGER', 'DOUBLE', 'DECIMAL')
+                THEN LEAST(10, GREATEST(1, ROUND(JSON_UNQUOTE(JSON_EXTRACT(gs.`value`, '$.max')))))
         END,
         3
     );
+
+-- Invalid pairs fall back to the global pair, or 1/3 when that is invalid too.
+UPDATE `region` AS r
+CROSS JOIN (
+    SELECT
+        CASE WHEN g.`min_value` < g.`max_value` THEN g.`min_value` ELSE 1 END AS `min_value`,
+        CASE WHEN g.`min_value` < g.`max_value` THEN g.`max_value` ELSE 3 END AS `max_value`
+    FROM (
+        SELECT
+            COALESCE(MAX(CASE
+                WHEN JSON_TYPE(JSON_EXTRACT(s.`value`, '$.min')) IN ('INTEGER', 'UNSIGNED INTEGER', 'DOUBLE', 'DECIMAL')
+                    THEN LEAST(10, GREATEST(1, ROUND(JSON_UNQUOTE(JSON_EXTRACT(s.`value`, '$.min')))))
+            END), 1) AS `min_value`,
+            COALESCE(MAX(CASE
+                WHEN JSON_TYPE(JSON_EXTRACT(s.`value`, '$.max')) IN ('INTEGER', 'UNSIGNED INTEGER', 'DOUBLE', 'DECIMAL')
+                    THEN LEAST(10, GREATEST(1, ROUND(JSON_UNQUOTE(JSON_EXTRACT(s.`value`, '$.max')))))
+            END), 3) AS `max_value`
+        FROM `system_setting` AS s
+        WHERE s.`key` = 'safetyTimeout'
+    ) AS g
+) AS fallback
+SET
+    r.`safety_timeout_min` = fallback.`min_value`,
+    r.`safety_timeout_max` = fallback.`max_value`
+WHERE r.`safety_timeout_min` >= r.`safety_timeout_max`;
 
 -- IndicatorThreshold now holds per-user display preferences only.
 ALTER TABLE `indicator_threshold`
@@ -102,9 +230,7 @@ ALTER TABLE `indicator_threshold`
 -- multiple readings in the same second are no longer discarded.
 -- ---------------------------------------------------------------------------
 ALTER TABLE `sensor_reading`
-    ADD COLUMN `source_key` VARCHAR(191) NULL AFTER `sprayer_id`,
-    MODIFY COLUMN `pump_status` VARCHAR(16) NOT NULL,
-    MODIFY COLUMN `wind_direction` VARCHAR(100) NULL;
+    ADD COLUMN `source_key` VARCHAR(191) NULL AFTER `sprayer_id`;
 
 UPDATE `sensor_reading`
 SET `source_key` = CONCAT('legacy:', `id`)
@@ -140,14 +266,9 @@ ALTER TABLE `sensor_reading`
     DROP COLUMN `block_id`;
 
 -- ---------------------------------------------------------------------------
--- IrrigationEvent: same transitive block removal, widened Firebase fields and
--- a stable (started_at, id) keyset-pagination index.
+-- IrrigationEvent: same transitive block removal and a stable (started_at, id)
+-- keyset-pagination index.
 -- ---------------------------------------------------------------------------
-ALTER TABLE `irrigation_event`
-    MODIFY COLUMN `reason` VARCHAR(255) NULL,
-    MODIFY COLUMN `firebase_event_id` VARCHAR(512) NULL,
-    MODIFY COLUMN `firebase_date_key` VARCHAR(64) NULL;
-
 CREATE INDEX `irrigation_event_started_at_id_idx`
     ON `irrigation_event`(`started_at`, `id`);
 
@@ -165,17 +286,16 @@ ALTER TABLE `irrigation_event`
 
 -- ---------------------------------------------------------------------------
 -- ActivityLog: preserve the dropped block reference inside metadata before
--- removing the column, then align audit string widths.
+-- removing the column. JSON_SET cannot add a key to an array or JSON null, so
+-- non-object metadata is kept under `legacyMetadata` instead.
 -- ---------------------------------------------------------------------------
 UPDATE `activity_log`
-SET `metadata` = JSON_SET(COALESCE(`metadata`, '{}'), '$.legacyBlockId', `block_id`)
+SET `metadata` = CASE
+    WHEN `metadata` IS NULL THEN JSON_OBJECT('legacyBlockId', `block_id`)
+    WHEN JSON_TYPE(`metadata`) = 'OBJECT' THEN JSON_SET(`metadata`, '$.legacyBlockId', `block_id`)
+    ELSE JSON_OBJECT('legacyBlockId', `block_id`, 'legacyMetadata', JSON_EXTRACT(`metadata`, '$'))
+END
 WHERE `block_id` IS NOT NULL;
-
-ALTER TABLE `activity_log`
-    MODIFY COLUMN `entity_type` VARCHAR(64) NOT NULL,
-    MODIFY COLUMN `entity_id` VARCHAR(191) NULL,
-    MODIFY COLUMN `ip_address` VARCHAR(64) NULL,
-    MODIFY COLUMN `user_agent` VARCHAR(512) NULL;
 
 ALTER TABLE `activity_log`
     DROP FOREIGN KEY `activity_log_block_id_fkey`;
@@ -230,85 +350,15 @@ ALTER TABLE `alert_notification`
 ALTER TABLE `alert_notification`
     DROP COLUMN `region_id`,
     DROP COLUMN `block_id`,
-    DROP COLUMN `sprayer_id`,
-    MODIFY COLUMN `title` VARCHAR(191) NOT NULL,
-    MODIFY COLUMN `message` TEXT NOT NULL;
+    DROP COLUMN `sprayer_id`;
 
 -- ---------------------------------------------------------------------------
--- User: soft-delete marker and validator-aligned identity widths.
+-- User: soft-delete marker.
 -- ---------------------------------------------------------------------------
 ALTER TABLE `user`
-    ADD COLUMN `deleted_at` DATETIME(3) NULL,
-    MODIFY COLUMN `email` VARCHAR(254) NOT NULL,
-    MODIFY COLUMN `name` VARCHAR(100) NOT NULL,
-    MODIFY COLUMN `password_hash` VARCHAR(255) NOT NULL;
+    ADD COLUMN `deleted_at` DATETIME(3) NULL;
 
 CREATE INDEX `user_deleted_at_idx` ON `user`(`deleted_at`);
-
--- ---------------------------------------------------------------------------
--- Remaining string-width alignment.
--- ---------------------------------------------------------------------------
-ALTER TABLE `region`
-    MODIFY COLUMN `name` VARCHAR(100) NOT NULL,
-    MODIFY COLUMN `description` VARCHAR(1000) NULL;
-
-ALTER TABLE `contact_submission`
-    MODIFY COLUMN `name` VARCHAR(100) NOT NULL,
-    MODIFY COLUMN `email` VARCHAR(254) NOT NULL,
-    MODIFY COLUMN `phone` VARCHAR(32) NULL,
-    MODIFY COLUMN `user_type` VARCHAR(64) NULL;
-
-ALTER TABLE `block`
-    MODIFY COLUMN `name` VARCHAR(100) NOT NULL;
-
-ALTER TABLE `sprayer`
-    MODIFY COLUMN `hardware_id` VARCHAR(100) NOT NULL,
-    MODIFY COLUMN `display_name` VARCHAR(100) NOT NULL;
-
-ALTER TABLE `map_layer`
-    MODIFY COLUMN `name` VARCHAR(100) NOT NULL;
-
-ALTER TABLE `session`
-    MODIFY COLUMN `token_hash` VARCHAR(64) NOT NULL;
-
-ALTER TABLE `password_reset_token`
-    MODIFY COLUMN `token_hash` VARCHAR(64) NOT NULL;
-
-ALTER TABLE `email_delivery`
-    MODIFY COLUMN `to_email` VARCHAR(254) NOT NULL,
-    MODIFY COLUMN `subject` VARCHAR(200) NOT NULL,
-    MODIFY COLUMN `provider` VARCHAR(32) NOT NULL,
-    MODIFY COLUMN `provider_id` VARCHAR(255) NULL,
-    MODIFY COLUMN `error` TEXT NULL;
-
-ALTER TABLE `landing_testimonial`
-    MODIFY COLUMN `role` VARCHAR(120) NOT NULL,
-    MODIFY COLUMN `image_url` VARCHAR(2048) NULL;
-
-ALTER TABLE `landing_location`
-    MODIFY COLUMN `image_url` VARCHAR(2048) NULL;
-
-ALTER TABLE `landing_partner`
-    MODIFY COLUMN `logo_url` VARCHAR(2048) NULL,
-    MODIFY COLUMN `website_url` VARCHAR(2048) NULL;
-
-ALTER TABLE `newsletter_subscriber`
-    MODIFY COLUMN `email` VARCHAR(254) NOT NULL;
-
-ALTER TABLE `user_detail`
-    MODIFY COLUMN `whatsapp` VARCHAR(32) NULL,
-    MODIFY COLUMN `nickname` VARCHAR(100) NULL,
-    MODIFY COLUMN `gender` VARCHAR(32) NULL,
-    MODIFY COLUMN `alt_phone` VARCHAR(32) NULL,
-    MODIFY COLUMN `occupation` VARCHAR(120) NULL,
-    MODIFY COLUMN `domicile` VARCHAR(120) NULL,
-    MODIFY COLUMN `address` VARCHAR(500) NULL,
-    MODIFY COLUMN `country` VARCHAR(100) NULL,
-    MODIFY COLUMN `province` VARCHAR(100) NULL,
-    MODIFY COLUMN `city` VARCHAR(100) NULL,
-    MODIFY COLUMN `postal_code` VARCHAR(20) NULL,
-    MODIFY COLUMN `device_username` VARCHAR(100) NULL,
-    MODIFY COLUMN `api_key` VARCHAR(255) NULL;
 
 -- ---------------------------------------------------------------------------
 -- Legacy per-entity settings are now represented by region columns. Keep the

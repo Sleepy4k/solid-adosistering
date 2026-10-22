@@ -80,6 +80,8 @@ VITE_SITE_URL="https://adosistering.example" bun run build
 bun run start      # node .output/server/index.mjs
 ```
 
+`bun run build` (or `npm run build`) generates the Prisma client, builds the app, and then applies pending database migrations through `scripts/migrate-deploy.mjs`, so `DATABASE_URL` must be set for the build. Set `SKIP_DB_MIGRATE=1` to build without a database. See [docs/deployment.md](docs/deployment.md#apply-migrations) for its safeguards.
+
 The server requires `DATABASE_URL`; outside development it also requires `NEWSLETTER_TOKEN_SECRET` (at least 32 characters), and production requires a valid HTTPS `APP_ORIGIN`. `assertServerConfig` runs lazily on the first page or `/_server` request that needs it, including public newsletter pages and every `/_server` call.
 
 Nitro keeps `firebase-admin` external because bundling its CommonJS internals is unsafe. Deploy `.output` together with production `node_modules` (for example `bun install --frozen-lockfile --production` on the target host), or configure your bundler to package that dependency. Do not copy `.env` or `.data` into the public web root.

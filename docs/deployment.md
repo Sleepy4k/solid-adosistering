@@ -155,9 +155,8 @@ Run the release from the same commit that produced the artifacts.
 
 ```bash
 bun install --frozen-lockfile
-bun run db:generate
-bun run db:deploy
 # Do not run bun run db:seed automatically.
+# The build generates the Prisma client, builds the app, then applies pending migrations.
 VITE_SITE_URL="https://app.example" bun run build
 bun run start
 ```
@@ -166,7 +165,7 @@ bun run start
 
 `bun install --frozen-lockfile` must be used so the lockfile is not rewritten during a release. Build hosts need devDependencies for Vite, TypeScript, and the Prisma CLI.
 
-If the build and runtime are separate stages, install all dependencies and run the build in the build stage. Run `db:deploy` from a release job that has the Prisma CLI and database access, then create the runtime stage with production dependencies:
+If the build and runtime are separate stages, install all dependencies and run the build in the build stage with database access, or build with `SKIP_DB_MIGRATE=1` and run `bun run db:deploy` from a release job that has the Prisma CLI and database access. Then create the runtime stage with production dependencies:
 
 ```bash
 bun install --frozen-lockfile --production
@@ -180,15 +179,25 @@ Prisma 7 does not generate the client automatically during install, `migrate`, o
 
 ### npm-only hosts
 
-Hosts that only run npm (for example a Git webhook that runs `npm install`, `npm run build`, then `node .output/server/index.mjs`) work with the same scripts. `.npmrc` sets `legacy-peer-deps=true` because `eslint-plugin-solid` still declares an ESLint 9 peer range; without it a clean `npm install` fails with `ERESOLVE`. npm ignores `bun.lock`, so dependency versions resolve from the ranges in `package.json`. Migrations are not part of that flow; run `npx prisma migrate deploy` from one release job as described below.
+Hosts that only run npm (for example a Git webhook that runs `npm install`, `npm run build`, then `node .output/server/index.mjs`) work with the same scripts. `.npmrc` sets `legacy-peer-deps=true` because `eslint-plugin-solid` still declares an ESLint 9 peer range; without it a clean `npm install` fails with `ERESOLVE`. npm ignores `bun.lock`, so dependency versions resolve from the ranges in `package.json`. `npm run build` applies pending migrations, so `DATABASE_URL` must be available to the build, not only to the running app. Take a database backup before pushing a release that contains new migrations.
 
 ### Apply migrations
 
+`bun run build` runs `scripts/migrate-deploy.mjs` after a successful `vite build`, so a release cannot go live against an outdated schema. Run the same step on its own with:
+
 ```bash
-bun run db:deploy
+bun run db:deploy   # or: npm run db:deploy
 ```
 
-This runs `prisma migrate deploy` and applies every pending migration in filename order. Never use `bun run db:migrate` in production; it is the development command and requires a shadow database.
+The script applies every pending migration in filename order through `prisma migrate deploy`, with these safeguards:
+
+- **No `DATABASE_URL`**: the build fails instead of shipping code against an unmigrated database. Set `SKIP_DB_MIGRATE=1` for builds that intentionally have no database, such as CI.
+- **No `_prisma_migrations` table** (a database created from an SQL import): migrations whose tables and columns already exist are marked applied, and the rest run. A schema that does not match a known migration prefix stops the build for a manual baseline.
+- **Values too long for the BCNF widths**: the build stops before any migration starts and lists each column with the number of rows to shorten (the same check as step 2 of the pre-deploy checklist).
+- **A BCNF run that previously failed in its column-width block**: it is marked rolled back and retried automatically. Any other failed migration stops the build with a pointer to the recovery steps.
+- **Drift**: after migrating, the database is compared with `prisma/schema.prisma` and any difference is printed as a warning.
+
+When the build fails at this step, the host keeps serving the previous release. Never use `bun run db:migrate` in production; it is the development command and requires a shadow database.
 
 A production database can have up to four pending migrations if earlier waves were not deployed:
 
@@ -199,7 +208,7 @@ A production database can have up to four pending migrations if earlier waves we
 
 Apply the pending migrations from this set in filename order from the single release job. Do not start application instances until every pending migration is recorded in `_prisma_migrations`.
 
-If a migration fails, stop the release. MySQL/MariaDB DDL commits implicitly, so the schema can be partially transformed. The one exception is a `Data too long` failure in the first block of `20261021120000_bcnf_normalization`: those statements only resize columns and run before anything is added or dropped. Fix the reported rows, then:
+If a migration fails, stop the release. MySQL/MariaDB DDL commits implicitly, so the schema can be partially transformed. The one exception is a `Data too long` failure in the first block of `20261021120000_bcnf_normalization`: those statements only resize columns and run before anything is added or dropped. Fix the reported rows and deploy again; `db:deploy` marks that run rolled back and retries it. Without the wrapper, the equivalent is:
 
 ```bash
 npx prisma migrate resolve --rolled-back 20261021120000_bcnf_normalization
@@ -216,7 +225,7 @@ Do not run the seed automatically. Production data is not created by a deploy.
 VITE_SITE_URL="https://app.example" bun run build
 ```
 
-`VITE_SITE_URL` is embedded at build time. Changing the public URL later requires a rebuild; setting it only at runtime is not enough. The build also validates that no server secret is exposed through a `VITE_*` variable.
+The build ends with the migration step described in [Apply migrations](#apply-migrations). `VITE_SITE_URL` is embedded at build time. Changing the public URL later requires a rebuild; setting it only at runtime is not enough. The build also validates that no server secret is exposed through a `VITE_*` variable.
 
 ### Start
 

@@ -1,25 +1,35 @@
 import { query, createAsync } from "@solidjs/router";
-import { createEffect, createSignal, For, on, onCleanup, onMount, Show, Suspense } from "solid-js";
+import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from "solid-js";
 import { PageMeta } from "~/components/shared/PageMeta";
 import { CalendarDays, Clock3, Download, Droplets, Gauge, Loader2, RotateCcw, WavesHorizontal } from "lucide-solid";
-import { getIrrigationHistory, getMyBlocks } from "~/server/actions/history";
-import { getMyRegions } from "~/server/actions/regions";
+import { getIrrigationHistory } from "~/server/actions/history";
+import { countMyRegions, searchBlockOptions, searchRegionOptions } from "~/server/actions/options";
 import { finishProgress, startProgress } from "~/lib/client/progress";
 import { SkCard } from "~/components/shared/Skeleton";
 import { SelectSearch } from "~/components/ui/SelectSearch";
 import { SimpleSelect } from "~/components/ui/SimpleSelect";
 import { DatePicker } from "~/components/ui/DatePicker";
+import { BackToTop } from "~/components/ui/BackToTop";
 import { useConfirm } from "~/components/shared/ConfirmProvider";
 import { useLiveDate } from "~/lib/client/liveDate";
 import { ExportHistoryModal } from "~/features/history/ExportHistoryModal";
 import { formatJakartaDateTime } from "~/lib/shared/datetime";
+import { formatBlockName } from "~/lib/shared/irrigation";
 
-const loadBlocks = query(() => getMyBlocks(), "my-blocks");
-const loadRegions = query(() => getMyRegions(), "my-regions");
+const loadRegionCount = query(() => countMyRegions(), "my-region-count");
 
-export const route = { preload: () => loadBlocks() };
+export const route = { preload: () => loadRegionCount() };
 
 const PAGE_SIZE = 10;
+
+const SORT_OPTIONS = [
+  { value: "startedAt:desc", label: "Waktu: terbaru" },
+  { value: "startedAt:asc", label: "Waktu: terlama" },
+  { value: "durationSeconds:desc", label: "Durasi: terlama" },
+  { value: "durationSeconds:asc", label: "Durasi: tersingkat" },
+  { value: "totalVolumeLiter:desc", label: "Total air: terbanyak" },
+  { value: "totalVolumeLiter:asc", label: "Total air: tersedikit" },
+];
 
 type HistoryItem = Awaited<ReturnType<typeof getIrrigationHistory>>["items"][number];
 
@@ -79,6 +89,7 @@ export default function RiwayatIrigasi() {
   const [status, setStatus] = createSignal<string>("");
   const [dateFrom, setDateFrom] = createSignal<string>("");
   const [dateTo, setDateTo] = createSignal<string>("");
+  const [sortValue, setSortValue] = createSignal<string>("startedAt:desc");
   const [loadError, setLoadError] = createSignal<string>("");
 
   const [items, setItems] = createSignal<HistoryItem[]>([]);
@@ -86,19 +97,14 @@ export default function RiwayatIrigasi() {
   const [hasMore, setHasMore] = createSignal(false);
   const [isFetching, setIsFetching] = createSignal(false);
   const [initialLoading, setInitialLoading] = createSignal(true);
+  const [loadMoreFailed, setLoadMoreFailed] = createSignal(false);
   const [exportOpen, setExportOpen] = createSignal(false);
 
-  const blocks = createAsync(() => loadBlocks());
-  const regions = createAsync(() => loadRegions());
-
-  const filteredBlocks = () => {
-    const allBlocks = blocks() ?? [];
-    const rid = regionId();
-    if (!rid) return allBlocks;
-    return allBlocks.filter((b) => b.region.id === rid);
-  };
+  const regions = createAsync(() => loadRegionCount());
 
   let fetchSeq = 0;
+  let sentinel!: HTMLDivElement;
+  let observer: IntersectionObserver | undefined;
 
   const fetchPage = async (isReset: boolean) => {
     if (!isReset && isFetching()) return;
@@ -112,6 +118,8 @@ export default function RiwayatIrigasi() {
     }
     void startProgress();
     setLoadError("");
+    setLoadMoreFailed(false);
+    let succeeded = false;
     try {
       const result = await getIrrigationHistory({
         regionId: regionId() || undefined,
@@ -120,6 +128,7 @@ export default function RiwayatIrigasi() {
         dateFrom: dateFrom() || undefined,
         dateTo: dateTo() || undefined,
         cursor: isReset ? undefined : (nextCursor() ?? undefined),
+        sort: { key: sortValue().split(":")[0], dir: sortValue().split(":")[1] },
         limit: PAGE_SIZE,
       });
       if (mySeq !== fetchSeq) return;
@@ -130,36 +139,47 @@ export default function RiwayatIrigasi() {
       }
       setNextCursor(result.nextCursor);
       setHasMore(result.nextCursor !== null);
+      succeeded = true;
     } catch (error) {
       if (mySeq !== fetchSeq) return;
       setLoadError(toMessage(error));
+      // No auto-retry: a persistent error would loop. The user retries explicitly.
+      if (!isReset) setLoadMoreFailed(true);
     } finally {
       if (mySeq === fetchSeq) {
         setIsFetching(false);
         setInitialLoading(false);
+        // The observer only fires on intersection changes; if the sentinel is
+        // still in view after a (short) page, re-observing forces a re-check.
+        if (succeeded && sentinel && observer) {
+          observer.unobserve(sentinel);
+          observer.observe(sentinel);
+        }
       }
       void finishProgress();
     }
   };
 
   createEffect(
-    on([regionId, blockId, status, dateFrom, dateTo], () => {
+    on([regionId, blockId, status, dateFrom, dateTo, sortValue], () => {
       void fetchPage(true);
     }),
   );
 
-  let sentinel!: HTMLDivElement;
   onMount(() => {
-    const observer = new IntersectionObserver(
+    observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry?.isIntersecting && hasMore() && !isFetching()) {
+        if (entry?.isIntersecting && hasMore() && !isFetching() && !loadMoreFailed()) {
           void fetchPage(false);
         }
       },
       { rootMargin: "300px" },
     );
     observer.observe(sentinel);
-    onCleanup(() => observer.disconnect());
+    onCleanup(() => {
+      observer?.disconnect();
+      observer = undefined;
+    });
   });
 
   const reset = async () => {
@@ -175,6 +195,7 @@ export default function RiwayatIrigasi() {
     setStatus("");
     setDateFrom("");
     setDateTo("");
+    setSortValue("startedAt:desc");
   };
 
   return (
@@ -213,17 +234,14 @@ export default function RiwayatIrigasi() {
           </div>
         </Show>
 
-        <div class="grid gap-4 rounded-2xl border border-[#C2C2C2] bg-white p-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-          <Show when={(regions()?.length ?? 0) > 1}>
+        <div class="grid gap-4 rounded-2xl border border-[#C2C2C2] bg-white p-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7">
+          <Show when={(regions() ?? 0) > 1}>
             <div class="flex flex-col gap-1.5">
               <label class="text-xs font-medium text-[#4F4F4F]">Region</label>
               <SelectSearch
                 value={regionId()}
                 placeholder="Semua Region"
-                options={[
-                  { value: "", label: "Semua Region" },
-                  ...(regions() ?? []).map((r) => ({ value: r.id, label: r.name })),
-                ]}
+                loadOptions={(q) => searchRegionOptions({ query: q, limit: 50 })}
                 onChange={(value) => {
                   setRegionId(value);
                   setBlockId("");
@@ -234,24 +252,12 @@ export default function RiwayatIrigasi() {
 
           <div class="flex flex-col gap-1.5">
             <label class="text-xs font-medium text-[#4F4F4F]">Nama Lahan</label>
-            <Suspense
-              fallback={
-                <div class="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-400">Memuat...</div>
-              }
-            >
-              <SelectSearch
-                value={blockId()}
-                placeholder="Pilih nama lahan"
-                options={[
-                  { value: "", label: "Pilih nama lahan" },
-                  ...filteredBlocks().map((block) => ({
-                    value: block.id,
-                    label: `${block.region.name} - ${block.name}`,
-                  })),
-                ]}
-                onChange={setBlockId}
-              />
-            </Suspense>
+            <SelectSearch
+              value={blockId()}
+              placeholder="Pilih nama lahan"
+              loadOptions={(q) => searchBlockOptions({ query: q, limit: 50, regionId: regionId() || undefined })}
+              onChange={setBlockId}
+            />
           </div>
 
           <div class="flex flex-col gap-1.5">
@@ -275,6 +281,11 @@ export default function RiwayatIrigasi() {
           <div class="flex flex-col gap-1.5">
             <label class="text-xs font-medium text-[#4F4F4F]">Sampai Tanggal</label>
             <DatePicker value={dateTo()} placeholder="Sampai tanggal" onChange={setDateTo} />
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs font-medium text-[#4F4F4F]">Urutkan</label>
+            <SimpleSelect value={sortValue()} options={SORT_OPTIONS} onChange={setSortValue} />
           </div>
 
           <button
@@ -301,7 +312,17 @@ export default function RiwayatIrigasi() {
             when={items().length > 0}
             fallback={
               <div class="rounded-2xl border border-[#C2C2C2] bg-white p-10 text-center text-sm text-slate-500">
-                Tidak ada data riwayat irigasi.
+                <Show when={loadError()} fallback="Tidak ada data riwayat irigasi.">
+                  <p class="mb-4">Data riwayat belum bisa dimuat.</p>
+                  <button
+                    type="button"
+                    class="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-4 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                    onClick={() => void fetchPage(true)}
+                  >
+                    <RotateCcw size={16} />
+                    Coba lagi
+                  </button>
+                </Show>
               </div>
             }
           >
@@ -317,7 +338,7 @@ export default function RiwayatIrigasi() {
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                           <div class="min-w-0">
                             <p class="text-sm font-semibold text-[#4F4F4F]">
-                              {event.block.region.name} - {event.block.name}
+                              {event.block.region.name} - {formatBlockName(event.block.name)}
                             </p>
                             <p class="text-sm font-medium text-[#4F8936]">{event.sprayer.displayName}</p>
                           </div>
@@ -402,12 +423,27 @@ export default function RiwayatIrigasi() {
           </div>
         </Show>
 
+        <Show when={loadMoreFailed() && !isFetching()}>
+          <div class="flex justify-center py-4">
+            <button
+              type="button"
+              class="flex h-10 items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-4 text-sm font-medium text-slate-600 hover:bg-slate-50"
+              onClick={() => void fetchPage(false)}
+            >
+              <RotateCcw size={16} />
+              Coba lagi
+            </button>
+          </div>
+        </Show>
+
         <Show when={!hasMore() && items().length > 0 && !isFetching()}>
           <p class="py-4 text-center text-xs text-slate-400">Semua {items().length} data riwayat telah dimuat.</p>
         </Show>
 
         <div ref={sentinel} class="h-px" />
       </div>
+
+      <BackToTop />
 
       <ExportHistoryModal
         open={exportOpen()}

@@ -1,6 +1,6 @@
 "use server";
 
-import { getRequestIP } from "@solidjs/start/http";
+import { getRequestHeader, getRequestIP } from "@solidjs/start/http";
 import { ActivityAction } from "@prisma/client";
 import { prisma } from "../db/prisma";
 import { sendLoginBlockedEmail, sendPasswordChangedEmail, sendPasswordResetEmail } from "../integrations/email";
@@ -39,8 +39,19 @@ function shouldNotifyLoginBlocked(userId: string, now = Date.now()): boolean {
   return true;
 }
 
+let warnedProxyMisconfig = false;
+
 function clientIp() {
   try {
+    // A forwarded header while TRUST_PROXY is off usually means the app sits behind
+    // a proxy: every client then shares the proxy IP (or "unknown"), which defeats
+    // per-IP limits. Warn once instead of silently trusting a spoofable header.
+    if (!warnedProxyMisconfig && !serverConfig.trustProxy && process.env.NODE_ENV === "production") {
+      if (getRequestHeader("x-forwarded-for")) {
+        warnedProxyMisconfig = true;
+        console.warn("[auth] X-Forwarded-For diterima tetapi TRUST_PROXY=false; pembatasan per-IP tidak akurat.");
+      }
+    }
     return getRequestIP({ xForwardedFor: serverConfig.trustProxy }) ?? "unknown";
   } catch {
     return "unknown";
@@ -145,49 +156,62 @@ export async function logout() {
 export async function requestPasswordReset(input: { email: string }) {
   const data = parseInput(requestPasswordResetSchema, input);
   const ip = clientIp();
-  const ipLimit = checkRateLimit(`reset:ip:${ip}`, 10, 60 * 60_000);
-  if (!ipLimit.allowed) throw rateLimitResponse(ipLimit);
-  const limit = checkRateLimit(`reset:${ip}:${data.email}`, 5, 60 * 60_000);
+  // Never key a bucket on "unknown": all unidentifiable clients would share it.
+  // The per-email bucket below still applies.
+  if (ip !== "unknown") {
+    const ipLimit = checkRateLimit(`reset:ip:${ip}`, 10, 60 * 60_000);
+    if (!ipLimit.allowed) throw rateLimitResponse(ipLimit);
+  }
+  const limit = checkRateLimit(
+    ip === "unknown" ? `reset:email:${data.email}` : `reset:${ip}:${data.email}`,
+    5,
+    60 * 60_000,
+  );
   if (!limit.allowed) throw rateLimitResponse(limit);
 
   const user = await prisma.user.findFirst({ where: { email: data.email, deletedAt: null } });
   if (!user) return { ok: true };
 
-  const token = newOpaqueToken();
-  const now = new Date();
-  await prisma.$transaction([
-    prisma.passwordResetToken.updateMany({
-      where: { userId: user.id, usedAt: null },
-      data: { usedAt: now },
-    }),
-    prisma.passwordResetToken.create({
-      data: {
-        userId: user.id,
-        tokenHash: hashToken(token),
-        expiresAt: new Date(now.getTime() + 1000 * 60 * 30),
-      },
-    }),
-  ]);
+  // Token write, audit log and email run detached so the found and not-found
+  // branches return after the same single lookup (no response-time oracle).
+  void (async () => {
+    const token = newOpaqueToken();
+    const now = new Date();
+    await prisma.$transaction([
+      prisma.passwordResetToken.updateMany({
+        where: { userId: user.id, usedAt: null },
+        data: { usedAt: now },
+      }),
+      prisma.passwordResetToken.create({
+        data: {
+          userId: user.id,
+          tokenHash: hashToken(token),
+          expiresAt: new Date(now.getTime() + 1000 * 60 * 30),
+        },
+      }),
+    ]);
 
-  const resetUrl = `${serverConfig.appOrigin}/reset-password?token=${encodeURIComponent(token)}`;
-  // Do not block the generic response on SMTP; this also avoids a timing oracle.
-  void sendPasswordResetEmail({ recipientId: user.id, to: user.email, resetUrl }).catch(() =>
-    console.error("[email] passwordReset: delivery failed"),
-  );
-  await logActivity({
-    actorId: user.id,
-    action: ActivityAction.AUTH_PASSWORD_RESET_REQUEST,
-    entityType: "User",
-    entityId: user.id,
-  });
+    const resetUrl = `${serverConfig.appOrigin}/reset-password?token=${encodeURIComponent(token)}`;
+    void sendPasswordResetEmail({ recipientId: user.id, to: user.email, resetUrl }).catch(() =>
+      console.error("[email] passwordReset: delivery failed"),
+    );
+    await logActivity({
+      actorId: user.id,
+      action: ActivityAction.AUTH_PASSWORD_RESET_REQUEST,
+      entityType: "User",
+      entityId: user.id,
+    });
+  })().catch((error) => console.error("[auth] passwordReset: background task failed", error));
   return { ok: true };
 }
 
 export async function completePasswordReset(input: { token: string; newPassword: string }) {
   const data = parseInput(completePasswordResetSchema, input);
   const ip = clientIp();
-  const limit = checkRateLimit(`reset-complete:${ip}`, 10, 60 * 60_000);
-  if (!limit.allowed) throw rateLimitResponse(limit);
+  if (ip !== "unknown") {
+    const limit = checkRateLimit(`reset-complete:${ip}`, 10, 60 * 60_000);
+    if (!limit.allowed) throw rateLimitResponse(limit);
+  }
   const tokenHash = hashToken(data.token);
   const reset = await prisma.passwordResetToken.findUnique({ where: { tokenHash } });
   if (!reset || reset.usedAt || reset.expiresAt < new Date()) {

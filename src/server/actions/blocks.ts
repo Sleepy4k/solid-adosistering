@@ -147,15 +147,23 @@ export async function updateBlock(input: { id: string; name: string; areaHectare
     const scoped = await getScopedRegionIds(session);
     if (!scoped?.includes(existing.regionId)) throw new Response("Forbidden", { status: 403 });
   }
-  const updated = await prisma.block.update({
-    where: { id: data.id },
-    data: {
-      name: data.name,
-      areaHectare: data.areaHectare,
-      updatedById: actor.id,
-      firebaseSyncStatus: SyncStatus.PENDING,
-    },
-  });
+  let updated: Awaited<ReturnType<typeof prisma.block.update>>;
+  try {
+    updated = await prisma.block.update({
+      where: { id: data.id },
+      data: {
+        name: data.name,
+        areaHectare: data.areaHectare,
+        updatedById: actor.id,
+        firebaseSyncStatus: SyncStatus.PENDING,
+      },
+    });
+  } catch (error) {
+    if (isUniqueConstraint(error)) {
+      throw new Response("Block dengan nama tersebut sudah ada di region ini.", { status: 409 });
+    }
+    throw error;
+  }
 
   let synced = false;
   try {
@@ -205,33 +213,44 @@ export async function createSprayer(input: {
 
   // Region-level thresholds are authoritative once the region has sprayers.
   // Only the first sprayer in a region may initialize them from the submitted
-  // values; later sprayers inherit the existing region configuration.
-  const sprayersInRegion = await prisma.sprayer.count({ where: { block: { regionId: block.regionId } } });
-  const initializesRegion = sprayersInRegion === 0;
-  const dryMaxPercent = initializesRegion ? data.dryMaxPercent : block.region.dryMaxPercent;
-  const wetMinPercent = initializesRegion ? data.wetMinPercent : block.region.wetMinPercent;
+  // values; later sprayers inherit the existing region configuration. The
+  // decision is made inside the transaction under a region row lock so two
+  // concurrent first-sprayer requests cannot both initialize.
+  let created: Awaited<ReturnType<typeof prisma.sprayer.create>>;
+  let dryMaxPercent: number;
+  let wetMinPercent: number;
+  try {
+    ({ created, dryMaxPercent, wetMinPercent } = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM region WHERE id = ${block.regionId} FOR UPDATE`;
+      const region = await tx.region.findUniqueOrThrow({ where: { id: block.regionId } });
+      const sprayersInRegion = await tx.sprayer.count({ where: { block: { regionId: block.regionId } } });
+      const initializesRegion = sprayersInRegion === 0;
+      const dry = initializesRegion ? data.dryMaxPercent : region.dryMaxPercent;
+      const wet = initializesRegion ? data.wetMinPercent : region.wetMinPercent;
 
-  const sprayer = await prisma.$transaction(async (tx) => {
-    const created = await tx.sprayer.create({
-      data: {
-        blockId: block.id,
-        hardwareId: data.hardwareId,
-        displayName: data.displayName,
-        firebaseSyncStatus: SyncStatus.PENDING,
-      },
-    });
-    if (initializesRegion) {
-      await tx.region.update({
-        where: { id: block.regionId },
+      const row = await tx.sprayer.create({
         data: {
-          dryMaxPercent,
-          wetMinPercent,
-          updatedById: actor.id,
+          blockId: block.id,
+          hardwareId: data.hardwareId,
+          displayName: data.displayName,
+          firebaseSyncStatus: SyncStatus.PENDING,
         },
       });
+      if (initializesRegion) {
+        await tx.region.update({
+          where: { id: block.regionId },
+          data: { dryMaxPercent: dry, wetMinPercent: wet, updatedById: actor.id },
+        });
+      }
+      return { created: row, dryMaxPercent: dry, wetMinPercent: wet };
+    }));
+  } catch (error) {
+    if (isUniqueConstraint(error)) {
+      throw new Response("Hardware ID sudah digunakan oleh sprayer lain.", { status: 409 });
     }
-    return created;
-  });
+    throw error;
+  }
+  const sprayer = created;
 
   let synced = false;
   try {

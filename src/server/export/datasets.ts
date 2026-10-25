@@ -166,15 +166,18 @@ export const EXPORT_DATASETS = {
     allow: isAdminOrHigher,
     filterSchema: z.object({
       role: z.enum(Role).optional(),
+      status: z.enum(["active", "inactive"]).optional(),
       search: z.string().trim().max(100).optional(),
     }),
     describeFilters: (filters) => [
       ...(filters.role ? [`Role: ${ROLE_LABELS[filters.role]}`] : []),
+      ...(filters.status ? [`Status: ${filters.status === "active" ? "Aktif" : "Nonaktif"}`] : []),
       ...(filters.search ? [`Pencarian: "${filters.search}"`] : []),
     ],
     async prepare(session, filters, range) {
       const where = await buildUserListWhere(session, {
         ...(filters.role ? { role: filters.role } : {}),
+        ...(filters.status ? { isActive: filters.status === "active" } : {}),
         ...(filters.search ? { search: filters.search } : {}),
         ...(range ? { createdAt: range } : {}),
       });

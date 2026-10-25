@@ -7,4 +7,5 @@ export type HistoryFilters = {
   dateTo?: string;
   cursor?: string;
   limit?: number;
+  sort?: { key?: string; dir?: string };
 };

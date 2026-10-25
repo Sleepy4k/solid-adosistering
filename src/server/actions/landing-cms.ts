@@ -1,13 +1,15 @@
 "use server";
 
-import { ActivityAction } from "@prisma/client";
+import { ActivityAction, type Prisma } from "@prisma/client";
 import { redirect } from "@solidjs/router";
 import { getPublicCached, invalidateLandingAndPublish } from "../cache";
 import { cacheKeys, LANDING_TTL_MS } from "../cache/keys";
 import { prisma } from "../db/prisma";
 import { assertSuperadmin, sanitizeImageUrl } from "../auth/security";
 import { getSession } from "../auth/session";
+import { resolveSort } from "~/lib/shared/tableSort";
 import {
+  cmsListSchema,
   idInputSchema,
   landingLocationSchema,
   landingPartnerSchema,
@@ -94,19 +96,75 @@ export async function getLandingPartners() {
   }
 }
 
-export async function getAllTestimonials() {
-  await requireSuperadmin();
-  return prisma.landingTestimonial.findMany({ orderBy: { sortOrder: "asc" } });
+type CmsListInput = {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  active?: "all" | "active" | "inactive";
+  sort?: { key?: string; dir?: string };
+};
+
+/** Shared admin-list parsing: validated page/size/search/active filter plus an allow-listed sort. */
+function parseCmsList<K extends string>(input: CmsListInput | undefined, keys: readonly K[]) {
+  const data = parseInput(cmsListSchema, input ?? {});
+  const sort = resolveSort(keys, data.sort, { key: "sortOrder" as K, dir: "asc" });
+  const activeWhere =
+    data.active === "active" ? { isActive: true } : data.active === "inactive" ? { isActive: false } : {};
+  return { data, sort, activeWhere, skip: data.page * data.pageSize, take: data.pageSize };
 }
 
-export async function getAllLocations() {
+const TESTIMONIAL_SORT_KEYS = ["name", "role", "sortOrder", "isActive", "createdAt"] as const;
+const LOCATION_SORT_KEYS = ["name", "sortOrder", "isActive", "createdAt"] as const;
+const PARTNER_SORT_KEYS = ["name", "websiteUrl", "sortOrder", "isActive", "createdAt"] as const;
+
+export async function getTestimonialsPage(input?: CmsListInput) {
   await requireSuperadmin();
-  return prisma.landingLocation.findMany({ orderBy: { sortOrder: "asc" } });
+  const { data, sort, activeWhere, skip, take } = parseCmsList(input, TESTIMONIAL_SORT_KEYS);
+  const where: Prisma.LandingTestimonialWhereInput = {
+    ...activeWhere,
+    ...(data.search
+      ? {
+          OR: [
+            { name: { contains: data.search } },
+            { role: { contains: data.search } },
+            { quote: { contains: data.search } },
+          ],
+        }
+      : {}),
+  };
+  const [items, total] = await Promise.all([
+    prisma.landingTestimonial.findMany({ where, orderBy: [{ [sort.key]: sort.dir }, { id: "asc" }], skip, take }),
+    prisma.landingTestimonial.count({ where }),
+  ]);
+  return { items, total };
 }
 
-export async function getAllPartners() {
+export async function getLocationsPage(input?: CmsListInput) {
   await requireSuperadmin();
-  return prisma.landingPartner.findMany({ orderBy: { sortOrder: "asc" } });
+  const { data, sort, activeWhere, skip, take } = parseCmsList(input, LOCATION_SORT_KEYS);
+  const where: Prisma.LandingLocationWhereInput = {
+    ...activeWhere,
+    ...(data.search ? { OR: [{ name: { contains: data.search } }, { description: { contains: data.search } }] } : {}),
+  };
+  const [items, total] = await Promise.all([
+    prisma.landingLocation.findMany({ where, orderBy: [{ [sort.key]: sort.dir }, { id: "asc" }], skip, take }),
+    prisma.landingLocation.count({ where }),
+  ]);
+  return { items, total };
+}
+
+export async function getPartnersPage(input?: CmsListInput) {
+  await requireSuperadmin();
+  const { data, sort, activeWhere, skip, take } = parseCmsList(input, PARTNER_SORT_KEYS);
+  const where: Prisma.LandingPartnerWhereInput = {
+    ...activeWhere,
+    ...(data.search ? { OR: [{ name: { contains: data.search } }, { websiteUrl: { contains: data.search } }] } : {}),
+  };
+  const [items, total] = await Promise.all([
+    prisma.landingPartner.findMany({ where, orderBy: [{ [sort.key]: sort.dir }, { id: "asc" }], skip, take }),
+    prisma.landingPartner.count({ where }),
+  ]);
+  return { items, total };
 }
 
 export async function createTestimonial(input: {

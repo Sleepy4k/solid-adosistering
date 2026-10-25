@@ -8,6 +8,7 @@ import type { LiveSprayerData, Threshold } from "~/lib/shared/irrigation";
 import { isFirebaseConfigured, subscribeToBlock } from "~/lib/client/firebaseClient";
 import { useNow } from "~/lib/client/liveDate";
 import type { AdminUserCard } from "./DashboardTypes";
+import { createDataClock, latestDataUpdate, liveFingerprint } from "./dataClock";
 import { deriveLiveStatus, formatLastUpdated } from "./helpers";
 import { ROUTES } from "~/constants/routes";
 
@@ -17,6 +18,7 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
   const [error, setError] = createSignal<string>("");
   const [menuOpen, setMenuOpen] = createSignal<boolean>(false);
   const nowMs = useNow(30_000);
+  const dataClock = createDataClock();
 
   onMount(() => {
     if (props.user.sprayersByBlock.length === 0) {
@@ -29,13 +31,17 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
       return;
     }
 
-    const blockMap = new Map<string, { regionName: string; blockName: string; threshold: Threshold }>();
+    const blockMap = new Map<
+      string,
+      { regionName: string; blockName: string; sprayerIds: string[]; threshold: Threshold }
+    >();
     for (const s of props.user.sprayersByBlock) {
       const key = `${s.regionName}::${s.blockName}`;
       if (!blockMap.has(key)) {
         blockMap.set(key, {
           regionName: s.regionName,
           blockName: s.blockName,
+          sprayerIds: [],
           threshold: s.threshold
             ? {
                 dryMaxPercent: s.threshold.dryMaxPercent,
@@ -48,6 +54,7 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
             : { dryMaxPercent: 40, wetMinPercent: 80, volumeDivider: s.volumeDivider },
         });
       }
+      blockMap.get(key)!.sprayerIds.push(s.hardwareId);
     }
 
     let loaded = 0;
@@ -56,8 +63,14 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
 
     for (const [key, block] of blockMap) {
       const unsub = subscribeToBlock(
-        { regionName: block.regionName, blockName: block.blockName, threshold: block.threshold },
+        {
+          regionName: block.regionName,
+          blockName: block.blockName,
+          sprayerIds: block.sprayerIds,
+          threshold: block.threshold,
+        },
         (sprayers) => {
+          for (const row of sprayers) dataClock.observe(`${key}::${row.sprayerId}`, liveFingerprint(row));
           setAllLive((prev) => {
             const next = new Map(prev);
             next.set(key, sprayers);
@@ -123,15 +136,15 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
     return value === null ? "-" : `${value} / ${freshSprayers().length}`;
   };
 
-  // "Terakhir update" must describe the device, not this card's receive time.
-  // `lastUpdated` is epoch seconds, but tolerate legacy millisecond payloads.
-  const latestDeviceUpdate = () => {
+  // "Terakhir update" is the stored latest data update across this user's
+  // sprayers, advanced by any change observed while the card is open.
+  const latestDataAt = () => {
     let latest: number | null = null;
-    for (const sprayer of allSprayers()) {
-      const value = sprayer.lastUpdated;
-      if (value == null || !Number.isFinite(value) || value <= 0) continue;
-      const seconds = value > 1e12 ? Math.floor(value / 1000) : value;
-      if (latest === null || seconds > latest) latest = seconds;
+    const observed = Object.values(dataClock.changedAt());
+    const observedMax = observed.length > 0 ? Math.max(...observed) : undefined;
+    for (const sprayer of props.user.sprayersByBlock) {
+      const value = latestDataUpdate(sprayer.lastDataAt, observedMax);
+      if (value !== null && (latest === null || value > latest)) latest = value;
     }
     return latest;
   };
@@ -247,9 +260,7 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
       </div>
 
       <p class="mt-4 text-right text-xs italic text-[#808080]">
-        {latestDeviceUpdate() === null
-          ? "Belum ada data"
-          : `Terakhir update ${formatLastUpdated(latestDeviceUpdate())}`}
+        {latestDataAt() === null ? "Belum ada data" : `Terakhir update ${formatLastUpdated(new Date(latestDataAt()!))}`}
       </p>
     </Card>
   );

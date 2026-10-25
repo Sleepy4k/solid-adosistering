@@ -4,7 +4,7 @@ import { useToast } from "~/components/shared/ToastProvider";
 import type { getRegions } from "~/server/actions/regions";
 import { createRegion, updateRegion } from "~/server/actions/regions";
 
-type RegionRow = Awaited<ReturnType<typeof getRegions>>[number];
+type RegionRow = Awaited<ReturnType<typeof getRegions>>["items"][number];
 
 const inputCls =
   "rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 w-full";

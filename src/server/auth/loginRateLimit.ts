@@ -130,7 +130,10 @@ function advanceBucket(bucket: Bucket, now: number): Bucket {
   next.failures += 1;
   next.lastEventAt = now;
 
-  if (next.failures >= MAX_ATTEMPTS) {
+  // Reservations happen before the password is verified, so the MAX_ATTEMPTS-th
+  // reservation must still be verified. The lock only applies to the reservation
+  // after it, i.e. once MAX_ATTEMPTS attempts have really been spent.
+  if (next.failures > MAX_ATTEMPTS) {
     const cooldownMs = COOLDOWN_LADDER_MS[Math.min(next.level, COOLDOWN_LADDER_MS.length - 1)];
     next.cooldownUntil = now + cooldownMs;
     next.level = Math.min(next.level + 1, COOLDOWN_LADDER_MS.length - 1);

@@ -165,8 +165,8 @@ export async function sendWelcomeUserEmail(input: {
   to: string;
   name: string;
   email: string;
-  password: string;
-  loginUrl: string;
+  setPasswordUrl: string;
+  expiresInHours: number;
 }) {
   const config = await getEmailBrandConfig();
   const template = welcomeUserTemplate({ ...input, config });

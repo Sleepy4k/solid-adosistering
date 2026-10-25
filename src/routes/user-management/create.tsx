@@ -5,17 +5,12 @@ import { createUserWithProfile, getUserFormOptions } from "~/server/actions/user
 import { useToast } from "~/components/shared/ToastProvider";
 import { SkCard } from "~/components/shared/Skeleton";
 import { SelectSearch } from "~/components/ui/SelectSearch";
+import { searchRegionOptions } from "~/server/actions/options";
 import { SimpleSelect } from "~/components/ui/SimpleSelect";
 import type { Role } from "@prisma/client";
-import { ChevronLeft, Eye, EyeOff } from "lucide-solid";
+import { ChevronLeft } from "lucide-solid";
 import { debounce } from "~/lib/shared/debounce";
-import {
-  validateEmail,
-  validateName,
-  validateNewPassword,
-  validatePasswordConfirm,
-  validatePhone,
-} from "~/lib/shared/validation";
+import { validateEmail, validateName, validatePhone } from "~/lib/shared/validation";
 
 const loadFormOptions = query(() => getUserFormOptions(), "user-create-form-options");
 export const route = { preload: () => loadFormOptions() };
@@ -57,9 +52,6 @@ export default function TambahUser() {
   const [email, setEmail] = createSignal<string>("");
   const [role, setRole] = createSignal<Role>("USER");
   const [regionIds, setRegionIds] = createSignal<string[]>([]);
-  const [password, setPassword] = createSignal<string>("");
-  const [confirmPw, setConfirmPw] = createSignal<string>("");
-  const [showPw, setShowPw] = createSignal<boolean>(false);
 
   const [whatsapp, setWhatsapp] = createSignal<string>("");
   const [nickname, setNickname] = createSignal<string>("");
@@ -78,18 +70,14 @@ export default function TambahUser() {
   const [nameErr, setNameErr] = createSignal<string>("");
   const [emailErr, setEmailErr] = createSignal<string>("");
   const [whatsappErr, setWhatsappErr] = createSignal<string>("");
-  const [passwordErr, setPasswordErr] = createSignal<string>("");
-  const [confirmPwErr, setConfirmPwErr] = createSignal<string>("");
 
   const validateNameD = debounce((v: string) => setNameErr(validateName(v)), 300);
   const validateEmailD = debounce((v: string) => setEmailErr(validateEmail(v)), 300);
   const validateWhatsappD = debounce((v: string) => setWhatsappErr(validatePhone(v)), 300);
-  const validatePasswordD = debounce((v: string) => setPasswordErr(validateNewPassword(v)), 300);
   onCleanup(() => {
     validateNameD.cancel();
     validateEmailD.cancel();
     validateWhatsappD.cancel();
-    validatePasswordD.cancel();
   });
 
   const onNameInput = (v: string) => {
@@ -107,17 +95,6 @@ export default function TambahUser() {
     if (whatsappErr()) setWhatsappErr(validatePhone(v));
     else validateWhatsappD(v);
   };
-  const onPasswordInput = (v: string) => {
-    setPassword(v);
-    if (passwordErr()) setPasswordErr(validateNewPassword(v));
-    else validatePasswordD(v);
-    if (confirmPw() || confirmPwErr()) setConfirmPwErr(validatePasswordConfirm(v, confirmPw()));
-  };
-  const onConfirmPwInput = (v: string) => {
-    setConfirmPw(v);
-    setConfirmPwErr(validatePasswordConfirm(password(), v));
-  };
-
   const actorRole = createMemo(() => formOptions()?.actorRole ?? "ADMIN");
   const targetRole = createMemo<Role>(() => (actorRole() === "ADMIN" ? "USER" : role()));
   const selectedRegion = createMemo(() => regionIds()[0] ?? "");
@@ -146,19 +123,14 @@ export default function TambahUser() {
     validateNameD.cancel();
     validateEmailD.cancel();
     validateWhatsappD.cancel();
-    validatePasswordD.cancel();
 
     const nErr = validateName(name());
     const eErr = validateEmail(email());
     const waErr = validatePhone(whatsapp());
-    const pwErr = validateNewPassword(password());
-    const cfErr = validatePasswordConfirm(password(), confirmPw());
     setNameErr(nErr);
     setEmailErr(eErr);
     setWhatsappErr(waErr);
-    setPasswordErr(pwErr);
-    setConfirmPwErr(cfErr);
-    if (nErr || eErr || waErr || pwErr || cfErr) return;
+    if (nErr || eErr || waErr) return;
 
     const assignmentError = validateAssignment();
     if (assignmentError) {
@@ -169,10 +141,9 @@ export default function TambahUser() {
 
     setLoading(true);
     try {
-      await createUserWithProfile({
+      const created = await createUserWithProfile({
         name: name(),
         email: email(),
-        password: password(),
         role: targetRole(),
         regionIds: targetRole() === "SUPERADMIN" ? [] : regionIds(),
         whatsapp: whatsapp() || undefined,
@@ -186,7 +157,19 @@ export default function TambahUser() {
         internalNotes: internalNotes() || undefined,
         deviceUsername: deviceUsername() || undefined,
       });
-      notify({ kind: "success", title: `Pengguna "${name()}" berhasil dibuat` });
+      if (created.emailSent) {
+        notify({
+          kind: "success",
+          title: `Pengguna "${name()}" berhasil dibuat`,
+          message: "Tautan atur kata sandi telah dikirim ke email pengguna.",
+        });
+      } else {
+        notify({
+          kind: "error",
+          title: `Pengguna "${name()}" dibuat, tetapi email gagal terkirim`,
+          message: "Gunakan tombol Kirim ulang tautan di daftar pengguna.",
+        });
+      }
       navigate("/user-management");
     } catch (err) {
       const msg = err instanceof Response ? await err.text() : "Gagal membuat pengguna. Periksa email atau coba lagi.";
@@ -299,10 +282,8 @@ export default function TambahUser() {
                     <SelectSearch
                       value={selectedRegion()}
                       placeholder="Pilih region..."
-                      options={[
-                        { value: "", label: "Pilih region..." },
-                        ...(formOptions()?.regions ?? []).map((region) => ({ value: region.id, label: region.name })),
-                      ]}
+                      selectedLabel={formOptions()?.regions.find((region) => region.id === selectedRegion())?.name}
+                      loadOptions={(q) => searchRegionOptions({ query: q, limit: 50 })}
                       onChange={setSingleRegion}
                     />
                   }
@@ -388,49 +369,9 @@ export default function TambahUser() {
               </div>
             </FormSection>
 
-            <FormSection title="Kredensial" subtitle="Password untuk login ke aplikasi">
-              <div class="grid gap-4 sm:grid-cols-2">
-                <Field label="Password" required>
-                  <div class="relative">
-                    <input
-                      type={showPw() ? "text" : "password"}
-                      value={password()}
-                      onInput={(e) => onPasswordInput(e.currentTarget.value)}
-                      onBlur={() => setPasswordErr(validateNewPassword(password()))}
-                      placeholder="Min. 8 karakter"
-                      class={`${baseInput} pr-11 ${passwordErr() ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20" : ""}`}
-                      aria-invalid={passwordErr() ? "true" : undefined}
-                    />
-                    <button
-                      type="button"
-                      class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                      onClick={() => setShowPw((v) => !v)}
-                    >
-                      <Show when={showPw()} fallback={<Eye size={16} />}>
-                        <EyeOff size={16} />
-                      </Show>
-                    </button>
-                  </div>
-                  <Show when={passwordErr()}>
-                    <span class="mt-0.5 text-xs text-rose-600">{passwordErr()}</span>
-                  </Show>
-                </Field>
-                <Field label="Konfirmasi Password" required>
-                  <input
-                    type="password"
-                    value={confirmPw()}
-                    onInput={(e) => onConfirmPwInput(e.currentTarget.value)}
-                    onBlur={() => setConfirmPwErr(validatePasswordConfirm(password(), confirmPw()))}
-                    placeholder="Ulangi password"
-                    class={`${baseInput} ${confirmPwErr() ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20" : ""}`}
-                    aria-invalid={confirmPwErr() ? "true" : undefined}
-                  />
-                  <Show when={confirmPwErr()}>
-                    <span class="mt-0.5 text-xs text-rose-600">{confirmPwErr()}</span>
-                  </Show>
-                </Field>
-              </div>
-            </FormSection>
+            <p class="text-sm text-slate-500">
+              Pengguna akan menerima email berisi tautan untuk mengatur kata sandi sendiri (berlaku 72 jam).
+            </p>
 
             <div class="flex justify-end gap-3">
               <button

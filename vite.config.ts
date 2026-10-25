@@ -72,6 +72,14 @@ export default defineConfig({
     }),
     tailwindcss(),
     nitro({
+      // Hashed build output is immutable; unhashed files under public/ get a
+      // moderate TTL so replacements still propagate. HTML/SSR/API stay uncached.
+      routeRules: {
+        "/_build/assets/**": { headers: { "cache-control": "public, max-age=31536000, immutable" } },
+        "/landing/**": { headers: { "cache-control": "public, max-age=2592000" } },
+        "/icons/**": { headers: { "cache-control": "public, max-age=2592000" } },
+        "/fonts/**": { headers: { "cache-control": "public, max-age=2592000" } },
+      },
       // The Admin SDK is CommonJS with circular package internals. Bundling it
       // with Rolldown breaks SDK_VERSION initialisation, so keep it as an
       // external production dependency and let Node resolve it at runtime.

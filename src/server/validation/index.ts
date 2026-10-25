@@ -4,3 +4,4 @@ export * from "./users";
 export * from "./regions";
 export * from "./settings";
 export * from "./content";
+export * from "./options";

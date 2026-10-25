@@ -33,3 +33,7 @@ export const AUTH_ACTIONS = [
   "AUTH_PASSWORD_RESET_REQUEST",
   "AUTH_PASSWORD_RESET_COMPLETE",
 ] as ActivityAction[];
+
+/** Columns the log tables may be sorted by; the server maps each key to a real column. */
+export const LOG_SORT_KEYS = ["createdAt", "actor", "action", "entityType", "entityId", "ipAddress"] as const;
+export type LogSortKey = (typeof LOG_SORT_KEYS)[number];

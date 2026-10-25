@@ -1,9 +1,10 @@
 import { Map } from "lucide-solid";
-import { createEffect, createSignal, onCleanup } from "solid-js";
+import { createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { query, createAsync } from "@solidjs/router";
 import { Card, CardHeader } from "~/components/ui/Card";
 import { LeafletMap, type LeafletPolygon, type LeafletRegionMarker } from "~/components/shared/LeafletMap";
 import { subscribeToBlock } from "~/lib/client/firebaseClient";
+import { formatBlockName } from "~/lib/shared/irrigation";
 import { getMapDisplayConfig } from "~/server/actions/map";
 import type { DashboardRegion } from "./DashboardTypes";
 import { colorForIndex, colorForStatus, pointsFromGeojson } from "./helpers";
@@ -24,6 +25,7 @@ export function MapCard(props: { regions?: DashboardRegion[] }) {
             {
               regionName: region.name,
               blockName: block.name,
+              sprayerIds: block.sprayers.map((s) => s.hardwareId),
               threshold: region.threshold ?? { dryMaxPercent: 40, wetMinPercent: 80 },
             },
             (sprayers) => {
@@ -35,7 +37,9 @@ export function MapCard(props: { regions?: DashboardRegion[] }) {
                   : statuses.includes("Lembab")
                     ? "Lembab"
                     : "";
-              setBlockStatuses((current) => ({ ...current, [block.id]: status }));
+              setBlockStatuses((current) =>
+                current[block.id] === status ? current : { ...current, [block.id]: status },
+              );
             },
           ),
         );
@@ -49,15 +53,24 @@ export function MapCard(props: { regions?: DashboardRegion[] }) {
       .filter((region) => region.latitude !== null && region.longitude !== null)
       .map((region) => ({ id: region.id, name: region.name, lat: region.latitude!, lng: region.longitude! }));
 
-  const polygons = (): LeafletPolygon[] =>
+  // Geometry only depends on props, so parse GeoJSON once per regions change
+  // rather than on every status/color update.
+  const baseShapes = createMemo(() =>
     (props.regions ?? []).flatMap((region, regionIndex) =>
       region.blocks.map((block, blockIndex) => ({
         id: block.id,
-        name: block.name.replace(/_/g, " "),
+        name: formatBlockName(block.name),
         points: pointsFromGeojson(block.polygonGeojson),
-        color: colorForStatus(blockStatuses()[block.id], mapColors()) ?? colorForIndex(regionIndex + blockIndex),
+        fallbackColor: colorForIndex(regionIndex + blockIndex),
       })),
-    );
+    ),
+  );
+
+  const polygons = (): LeafletPolygon[] =>
+    baseShapes().map(({ fallbackColor, ...shape }) => ({
+      ...shape,
+      color: colorForStatus(blockStatuses()[shape.id], mapColors()) ?? fallbackColor,
+    }));
 
   return (
     <Card class="overflow-hidden">

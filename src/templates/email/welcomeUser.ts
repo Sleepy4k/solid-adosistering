@@ -3,43 +3,35 @@ import { baseEmailTemplate, escAttr, escHtml, type EmailBrandConfig } from "./ba
 export function welcomeUserTemplate(input: {
   name: string;
   email: string;
-  password: string;
-  loginUrl: string;
+  setPasswordUrl: string;
+  expiresInHours: number;
   config?: Partial<EmailBrandConfig>;
 }) {
   const configuredColor = input.config?.primaryColor;
   const primaryColor = configuredColor && /^#[0-9a-fA-F]{6}$/.test(configuredColor) ? configuredColor : "#186D3C";
-  const subject = "Selamat Datang di Adosistering — Akun Anda Telah Dibuat";
+  const subject = "Selamat Datang di Adosistering - Atur Kata Sandi Anda";
   const bodyHtml = `
     <p style="margin:0 0 16px;font-size:15px;color:#374151">Halo, <strong>${escHtml(input.name)}</strong>,</p>
     <p style="margin:0 0 16px;font-size:15px;color:#374151">
-      Akun Adosistering Anda telah berhasil dibuat oleh administrator. Berikut adalah kredensial awal Anda:
+      Akun Adosistering Anda telah dibuat oleh administrator dengan email
+      <strong>${escHtml(input.email)}</strong>. Klik tombol di bawah untuk mengatur kata sandi Anda sebelum masuk.
     </p>
-    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px 20px;margin:0 0 16px">
-      <table cellpadding="4" cellspacing="0" style="border-collapse:collapse;width:100%">
-        <tr>
-          <td style="font-size:13px;color:#6b7280;width:100px">Email</td>
-          <td style="font-size:14px;font-weight:600;color:#166534">${escHtml(input.email)}</td>
-        </tr>
-        <tr>
-          <td style="font-size:13px;color:#6b7280">Password</td>
-          <td style="font-size:14px;font-weight:600;color:#166534;font-family:monospace">${escHtml(input.password)}</td>
-        </tr>
-      </table>
-    </div>
     <div style="text-align:center;margin:28px 0">
-      <a href="${escAttr(input.loginUrl)}"
+      <a href="${escAttr(input.setPasswordUrl)}"
          style="display:inline-block;background:${primaryColor};color:#fff;text-decoration:none;padding:14px 32px;border-radius:8px;font-weight:700;font-size:15px">
-        Masuk Sekarang
+        Atur Kata Sandi Anda
       </a>
     </div>
+    <p style="margin:0 0 8px;font-size:13px;color:#6b7280">Atau salin tautan berikut ke browser Anda:</p>
+    <p style="margin:0 0 16px;font-size:12px;color:${primaryColor};word-break:break-all">${escHtml(input.setPasswordUrl)}</p>
     <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px 16px;margin:0 0 16px">
       <p style="margin:0;font-size:13px;color:#92400e">
-        🔒 Demi keamanan, segera ubah password Anda setelah pertama kali masuk melalui menu <em>Profil → Ubah Password</em>.
+        Tautan ini berlaku selama <strong>${input.expiresInHours} jam</strong> dan hanya dapat digunakan satu kali.
+        Jika kedaluwarsa, minta administrator mengirim ulang tautan atau gunakan menu Lupa Password.
       </p>
     </div>
   `;
-  const bodyText = `Halo, ${input.name},\n\nAkun Adosistering Anda telah dibuat.\n\nEmail: ${input.email}\nPassword: ${input.password}\n\nLogin di: ${input.loginUrl}\n\nSegera ubah password Anda setelah pertama kali masuk.`;
+  const bodyText = `Halo, ${input.name},\n\nAkun Adosistering Anda telah dibuat dengan email ${input.email}.\n\nAtur kata sandi Anda melalui tautan berikut:\n${input.setPasswordUrl}\n\nTautan berlaku ${input.expiresInHours} jam dan hanya dapat digunakan satu kali. Jika kedaluwarsa, minta administrator mengirim ulang tautan.`;
 
   return baseEmailTemplate({ subject, bodyHtml, bodyText, config: input.config });
 }

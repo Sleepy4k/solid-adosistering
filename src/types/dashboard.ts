@@ -21,7 +21,7 @@ export type DashboardRegion = {
     id: string;
     name: string;
     polygonGeojson: Prisma.JsonValue | null;
-    sprayers: { id: string; hardwareId: string; displayName: string; lastWateredAt: string | null }[];
+    sprayers: { id: string; hardwareId: string; displayName: string; lastDataAt: string | null }[];
   }[];
 };
 
@@ -38,6 +38,8 @@ export type AdminUserCard = {
     blockName: string;
     hardwareId: string;
     sprayerId: string;
+    /** Stored "latest data update" (ISO) for this sprayer. */
+    lastDataAt: string | null;
     volumeDivider: number;
     threshold: {
       dryMaxPercent: number;
@@ -49,19 +51,28 @@ export type AdminUserCard = {
   }[];
 };
 
+export type SuperadminRegionRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  blockCount: number;
+  adminCount: number;
+  syncStatus: string;
+};
+
+/** Totals and map markers only; the region table is paged separately. */
 export type SuperadminSummary = {
   totalRegions: number;
   totalBlocks: number;
   totalAdmins: number;
   totalUsers: number;
-  regions: {
-    id: string;
-    name: string;
-    description: string | null;
-    latitude: number | null;
-    longitude: number | null;
-    blockCount: number;
-    adminCount: number;
-    syncStatus: string;
-  }[];
+  markers: { id: string; name: string; latitude: number; longitude: number }[];
+};
+
+/** KPI counters for the admin dashboard, computed with COUNT queries. */
+export type AdminDashboardStats = {
+  totalUsers: number;
+  activeUsers: number;
+  attentionUsers: number;
+  sprayerCount: number;
 };

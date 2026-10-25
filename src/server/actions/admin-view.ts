@@ -4,15 +4,15 @@ import { redirect } from "@solidjs/router";
 import { prisma } from "../db/prisma";
 import { assertAdminOrHigher } from "../auth/security";
 import { getSession } from "../auth/session";
-import { getScopedRegionIds, getRegionThresholdMap, scheduleFirebaseRefresh } from "../domain";
-import { getLastWateredBySprayer } from "../domain/lastWatered";
+import { getScopedRegionIds, getRegionThresholdMap, refreshFirebaseWithin } from "../domain";
+import { getDataStampBySprayer } from "../domain/dataStamp";
 import type { DashboardRegion } from "~/types/dashboard";
 
 export async function getUserDashboardView(userId: string): Promise<{ regions: DashboardRegion[] }> {
   const session = await getSession();
   if (!session) throw redirect("/login");
   assertAdminOrHigher(session);
-  scheduleFirebaseRefresh();
+  await refreshFirebaseWithin();
 
   if (!userId || userId.length > 128 || !/^[a-zA-Z0-9_-]+$/.test(userId)) {
     throw new Response("User ID tidak valid.", { status: 400 });
@@ -50,12 +50,12 @@ export async function getUserDashboardView(userId: string): Promise<{ regions: D
   const assignedSprayerIds = assignments.flatMap((a) =>
     a.region.blocks.flatMap((block) => block.sprayers.map((sprayer) => sprayer.id)),
   );
-  const [thresholdMap, lastWateredMap] = await Promise.all([
+  const [thresholdMap, dataStampMap] = await Promise.all([
     getRegionThresholdMap(
       userId,
       assignments.map((a) => a.regionId),
     ),
-    getLastWateredBySprayer(assignedSprayerIds),
+    getDataStampBySprayer(assignedSprayerIds),
   ]);
 
   return {
@@ -89,7 +89,7 @@ export async function getUserDashboardView(userId: string): Promise<{ regions: D
             id: sprayer.id,
             hardwareId: sprayer.hardwareId,
             displayName: sprayer.displayName,
-            lastWateredAt: lastWateredMap.get(sprayer.id) ?? null,
+            lastDataAt: dataStampMap.get(sprayer.id) ?? null,
           })),
         })),
       };

@@ -2,7 +2,6 @@ import { CalendarClock, Droplets, Gauge, Power, Wind } from "lucide-solid";
 import { Show } from "solid-js";
 import { Badge } from "~/components/ui/Badge";
 import { Toggle } from "~/components/ui/Toggle";
-import { formatJakartaDateTime } from "~/lib/shared/datetime";
 import type { LiveSprayerData, Threshold } from "~/lib/shared/irrigation";
 import { deriveLiveStatus, formatLastUpdated, liveStatusMeta, moistureTone, pumpBadgeTone } from "./helpers";
 
@@ -10,13 +9,16 @@ export type SprayerMeta = {
   id: string;
   hardwareId: string;
   displayName: string;
-  lastWateredAt?: string | null;
+  /** Stored "latest data update" (ISO), kept in the website database. */
+  lastDataAt?: string | null;
 };
 
 export function SprayerCard(props: {
   data: LiveSprayerData | null;
   meta?: SprayerMeta;
   nowMs: number;
+  /** Latest data update in epoch ms: stored stamp or a change seen on this page. */
+  dataUpdatedAtMs?: number | null;
   monitorError?: boolean;
   threshold: Threshold;
   showWindDirection: boolean;
@@ -28,9 +30,8 @@ export function SprayerCard(props: {
   const status = () => deriveLiveStatus(props.data, props.nowMs, props.monitorError);
   const statusMeta = () => liveStatusMeta(status());
   const moisture = () => moistureTone(props.data?.moisturePercent ?? 0, props.threshold);
-  // Only show the last watering event while water is actually flowing; a stale
-  // event timestamp from yesterday must not read as current activity.
-  const lastWateredAt = () => (status() === "watering" ? (props.meta?.lastWateredAt ?? null) : null);
+  // `live_data.last_updated` is the device's latest watering timestamp.
+  const lastWatered = () => props.data?.lastUpdated ?? null;
 
   return (
     <div class="rounded-xl border border-gray-200 bg-white p-5">
@@ -89,14 +90,14 @@ export function SprayerCard(props: {
             {(data) => <Badge tone={pumpBadgeTone(data().pumpStatus)}>{data().pumpOn ? "Aktif" : "Mati"}</Badge>}
           </Show>
         </div>
-        <Show when={lastWateredAt()}>
+        <Show when={lastWatered()}>
           {(value) => (
             <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
               <span class="inline-flex min-w-0 items-center gap-2 text-[#4F4F4F]">
                 <CalendarClock size={16} class="shrink-0" /> Terakhir siram
               </span>
               <span class="min-w-0 break-words text-right font-semibold text-[#186D3C]">
-                {formatJakartaDateTime(value())}
+                {formatLastUpdated(value())}
               </span>
             </div>
           )}
@@ -111,7 +112,7 @@ export function SprayerCard(props: {
       </Show>
 
       <p class="mt-4 text-right text-xs italic text-[#4F4F4F]">
-        Terakhir update {formatLastUpdated(props.data?.lastUpdated ?? null)}
+        Terakhir update {formatLastUpdated(props.dataUpdatedAtMs ? new Date(props.dataUpdatedAtMs) : null)}
       </p>
 
       <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[#C2C2C2] pt-4">

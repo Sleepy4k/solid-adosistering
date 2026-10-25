@@ -1,7 +1,7 @@
 "use server";
 
 import type { MoistureStatus } from "@prisma/client";
-import { ActivityAction, SyncStatus } from "@prisma/client";
+import { ActivityAction, RelayState, SyncStatus } from "@prisma/client";
 import { redirect } from "@solidjs/router";
 import { updateRegionSettings, updateSprayerControl } from "../integrations/firebase";
 import { prisma } from "../db/prisma";
@@ -175,6 +175,35 @@ type AutomaticModeSprayer = {
 const MANUAL_OFF_MAX_ATTEMPTS = 3;
 
 /**
+ * Close every open ON irrigation event of the given sprayers after their relay
+ * was acknowledged OFF (mirrors what `overridePump` records on OFF). Hardware is
+ * already off at this point, so a bookkeeping failure is logged rather than
+ * thrown: it must never turn a safe state into a request failure or re-enable
+ * anything.
+ */
+async function closeOpenIrrigationEvents(sprayerIds: string[]) {
+  if (sprayerIds.length === 0) return;
+  try {
+    await prisma.$transaction(async (tx) => {
+      const open = await tx.irrigationEvent.findMany({
+        where: { sprayerId: { in: sprayerIds }, relay: RelayState.ON, endedAt: null },
+        select: { id: true, startedAt: true },
+      });
+      const endedAt = new Date();
+      for (const event of open) {
+        const durationSeconds = Math.max(0, Math.round((endedAt.getTime() - event.startedAt.getTime()) / 1000));
+        await tx.irrigationEvent.updateMany({
+          where: { id: event.id, endedAt: null },
+          data: { endedAt, durationSeconds },
+        });
+      }
+    });
+  } catch (error) {
+    console.error("[region] failed to close open irrigation events after OFF", error);
+  }
+}
+
+/**
  * Best-effort return to the safe hardware state. Each sprayer gets a bounded
  * number of immediate attempts (no backoff: this runs while the per-region lock
  * is held and the request is already failing). Returns the internal sprayer ids
@@ -183,6 +212,7 @@ const MANUAL_OFF_MAX_ATTEMPTS = 3;
  */
 async function forceManualOff(regionName: string, sprayers: AutomaticModeSprayer[]): Promise<string[]> {
   const failedSprayerIds: string[] = [];
+  const offSprayerIds: string[] = [];
   for (const sprayer of sprayers) {
     for (let attempt = 1; attempt <= MANUAL_OFF_MAX_ATTEMPTS; attempt += 1) {
       try {
@@ -193,6 +223,7 @@ async function forceManualOff(regionName: string, sprayers: AutomaticModeSprayer
           mode: "MANUAL",
           relay: "OFF",
         });
+        offSprayerIds.push(sprayer.id);
         break;
       } catch (error) {
         if (attempt === MANUAL_OFF_MAX_ATTEMPTS) {
@@ -205,6 +236,7 @@ async function forceManualOff(regionName: string, sprayers: AutomaticModeSprayer
       }
     }
   }
+  await closeOpenIrrigationEvents(offSprayerIds);
   return failedSprayerIds;
 }
 
@@ -222,6 +254,7 @@ function compensationUnverifiedResponse() {
 
 async function setActiveSprayersMode(regionName: string, sprayers: AutomaticModeSprayer[], mode: "AUTO" | "MANUAL") {
   const failedSprayerIds: string[] = [];
+  const offSprayerIds: string[] = [];
   for (const sprayer of sprayers) {
     try {
       await updateSprayerControl({
@@ -231,11 +264,13 @@ async function setActiveSprayersMode(regionName: string, sprayers: AutomaticMode
         mode,
         relay: "OFF",
       });
+      offSprayerIds.push(sprayer.id);
     } catch (error) {
       console.error(`[region] failed to set ${mode}/OFF for sprayer ${sprayer.id}`, error);
       failedSprayerIds.push(sprayer.id);
     }
   }
+  await closeOpenIrrigationEvents(offSprayerIds);
   return failedSprayerIds;
 }
 

@@ -1,11 +1,19 @@
-import { createEffect, createSignal, For, on, Show } from "solid-js";
+import { createEffect, createSignal, For, on, onCleanup, Show } from "solid-js";
 import { ChevronDown, Search, X } from "lucide-solid";
 import { Popover } from "~/components/ui/Popover";
 
 export type SelectOption = { value: string; label: string };
 
+/**
+ * Static mode (`options`) filters locally and is only meant for tiny fixed lists.
+ * Async mode (`loadOptions`) never filters in the browser: every query goes to the server.
+ */
 export function SelectSearch(props: {
-  options: SelectOption[];
+  options?: SelectOption[];
+  /** Server-side search. Called with the trimmed query (empty string when the panel opens). */
+  loadOptions?: (query: string) => Promise<SelectOption[]>;
+  /** Label of the currently selected value, shown when it is not in the loaded results. */
+  selectedLabel?: string;
   value: string;
   placeholder?: string;
   searchPlaceholder?: string;
@@ -19,28 +27,95 @@ export function SelectSearch(props: {
   let containerRef: HTMLDivElement | undefined;
   let inputRef: HTMLInputElement | undefined;
 
-  const selected = () => props.options.find((o) => o.value === props.value);
+  const [remote, setRemote] = createSignal<SelectOption[]>([]);
+  const [loading, setLoading] = createSignal<boolean>(false);
+  const [failed, setFailed] = createSignal<boolean>(false);
+  const [pickedOption, setPickedOption] = createSignal<SelectOption | null>(null);
+  let seq = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const isAsync = () => props.loadOptions !== undefined;
+  const staticOptions = () => props.options ?? [];
+
+  const selected = (): SelectOption | undefined => {
+    if (!props.value) return undefined;
+    const found = isAsync()
+      ? remote().find((o) => o.value === props.value)
+      : staticOptions().find((o) => o.value === props.value);
+    if (found) return found;
+    const picked = pickedOption();
+    if (picked && picked.value === props.value) return picked;
+    if (props.selectedLabel) return { value: props.value, label: props.selectedLabel };
+    return staticOptions().find((o) => o.value === props.value);
+  };
   const filtered = () => {
+    if (isAsync()) return remote();
     const q = query().toLowerCase().trim();
-    if (!q) return props.options;
-    return props.options.filter((o) => o.label.toLowerCase().includes(q));
+    if (!q) return staticOptions();
+    return staticOptions().filter((o) => o.label.toLowerCase().includes(q));
   };
 
-  const pick = (value: string) => {
+  const fetchRemote = async (q: string) => {
+    const load = props.loadOptions;
+    if (!load) return;
+    const mySeq = ++seq;
+    setLoading(true);
+    setFailed(false);
+    try {
+      const result = await load(q);
+      if (mySeq !== seq) return;
+      setRemote(result);
+    } catch {
+      if (mySeq !== seq) return;
+      setRemote([]);
+      setFailed(true);
+    } finally {
+      if (mySeq === seq) setLoading(false);
+    }
+  };
+
+  const onQueryInput = (value: string) => {
+    setQuery(value);
+    if (!isAsync()) return;
+    clearTimeout(timer);
+    setLoading(true);
+    timer = setTimeout(() => void fetchRemote(value.trim()), 250);
+  };
+
+  onCleanup(() => {
+    clearTimeout(timer);
+    seq++;
+  });
+
+  const pick = (opt: SelectOption) => {
     setOpen(false);
-    props.onChange(value);
+    setPickedOption(opt.value ? opt : null);
+    props.onChange(opt.value);
     setQuery("");
   };
 
   const clear = (e: MouseEvent) => {
     e.stopPropagation();
+    setPickedOption(null);
     props.onChange("");
     setQuery("");
   };
 
   createEffect(
     on(open, (isOpen) => {
-      if (isOpen) setTimeout(() => inputRef?.focus(), 10);
+      if (isOpen) {
+        setTimeout(() => inputRef?.focus(), 10);
+        // A reopened panel starts from an empty query, matching its unfiltered results.
+        setQuery("");
+        if (isAsync()) {
+          clearTimeout(timer);
+          void fetchRemote("");
+        }
+      } else {
+        clearTimeout(timer);
+        seq++;
+        setLoading(false);
+      }
     }),
   );
 
@@ -95,13 +170,22 @@ export function SelectSearch(props: {
             placeholder={props.searchPlaceholder ?? "Cari..."}
             aria-label={props.searchPlaceholder ?? "Cari"}
             value={query()}
-            onInput={(e) => setQuery(e.currentTarget.value)}
+            onInput={(e) => onQueryInput(e.currentTarget.value)}
           />
         </div>
         <ul class="max-h-52 overflow-y-auto py-1">
+          <Show when={isAsync() && loading()}>
+            <li class="px-4 py-2 text-sm text-slate-400" role="status">
+              Memuat...
+            </li>
+          </Show>
           <Show
             when={filtered().length > 0}
-            fallback={<li class="px-4 py-2 text-sm text-slate-400">Tidak ada hasil</li>}
+            fallback={
+              <Show when={!loading()}>
+                <li class="px-4 py-2 text-sm text-slate-400">{failed() ? "Gagal memuat data" : "Tidak ada hasil"}</li>
+              </Show>
+            }
           >
             <For each={filtered()}>
               {(opt) => (
@@ -110,7 +194,7 @@ export function SelectSearch(props: {
                     type="button"
                     title={opt.label}
                     class={`block w-full truncate px-4 py-2 text-left text-sm hover:bg-emerald-50 ${opt.value === props.value ? "font-semibold text-emerald-700" : "text-slate-700"}`}
-                    onClick={() => pick(opt.value)}
+                    onClick={() => pick(opt)}
                   >
                     {opt.label}
                   </button>

@@ -1,10 +1,12 @@
 "use server";
 
+import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { redirect } from "@solidjs/router";
 import { addJakartaDays, endOfJakartaDayExclusive, jakartaDateKey, startOfJakartaDay } from "~/lib/shared/datetime";
 import { prisma } from "../db/prisma";
 import { getSession } from "../auth/session";
+import { serverCache } from "../cache";
 import { getScopedBlockIds, getScopedRegionIds, scheduleFirebaseRefresh } from "../domain";
 import { parseInput, statisticsSchema } from "../validation";
 
@@ -28,6 +30,8 @@ const PRESET_DAYS: Record<StatisticsRange, number> = { today: 1, "7d": 7, "30d":
 const DAY_MS = 86_400_000;
 const TWO_HOUR_BUCKET_COUNT = 12;
 const MAX_DAY_BUCKET_COUNT = 32;
+const STATS_CACHE_TTL_MS = 45_000;
+const STATS_CACHE_PREFIX = "stats:";
 
 const dayLabelFormatter = new Intl.DateTimeFormat("id-ID", {
   day: "2-digit",
@@ -159,6 +163,21 @@ export async function getStatistics(input: {
     }
   }
 
+  // The key carries role, user, and the exact resolved block scope, so entries
+  // are never shared between different scopes. The block list is hashed to keep
+  // keys short; sorting makes it order-independent.
+  const scopeHash =
+    scopedBlockIds === null
+      ? "all"
+      : createHash("sha256")
+          .update([...scopedBlockIds].sort().join(","))
+          .digest("hex")
+          .slice(0, 32);
+  const cacheKey = `${STATS_CACHE_PREFIX}${session.role}:${session.id}:${scopeHash}:${from.getTime()}:${to.getTime()}`;
+  return serverCache.getOrSet(cacheKey, () => computeStatistics(from, to, scopedBlockIds), STATS_CACHE_TTL_MS);
+}
+
+async function computeStatistics(from: Date, to: Date, scopedBlockIds: string[] | null) {
   const granularity: Granularity = to.getTime() - from.getTime() <= DAY_MS ? "2h" : "day";
   const eventFilter: Prisma.IrrigationEventWhereInput = scopedBlockIds
     ? { sprayer: { blockId: { in: scopedBlockIds } } }

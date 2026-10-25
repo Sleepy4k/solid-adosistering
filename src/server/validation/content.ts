@@ -9,6 +9,26 @@ export const contactSchema = z.object({
   message: z.string().trim().min(10, "Pesan minimal 10 karakter.").max(2000, "Pesan maksimal 2000 karakter."),
 });
 
+/** Free-text search box: trimmed, bounded, empty means "no filter". */
+const searchTextSchema = z
+  .string()
+  .trim()
+  .max(100, "Pencarian maksimal 100 karakter.")
+  .optional()
+  .transform((value) => value || undefined);
+
+/** Raw sort input; the key is checked against a per-endpoint allow-list by resolveSort. */
+const sortInputSchema = z.object({ key: z.string().max(40).optional(), dir: z.string().max(8).optional() }).optional();
+
+const dayStringSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Format tanggal tidak valid.")
+  .optional()
+  .or(z.literal("").transform(() => undefined));
+
+const pageNumberSchema = z.number().int().min(0).max(100_000).default(0);
+const pageSizeSchema = z.number().int().min(10).max(100).default(25);
+
 export const newsletterSchema = emailSchema;
 
 /**
@@ -45,10 +65,30 @@ export const subscriberListSchema = z.object({
     .max(100, "Ukuran halaman maksimal 100.")
     .default(25),
   status: newsletterSubscriberStatusSchema.optional(),
+  search: searchTextSchema,
+  sort: sortInputSchema,
 });
 
 export const markContactReadSchema = z.object({ id: idSchema, isRead: z.boolean() });
-export const contactListSchema = z.object({ unreadOnly: z.boolean().optional() });
+export const contactListSchema = z.object({
+  unreadOnly: z.boolean().optional(),
+  readState: z.enum(["all", "unread", "read"]).optional(),
+  search: searchTextSchema,
+  dateFrom: dayStringSchema,
+  dateTo: dayStringSchema,
+  sort: sortInputSchema,
+  limit: z.number().int().min(1).max(100).optional(),
+  offset: z.number().int().min(0).max(10_000_000).optional(),
+});
+
+/** Admin CMS list (testimonials, locations, partners): server-side search, sort and pagination. */
+export const cmsListSchema = z.object({
+  page: pageNumberSchema,
+  pageSize: pageSizeSchema,
+  search: searchTextSchema,
+  active: z.enum(["all", "active", "inactive"]).optional(),
+  sort: sortInputSchema,
+});
 
 export const bulkEmailSchema = z.object({
   subject: z

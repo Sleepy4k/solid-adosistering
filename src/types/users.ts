@@ -9,4 +9,6 @@ export type UserListItem = {
   whatsapp: string | null;
   regions: { id: string; name: string }[];
   createdAt: Date;
+  /** Never logged in nor set a password yet: the set-password link can be resent. */
+  pendingSetup: boolean;
 };

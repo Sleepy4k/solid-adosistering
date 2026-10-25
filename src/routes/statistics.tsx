@@ -2,7 +2,7 @@ import { query, createAsync } from "@solidjs/router";
 import { createEffect, createMemo, createSignal, onCleanup, onMount, Show, Suspense } from "solid-js";
 import { X } from "lucide-solid";
 import { PageMeta } from "~/components/shared/PageMeta";
-import { getMyRegions } from "~/server/actions/regions";
+import { countMyRegions, searchRegionOptions } from "~/server/actions/options";
 import { getStatistics } from "~/server/actions/statistics";
 import { finishProgress, startProgress } from "~/lib/client/progress";
 import { SkCard } from "~/components/shared/Skeleton";
@@ -36,7 +36,7 @@ const loadStats = query(
     }),
   "statistics",
 );
-const loadRegions = query(() => getMyRegions(), "my-regions");
+const loadRegions = query(() => countMyRegions(), "my-region-count");
 export const route = { preload: () => loadStats({ range: "today", regionId: "" }) };
 
 function resolveWindow(args: StatsArgs): { from: Date; to: Date } {
@@ -309,14 +309,11 @@ export default function Statistik() {
                   </button>
                 ))}
               </div>
-              <Show when={(regions()?.length ?? 0) > 1}>
+              <Show when={(regions() ?? 0) > 1}>
                 <SelectSearch
                   value={regionId()}
                   placeholder="Semua Region"
-                  options={[
-                    { value: "", label: "Semua Region" },
-                    ...(regions() ?? []).map((r) => ({ value: r.id, label: r.name })),
-                  ]}
+                  loadOptions={(q) => searchRegionOptions({ query: q, limit: 50 })}
                   onChange={setRegionId}
                 />
               </Show>

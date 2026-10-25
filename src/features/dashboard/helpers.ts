@@ -34,9 +34,9 @@ export type LiveStatus = "unknown" | "never" | "offline" | "watering" | "no-flow
  */
 export function deriveLiveStatus(data: LiveSprayerData | null, nowMs: number, monitorError = false): LiveStatus {
   if (monitorError) return "unknown";
-  if (!data || data.lastUpdated == null) return "never";
+  const raw = data?.lastSeen ?? data?.lastUpdated;
+  if (!data || raw == null) return "never";
 
-  const raw = data.lastUpdated;
   const timestampMs = raw > 1e12 ? raw : raw * 1000;
   if (!Number.isFinite(timestampMs) || timestampMs <= 0) return "never";
   if (timestampMs - nowMs > CLOCK_SKEW_MS) return "offline";

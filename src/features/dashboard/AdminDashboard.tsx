@@ -1,12 +1,19 @@
-import { A } from "@solidjs/router";
+import { A, createAsync, query } from "@solidjs/router";
 import { AlertTriangle, MapPin, Plus, RotateCcw, Search, Sprout, UserCheck, Users } from "lucide-solid";
-import { createMemo, createSignal, For, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onCleanup, Show, Suspense } from "solid-js";
 import { Badge } from "~/components/ui/Badge";
 import { Card, CardHeader } from "~/components/ui/Card";
 import { MetricCard } from "~/components/ui/MetricCard";
 import { SelectSearch } from "~/components/ui/SelectSearch";
+import { searchRegionOptions } from "~/server/actions/options";
+import { SortHeader } from "~/components/ui/SortHeader";
+import { PageSizeSelect, TablePagination } from "~/components/ui/TablePagination";
+import { debounce } from "~/lib/shared/debounce";
+import { ADMIN_USER_SORT_KEYS, DEFAULT_PAGE_SIZE, type AdminUserSortKey } from "~/lib/shared/regionTable";
+import type { TableSort } from "~/lib/shared/tableSort";
+import { getAdminUsers, type AdminUsersQuery } from "~/server/actions/dashboard";
 import { ROUTES } from "~/constants/routes";
-import type { AdminUserCard, DashboardRegion } from "./DashboardTypes";
+import type { AdminDashboardStats, DashboardRegion } from "./DashboardTypes";
 import { AdminUserSensorCard } from "./AdminUserSensorCard";
 import { MapCard } from "./MapCard";
 
@@ -17,25 +24,67 @@ const ACCOUNT_OPTIONS = [
   { value: "attention", label: "Perlu Perhatian" },
 ];
 
-export function AdminDashboard(props: { users: AdminUserCard[]; regions: DashboardRegion[] }) {
+const SORT_LABELS: Record<AdminUserSortKey, string> = {
+  name: "Nama",
+  email: "Email",
+  city: "Kota",
+  isActive: "Status Akun",
+  createdAt: "Terdaftar",
+};
+
+const loadAdminUsers = query((q: AdminUsersQuery) => getAdminUsers(q), "admin-dashboard-users");
+
+export function AdminDashboard(props: { regions: DashboardRegion[]; stats: AdminDashboardStats }) {
+  const [searchInput, setSearchInput] = createSignal<string>("");
   const [search, setSearch] = createSignal<string>("");
   const [regionFilter, setRegionFilter] = createSignal<string>("");
   const [accountFilter, setAccountFilter] = createSignal<string>("");
+  const [sort, setSort] = createSignal<TableSort<AdminUserSortKey> | null>(null);
+  const [page, setPage] = createSignal<number>(0);
+  const [pageSize, setPageSize] = createSignal<number>(DEFAULT_PAGE_SIZE);
 
-  const normalizedSearch = createMemo(() => search().trim().toLowerCase());
+  // Search, filters, sort and paging all run on the server; the browser only
+  // holds the current page of user cards (and subscribes to those cards only).
+  const commitSearch = debounce((value: string) => {
+    setSearch(value.trim());
+    setPage(0);
+  }, 300);
+  onCleanup(() => commitSearch.cancel());
+
+  const users = createAsync(() =>
+    loadAdminUsers({
+      search: search() || undefined,
+      regionId: regionFilter() || undefined,
+      account: (accountFilter() || undefined) as AdminUsersQuery["account"],
+      sort: sort() ?? undefined,
+      limit: pageSize(),
+      offset: page() * pageSize(),
+    }),
+  );
+  const userRows = () => users()?.items ?? [];
+  const total = () => users()?.total ?? 0;
+
+  createEffect(() => {
+    const lastPage = Math.max(0, Math.ceil(total() / pageSize()) - 1);
+    if (users() && page() > lastPage) setPage(lastPage);
+  });
+
   const hasActiveFilters = createMemo(
-    () => normalizedSearch().length > 0 || regionFilter().length > 0 || accountFilter().length > 0,
+    () => searchInput().trim().length > 0 || regionFilter().length > 0 || accountFilter().length > 0,
   );
 
-  const regionOptions = createMemo(() => [
-    { value: "", label: "Semua Wilayah" },
-    ...props.regions.map((region) => ({ value: region.id, label: region.name })),
-  ]);
-
-  const activeUsers = createMemo(() => props.users.filter((user) => user.isActive).length);
-  const attentionUsers = createMemo(
-    () => props.users.filter((user) => !user.isActive || user.sprayersByBlock.length === 0).length,
-  );
+  const updateSort = (next: TableSort<AdminUserSortKey>) => {
+    setSort(next);
+    setPage(0);
+  };
+  const updateRegionFilter = (value: string) => {
+    setRegionFilter(value);
+    setPage(0);
+  };
+  const updateAccountFilter = (value: string) => {
+    setAccountFilter(value);
+    setPage(0);
+  };
 
   const regionSummaries = createMemo(() =>
     props.regions.map((region) => ({
@@ -46,73 +95,22 @@ export function AdminDashboard(props: { users: AdminUserCard[]; regions: Dashboa
     })),
   );
 
-  // Installed sprayers are physical units tracked per region/block. Counting user assignments
-  // double-counts a sprayer shared across users, so derive the KPI from the region inventory.
-  const assignedSprayers = createMemo(() =>
-    regionSummaries().reduce((total, region) => total + region.sprayerCount, 0),
-  );
-
-  // Build each user's lowercased search haystack once per users change instead of on every keystroke.
-  const searchIndex = createMemo(() => {
-    const index = new Map<string, string>();
-    for (const user of props.users) {
-      index.set(
-        user.id,
-        [
-          user.name,
-          user.email,
-          user.city ?? "",
-          user.domicile ?? "",
-          ...user.regions.map((region) => region.name),
-          ...user.sprayersByBlock.map((sprayer) => sprayer.regionName),
-          ...user.sprayersByBlock.map((sprayer) => sprayer.hardwareId),
-        ]
-          .join(" ")
-          .toLowerCase(),
-      );
-    }
-    return index;
-  });
-
-  const filteredUsers = createMemo(() => {
-    const query = normalizedSearch();
-    const selectedRegionId = regionFilter();
-    const selectedRegion = selectedRegionId
-      ? props.regions.find((region) => region.id === selectedRegionId)
-      : undefined;
-    const account = accountFilter();
-    const haystacks = searchIndex();
-
-    return props.users.filter((user) => {
-      if (account === "active" && !user.isActive) return false;
-      if (account === "inactive" && user.isActive) return false;
-      if (account === "attention" && user.isActive && user.sprayersByBlock.length > 0) return false;
-
-      if (selectedRegionId && selectedRegion) {
-        const inRegion =
-          user.regions.some((region) => region.id === selectedRegionId || region.name === selectedRegion.name) ||
-          user.sprayersByBlock.some((sprayer) => sprayer.regionName === selectedRegion.name);
-        if (!inRegion) return false;
-      }
-
-      if (query && !haystacks.get(user.id)?.includes(query)) return false;
-      return true;
-    });
-  });
-
   const resetFilters = () => {
+    commitSearch.cancel();
+    setSearchInput("");
     setSearch("");
     setRegionFilter("");
     setAccountFilter("");
+    setPage(0);
   };
 
   return (
     <div class="space-y-5">
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard label="Total Pengguna" value={props.users.length} icon={<Users size={22} />} />
-        <MetricCard label="Pengguna Aktif" value={activeUsers()} icon={<UserCheck size={22} />} />
-        <MetricCard label="Perlu Perhatian" value={attentionUsers()} icon={<AlertTriangle size={22} />} />
-        <MetricCard label="Sprayer Terpasang" value={assignedSprayers()} icon={<Sprout size={22} />} />
+        <MetricCard label="Total Pengguna" value={props.stats.totalUsers} icon={<Users size={22} />} />
+        <MetricCard label="Pengguna Aktif" value={props.stats.activeUsers} icon={<UserCheck size={22} />} />
+        <MetricCard label="Perlu Perhatian" value={props.stats.attentionUsers} icon={<AlertTriangle size={22} />} />
+        <MetricCard label="Sprayer Terpasang" value={props.stats.sprayerCount} icon={<Sprout size={22} />} />
       </div>
 
       <div class="grid gap-4 xl:grid-cols-5">
@@ -145,7 +143,7 @@ export function AdminDashboard(props: { users: AdminUserCard[]; regions: Dashboa
                       }`}
                       aria-pressed={regionFilter() === region.id}
                       aria-label={`Filter pengguna wilayah ${region.name}`}
-                      onClick={() => setRegionFilter(region.id)}
+                      onClick={() => updateRegionFilter(region.id)}
                     >
                       <span class="min-w-0">
                         <span class="block truncate text-sm font-semibold text-[#4F4F4F]">{region.name}</span>
@@ -189,8 +187,11 @@ export function AdminDashboard(props: { users: AdminUserCard[]; regions: Dashboa
                 class="form-input h-11 w-full rounded-xl pl-9 pr-3 text-sm"
                 placeholder="Cari nama, email, kota, wilayah, atau ID hardware"
                 aria-label="Cari pengguna berdasarkan nama, email, kota, wilayah, atau ID hardware"
-                value={search()}
-                onInput={(event) => setSearch(event.currentTarget.value)}
+                value={searchInput()}
+                onInput={(event) => {
+                  setSearchInput(event.currentTarget.value);
+                  commitSearch(event.currentTarget.value);
+                }}
               />
             </div>
             <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto">
@@ -222,8 +223,9 @@ export function AdminDashboard(props: { users: AdminUserCard[]; regions: Dashboa
                 value={regionFilter()}
                 placeholder="Semua Wilayah"
                 searchPlaceholder="Cari wilayah..."
-                options={regionOptions()}
-                onChange={setRegionFilter}
+                selectedLabel={props.regions.find((region) => region.id === regionFilter())?.name}
+                loadOptions={(q) => searchRegionOptions({ query: q, limit: 50 })}
+                onChange={updateRegionFilter}
               />
             </div>
             <div role="group" aria-labelledby="admin-account-filter-label">
@@ -236,7 +238,7 @@ export function AdminDashboard(props: { users: AdminUserCard[]; regions: Dashboa
                 searchPlaceholder="Cari status..."
                 options={ACCOUNT_OPTIONS}
                 align="end"
-                onChange={setAccountFilter}
+                onChange={updateAccountFilter}
               />
             </div>
           </div>
@@ -244,55 +246,77 @@ export function AdminDashboard(props: { users: AdminUserCard[]; regions: Dashboa
       </Card>
 
       <section class="space-y-3" aria-labelledby="admin-users-heading">
-        <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex flex-wrap items-end justify-between gap-3">
           <h2 id="admin-users-heading" class="text-lg font-bold text-[#4F4F4F]">
             Daftar Pengguna
           </h2>
-          <p class="text-sm text-[#6B6B6B]" aria-live="polite">
-            Menampilkan <span class="font-semibold text-[#333]">{filteredUsers().length}</span> dari{" "}
-            {props.users.length} pengguna
-          </p>
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-2" role="group" aria-label="Urutkan pengguna">
+            <span class="text-xs font-medium text-[#6B6B6B]">Urutkan:</span>
+            <For each={ADMIN_USER_SORT_KEYS}>
+              {(key) => (
+                <SortHeader
+                  class="text-xs text-[#6B6B6B]"
+                  label={SORT_LABELS[key]}
+                  column={key}
+                  sort={sort()}
+                  onSort={updateSort}
+                />
+              )}
+            </For>
+          </div>
+          <PageSizeSelect
+            value={pageSize()}
+            onChange={(value) => {
+              setPageSize(value);
+              setPage(0);
+            }}
+          />
         </div>
 
-        <Show
-          when={filteredUsers().length > 0}
-          fallback={
-            <Card class="p-10 text-center">
-              <Show
-                when={props.users.length > 0}
-                fallback={
-                  <>
-                    <p class="text-sm text-[#6B6B6B]">Belum ada pengguna yang terdaftar.</p>
-                    <A
-                      href={ROUTES.userCreate}
-                      class="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-[#186D3C] hover:underline"
-                    >
-                      <Plus size={16} />
-                      Tambah Pengguna
-                    </A>
-                  </>
-                }
-              >
-                <p class="text-sm font-semibold text-[#4F4F4F]">Tidak ada pengguna yang cocok dengan filter.</p>
-                <p class="mt-1 text-sm text-[#6B6B6B]">
-                  Ubah kata kunci atau reset filter untuk melihat semua pengguna.
-                </p>
-                <button
-                  type="button"
-                  class="mt-4 inline-flex items-center gap-2 rounded-xl border border-[#C2C2C2] px-4 py-2 text-sm font-medium text-[#4F4F4F] hover:bg-gray-50"
-                  onClick={resetFilters}
+        <Suspense fallback={<Card class="p-10 text-center text-sm text-[#6B6B6B]">Memuat pengguna...</Card>}>
+          <Show
+            when={userRows().length > 0}
+            fallback={
+              <Card class="p-10 text-center">
+                <Show
+                  when={hasActiveFilters() || props.stats.totalUsers > 0}
+                  fallback={
+                    <>
+                      <p class="text-sm text-[#6B6B6B]">Belum ada pengguna yang terdaftar.</p>
+                      <A
+                        href={ROUTES.userCreate}
+                        class="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-[#186D3C] hover:underline"
+                      >
+                        <Plus size={16} />
+                        Tambah Pengguna
+                      </A>
+                    </>
+                  }
                 >
-                  <RotateCcw size={16} aria-hidden="true" />
-                  Reset Filter
-                </button>
-              </Show>
-            </Card>
-          }
-        >
-          <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            <For each={filteredUsers()}>{(user) => <AdminUserSensorCard user={user} />}</For>
-          </div>
-        </Show>
+                  <p class="text-sm font-semibold text-[#4F4F4F]">Tidak ada pengguna yang cocok dengan filter.</p>
+                  <p class="mt-1 text-sm text-[#6B6B6B]">
+                    Ubah kata kunci atau reset filter untuk melihat semua pengguna.
+                  </p>
+                  <button
+                    type="button"
+                    class="mt-4 inline-flex items-center gap-2 rounded-xl border border-[#C2C2C2] px-4 py-2 text-sm font-medium text-[#4F4F4F] hover:bg-gray-50"
+                    onClick={resetFilters}
+                  >
+                    <RotateCcw size={16} aria-hidden="true" />
+                    Reset Filter
+                  </button>
+                </Show>
+              </Card>
+            }
+          >
+            <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <For each={userRows()}>{(user) => <AdminUserSensorCard user={user} />}</For>
+            </div>
+          </Show>
+          <Card class="overflow-hidden">
+            <TablePagination page={page()} pageSize={pageSize()} total={total()} onPageChange={setPage} />
+          </Card>
+        </Suspense>
       </section>
     </div>
   );

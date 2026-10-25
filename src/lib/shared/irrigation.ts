@@ -10,6 +10,16 @@ export function calculateMoistureStatus(moisturePercent: number, threshold: Thre
 }
 
 /**
+ * Display label for a block key: `Block_B` / `Block-B` read as `Block B` with
+ * the first character uppercased. Presentation only; the stored and Firebase
+ * keys are never rewritten.
+ */
+export function formatBlockName(name: string) {
+  const label = name.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+  return label ? label.charAt(0).toUpperCase() + label.slice(1) : name;
+}
+
+/**
  * Sanitizes a value into a Firebase RTDB path segment.
  *
  * Callers must validate region/block names and hardware IDs at the input

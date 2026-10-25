@@ -1,17 +1,22 @@
 import { query, createAsync, revalidate } from "@solidjs/router";
-import { createEffect, createMemo, createSignal, For, lazy, Show, Suspense } from "solid-js";
-import { Download, Plus } from "lucide-solid";
+import { createEffect, createSignal, For, lazy, onCleanup, Show, Suspense } from "solid-js";
+import { Download, Plus, RotateCcw, Search } from "lucide-solid";
 import { ExportDataModal } from "~/features/export/ExportDataModal";
 import { PageMeta } from "~/components/shared/PageMeta";
+import { SimpleSelect } from "~/components/ui/SimpleSelect";
+import { ariaSort, SortHeader } from "~/components/ui/SortHeader";
 import { PageSizeSelect, TablePagination } from "~/components/ui/TablePagination";
 import { Badge } from "~/components/ui/Badge";
-import { getRegions, deleteRegion, getAdmins } from "~/server/actions/regions";
+import { getRegions, deleteRegion, type RegionListQuery } from "~/server/actions/regions";
 import { setRegionAutomaticMode } from "~/server/actions/settings";
 import { SkTableRow } from "~/components/shared/Skeleton";
 import { useToast } from "~/components/shared/ToastProvider";
 import { useConfirm } from "~/components/shared/ConfirmProvider";
+import { debounce } from "~/lib/shared/debounce";
+import { DEFAULT_PAGE_SIZE, type RegionListSortKey } from "~/lib/shared/regionTable";
+import type { TableSort } from "~/lib/shared/tableSort";
 
-type RegionRow = Awaited<ReturnType<typeof getRegions>>[number];
+type RegionRow = Awaited<ReturnType<typeof getRegions>>["items"][number];
 
 const RegionModal = lazy(() =>
   import("~/features/region-management/RegionModal").then((m) => ({ default: m.RegionModal })),
@@ -26,9 +31,24 @@ const SYNC_BADGES: Record<string, { label: string; cls: string }> = {
   FAILED: { label: "Gagal", cls: "bg-rose-100 text-rose-700" },
 };
 
-const loadRegions = query(() => getRegions(), "regions-list");
-const loadAdmins = query(() => getAdmins(), "admins-list");
-export const route = { preload: () => Promise.all([loadRegions(), loadAdmins()]) };
+const SYNC_FILTER_OPTIONS = [
+  { value: "", label: "Semua Firebase" },
+  { value: "SYNCED", label: "Tersinkron" },
+  { value: "PENDING", label: "Menunggu" },
+  { value: "FAILED", label: "Gagal" },
+];
+const MODE_FILTER_OPTIONS = [
+  { value: "", label: "Semua Mode" },
+  { value: "on", label: "Otomatis Aktif" },
+  { value: "off", label: "Otomatis Nonaktif" },
+];
+
+const dateFormat = new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeZone: "Asia/Jakarta" });
+
+const loadRegions = query((q: RegionListQuery) => getRegions(q), "regions-list");
+export const route = {
+  preload: () => loadRegions({ limit: DEFAULT_PAGE_SIZE, offset: 0 }),
+};
 
 export default function ManajemenRegion() {
   const { notify } = useToast();
@@ -40,26 +60,61 @@ export default function ManajemenRegion() {
   const [refreshKey, setRefreshKey] = createSignal<number>(0);
   const [loadError, setLoadError] = createSignal<string>("");
   const [page, setPage] = createSignal<number>(0);
-  const [pageSize, setPageSize] = createSignal<number>(10);
+  const [pageSize, setPageSize] = createSignal<number>(DEFAULT_PAGE_SIZE);
+  const [searchInput, setSearchInput] = createSignal<string>("");
+  const [search, setSearch] = createSignal<string>("");
+  const [syncFilter, setSyncFilter] = createSignal<string>("");
+  const [modeFilter, setModeFilter] = createSignal<string>("");
+  const [sort, setSort] = createSignal<TableSort<RegionListSortKey> | null>(null);
   const [modePendingId, setModePendingId] = createSignal<string | null>(null);
+
+  const commitSearch = debounce((value: string) => {
+    setSearch(value.trim());
+    setPage(0);
+  }, 300);
+  onCleanup(() => commitSearch.cancel());
 
   const regions = createAsync(async () => {
     void refreshKey();
     setLoadError("");
+    const sortState = sort();
     try {
-      return await loadRegions();
+      return await loadRegions({
+        search: search() || undefined,
+        syncStatus: (syncFilter() || undefined) as RegionListQuery["syncStatus"],
+        automaticMode: (modeFilter() || undefined) as RegionListQuery["automaticMode"],
+        sort: sortState ?? undefined,
+        limit: pageSize(),
+        offset: page() * pageSize(),
+      });
     } catch (error) {
       setLoadError(!import.meta.env.PROD && error instanceof Error ? error.message : "Data region belum bisa dimuat.");
-      return [];
+      return { items: [], total: 0 };
     }
   });
-  const regionRows = createMemo(() => regions() ?? []);
-  const pagedRegions = createMemo(() => regionRows().slice(page() * pageSize(), (page() + 1) * pageSize()));
+  const regionRows = () => regions()?.items ?? [];
+  const total = () => regions()?.total ?? 0;
+  const hasFilters = () => searchInput().trim() !== "" || syncFilter() !== "" || modeFilter() !== "";
 
+  // Land on the last page when a delete or filter leaves the current page empty.
   createEffect(() => {
-    const lastPage = Math.max(0, Math.ceil(regionRows().length / pageSize()) - 1);
-    if (page() > lastPage) setPage(lastPage);
+    const lastPage = Math.max(0, Math.ceil(total() / pageSize()) - 1);
+    // A failed load returns an empty placeholder: it must not look like an emptied page.
+    if (regions() && !loadError() && page() > lastPage) setPage(lastPage);
   });
+
+  const updateSort = (next: TableSort<RegionListSortKey>) => {
+    setSort(next);
+    setPage(0);
+  };
+  const resetFilters = () => {
+    commitSearch.cancel();
+    setSearchInput("");
+    setSearch("");
+    setSyncFilter("");
+    setModeFilter("");
+    setPage(0);
+  };
 
   const handleDelete = async (r: RegionRow) => {
     const ok = await confirm({
@@ -172,6 +227,53 @@ export default function ManajemenRegion() {
           </div>
         </Show>
 
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div class="relative min-w-0 flex-1">
+            <Search class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <input
+              type="search"
+              class="h-10 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+              placeholder="Cari nama atau deskripsi region"
+              aria-label="Cari region berdasarkan nama atau deskripsi"
+              value={searchInput()}
+              onInput={(event) => {
+                setSearchInput(event.currentTarget.value);
+                commitSearch(event.currentTarget.value);
+              }}
+            />
+          </div>
+          <div class="w-full sm:w-48">
+            <SimpleSelect
+              value={syncFilter()}
+              options={SYNC_FILTER_OPTIONS}
+              onChange={(value) => {
+                setSyncFilter(value);
+                setPage(0);
+              }}
+            />
+          </div>
+          <div class="w-full sm:w-52">
+            <SimpleSelect
+              value={modeFilter()}
+              options={MODE_FILTER_OPTIONS}
+              align="end"
+              onChange={(value) => {
+                setModeFilter(value);
+                setPage(0);
+              }}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={resetFilters}
+            disabled={!hasFilters()}
+            class="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <RotateCcw size={16} aria-hidden="true" />
+            Reset
+          </button>
+        </div>
+
         <div class="animate-in-soft rounded-xl border border-slate-200 bg-white">
           <Suspense
             fallback={
@@ -185,32 +287,59 @@ export default function ManajemenRegion() {
             }
           >
             <Show
-              when={regionRows().length > 0}
+              when={regionRows().length > 0 || total() > 0}
               fallback={
-                <div class="p-10 text-center text-sm text-slate-500">Belum ada region. Buat region pertama Anda.</div>
+                <div class="p-10 text-center text-sm text-slate-500">
+                  {hasFilters()
+                    ? "Tidak ada region yang cocok dengan filter."
+                    : "Belum ada region. Buat region pertama Anda."}
+                </div>
               }
             >
               <div class="overflow-x-auto">
-                <table class="w-full min-w-[900px] text-sm">
+                <table class="w-full min-w-[1100px] text-sm">
                   <thead class="border-b border-slate-100 bg-slate-50 text-xs font-medium text-slate-500">
                     <tr>
-                      <th class="whitespace-nowrap px-5 py-3 text-left">Nama Region</th>
-                      <th class="whitespace-nowrap px-5 py-3 text-left">Blok</th>
-                      <th class="whitespace-nowrap px-5 py-3 text-left">Admin</th>
-                      <th class="whitespace-nowrap px-5 py-3 text-left">Mode Otomatis</th>
-                      <th class="whitespace-nowrap px-5 py-3 text-left">Firebase</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left" aria-sort={ariaSort(sort(), "name")}>
+                        <SortHeader label="Nama Region" column="name" sort={sort()} onSort={updateSort} />
+                      </th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left" aria-sort={ariaSort(sort(), "description")}>
+                        <SortHeader label="Deskripsi" column="description" sort={sort()} onSort={updateSort} />
+                      </th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left" aria-sort={ariaSort(sort(), "blocks")}>
+                        <SortHeader label="Blok" column="blocks" sort={sort()} onSort={updateSort} />
+                      </th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left" aria-sort={ariaSort(sort(), "admins")}>
+                        <SortHeader label="Admin" column="admins" sort={sort()} onSort={updateSort} />
+                      </th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left" aria-sort={ariaSort(sort(), "automaticMode")}>
+                        <SortHeader label="Mode Otomatis" column="automaticMode" sort={sort()} onSort={updateSort} />
+                      </th>
+                      <th
+                        class="whitespace-nowrap px-5 py-3 text-left"
+                        aria-sort={ariaSort(sort(), "firebaseSyncStatus")}
+                      >
+                        <SortHeader label="Firebase" column="firebaseSyncStatus" sort={sort()} onSort={updateSort} />
+                      </th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left" aria-sort={ariaSort(sort(), "createdAt")}>
+                        <SortHeader label="Dibuat" column="createdAt" sort={sort()} onSort={updateSort} />
+                      </th>
                       <th class="whitespace-nowrap px-5 py-3 text-left">Aksi</th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-slate-100">
-                    <For each={pagedRegions()}>
+                    <For each={regionRows()}>
                       {(region) => {
                         const badge = SYNC_BADGES[region.firebaseSyncStatus] ?? SYNC_BADGES.PENDING;
                         return (
                           <tr class="hover:bg-slate-50">
                             <td class="px-5 py-3">
                               <p class="font-medium text-slate-900">{region.name}</p>
-                              <p class="break-anywhere text-xs text-slate-400">{region.description ?? "—"}</p>
+                            </td>
+                            <td class="max-w-[16rem] px-5 py-3">
+                              <p class="break-anywhere line-clamp-2 text-xs text-slate-500">
+                                {region.description ?? "—"}
+                              </p>
                             </td>
                             <td class="whitespace-nowrap px-5 py-3 text-slate-600">{region._count.blocks}</td>
                             <td class="px-5 py-3">
@@ -265,6 +394,9 @@ export default function ManajemenRegion() {
                                 {badge.label}
                               </span>
                             </td>
+                            <td class="whitespace-nowrap px-5 py-3 text-xs text-slate-500">
+                              {dateFormat.format(new Date(region.createdAt))}
+                            </td>
                             <td class="px-5 py-3">
                               <div class="flex flex-wrap items-center gap-2">
                                 <button
@@ -297,7 +429,7 @@ export default function ManajemenRegion() {
                   </tbody>
                 </table>
               </div>
-              <TablePagination page={page()} pageSize={pageSize()} total={regionRows().length} onPageChange={setPage} />
+              <TablePagination page={page()} pageSize={pageSize()} total={total()} onPageChange={setPage} />
             </Show>
           </Suspense>
         </div>

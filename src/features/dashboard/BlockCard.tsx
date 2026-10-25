@@ -6,12 +6,13 @@ import { Card, CardHeader } from "~/components/ui/Card";
 import type { MoistureStatus } from "@prisma/client";
 import { subscribeToBlock, isFirebaseConfigured } from "~/lib/client/firebaseClient";
 import { useNow } from "~/lib/client/liveDate";
-import { firebaseSegment, type LiveSprayerData, type Threshold } from "~/lib/shared/irrigation";
+import { firebaseSegment, formatBlockName, type LiveSprayerData, type Threshold } from "~/lib/shared/irrigation";
 import { overridePump } from "~/server/actions/blocks";
 import { useConfirm } from "~/components/shared/ConfirmProvider";
 import { InlineError } from "~/components/shared/AppErrorBoundary";
 import { useToast } from "~/components/shared/ToastProvider";
 import { aggregateLive, deriveLiveStatus, moistureTone } from "./helpers";
+import { createDataClock, latestDataUpdate, liveFingerprint } from "./dataClock";
 import { SprayerCard, type SprayerMeta } from "./SprayerCard";
 
 export function BlockCard(props: {
@@ -31,6 +32,7 @@ export function BlockCard(props: {
   const confirm = useConfirm();
   const { notify } = useToast();
   const nowMs = useNow(30_000);
+  const dataClock = createDataClock();
 
   /**
    * Live rows are keyed by the Firebase node key: usually the exact
@@ -56,10 +58,14 @@ export function BlockCard(props: {
   });
 
   const sprayerRows = createMemo(() =>
-    props.sprayers.map((meta) => ({
-      meta,
-      data: liveByMetaId().get(meta.id) ?? null,
-    })),
+    props.sprayers.map((meta) => {
+      const data = liveByMetaId().get(meta.id) ?? null;
+      return {
+        meta,
+        data,
+        dataUpdatedAtMs: latestDataUpdate(meta.lastDataAt, data ? dataClock.changedAt()[data.sprayerId] : undefined),
+      };
+    }),
   );
 
   const freshLive = createMemo(() => {
@@ -127,8 +133,14 @@ export function BlockCard(props: {
       return;
     }
     const unsubscribe = subscribeToBlock(
-      { regionName: props.regionName, blockName: props.blockName, threshold: threshold() },
+      {
+        regionName: props.regionName,
+        blockName: props.blockName,
+        sprayerIds: props.sprayers.map((sprayer) => sprayer.hardwareId),
+        threshold: threshold(),
+      },
       (sprayers) => {
+        for (const row of sprayers) dataClock.observe(row.sprayerId, liveFingerprint(row));
         setLiveData(sprayers);
         setLoading(false);
         setError("");
@@ -184,7 +196,7 @@ export function BlockCard(props: {
     const label = relay === "ON" ? "Nyalakan Semua" : "Matikan Semua";
     const ok = await confirm({
       title: `${label} sprayer?`,
-      message: `Semua sprayer di ${props.blockName} akan diubah ke mode manual.`,
+      message: `Semua sprayer di ${formatBlockName(props.blockName)} akan diubah ke mode manual.`,
       confirmLabel: label,
       tone: relay === "OFF" ? "danger" : "primary",
     });
@@ -200,7 +212,7 @@ export function BlockCard(props: {
   return (
     <Card class="overflow-hidden">
       <CardHeader
-        title={props.blockName}
+        title={formatBlockName(props.blockName)}
         actions={
           <div class="flex flex-wrap items-center gap-2">
             <Badge tone={liveSummary().tone}>{liveSummary().label}</Badge>
@@ -274,6 +286,7 @@ export function BlockCard(props: {
                   <SprayerCard
                     data={row.data}
                     meta={row.meta}
+                    dataUpdatedAtMs={row.dataUpdatedAtMs}
                     nowMs={nowMs()}
                     monitorError={monitorError()}
                     threshold={threshold()}

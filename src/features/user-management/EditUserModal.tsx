@@ -2,6 +2,7 @@ import { createMemo, createSignal, For, Show } from "solid-js";
 import type { Role } from "@prisma/client";
 import { ModalFrame } from "~/components/shared/ModalFrame";
 import { SelectSearch } from "~/components/ui/SelectSearch";
+import { searchRegionOptions } from "~/server/actions/options";
 import { useToast } from "~/components/shared/ToastProvider";
 import type { getUserFormOptions } from "~/server/actions/users";
 import { updateUserById } from "~/server/actions/users";
@@ -141,10 +142,11 @@ export function EditUserModal(props: {
                   <SelectSearch
                     value={selectedRegion()}
                     placeholder="Pilih region..."
-                    options={[
-                      { value: "", label: "Pilih region..." },
-                      ...props.options.regions.map((region) => ({ value: region.id, label: region.name })),
-                    ]}
+                    selectedLabel={
+                      props.options.regions.find((region) => region.id === selectedRegion())?.name ??
+                      props.user.regions.find((region) => region.id === selectedRegion())?.name
+                    }
+                    loadOptions={(q) => searchRegionOptions({ query: q, limit: 50 })}
                     onChange={setSingleRegion}
                   />
                 }

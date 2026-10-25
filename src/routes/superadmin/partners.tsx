@@ -1,5 +1,5 @@
 import { query, createAsync, revalidate } from "@solidjs/router";
-import { createSignal, For, Show, Suspense } from "solid-js";
+import { createEffect, createSignal, For, Show, Suspense } from "solid-js";
 import { Download, Pencil, Plus, Trash2 } from "lucide-solid";
 import { ExportDataModal } from "~/features/export/ExportDataModal";
 import { PageMeta } from "~/components/shared/PageMeta";
@@ -8,17 +8,34 @@ import { ModalFrame } from "~/components/shared/ModalFrame";
 import { Card, CardHeader } from "~/components/ui/Card";
 import { Button } from "~/components/ui/Button";
 import { Badge } from "~/components/ui/Badge";
+import { TablePagination } from "~/components/ui/TablePagination";
+import { CmsListToolbar, type ActiveFilter } from "~/features/superadmin/CmsListToolbar";
+import { useServerList } from "~/features/superadmin/useServerList";
 import { useToast } from "~/components/shared/ToastProvider";
 import { useConfirm } from "~/components/shared/ConfirmProvider";
 import { ImageUpload } from "~/components/shared/ImageUpload";
-import { getAllPartners, createPartner, updatePartner, deletePartner } from "~/server/actions/landing-cms";
+import { getPartnersPage, createPartner, updatePartner, deletePartner } from "~/server/actions/landing-cms";
 
-type Item = Awaited<ReturnType<typeof getAllPartners>>[number];
+type Item = Awaited<ReturnType<typeof getPartnersPage>>["items"][number];
+type SortKey = "name" | "websiteUrl" | "sortOrder" | "isActive" | "createdAt";
+
+const SORT_COLUMNS: { key: SortKey; label: string }[] = [
+  { key: "name", label: "Nama" },
+  { key: "websiteUrl", label: "Website" },
+  { key: "sortOrder", label: "Urutan" },
+  { key: "isActive", label: "Status" },
+  { key: "createdAt", label: "Tanggal Dibuat" },
+];
 
 const ADMIN_KEY = "all-partners";
 const PUBLIC_KEY = "landing-partners";
-const load = query(() => getAllPartners(), ADMIN_KEY);
-export const route = { preload: () => load() };
+const DEFAULT_PAGE_SIZE = 25;
+const load = query(
+  (page: number, pageSize: number, search: string, active: ActiveFilter, sortKey: SortKey, sortDir: "asc" | "desc") =>
+    getPartnersPage({ page, pageSize, search: search || undefined, active, sort: { key: sortKey, dir: sortDir } }),
+  ADMIN_KEY,
+);
+export const route = { preload: () => load(0, DEFAULT_PAGE_SIZE, "", "all", "sortOrder", "asc") };
 
 const inp =
   "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20";
@@ -147,7 +164,21 @@ function PartnerModal(props: { initial?: Item; onClose: () => void; onSaved: () 
 export default function CmsPartners() {
   const { notify } = useToast();
   const confirm = useConfirm();
-  const items = createAsync(() => load());
+  const list = useServerList<SortKey>({ defaultSort: { key: "sortOrder", dir: "asc" }, pageSize: DEFAULT_PAGE_SIZE });
+  const [active, setActive] = createSignal<ActiveFilter>("all");
+  const data = createAsync(() =>
+    load(list.page(), list.pageSize(), list.search(), active(), list.sort().key, list.sort().dir),
+  );
+  const items = () => data()?.items ?? [];
+  const total = () => data()?.total ?? 0;
+
+  // Deleting the last row of the last page would leave an empty page; step back.
+  createEffect(() => {
+    const loadedTotal = data()?.total;
+    if (loadedTotal === undefined) return;
+    const lastPage = Math.max(0, Math.ceil(loadedTotal / list.pageSize()) - 1);
+    if (list.page() > lastPage) list.setPage(lastPage);
+  });
   const [adding, setAdding] = createSignal<boolean>(false);
   const [exportOpen, setExportOpen] = createSignal<boolean>(false);
   const [editing, setEditing] = createSignal<Item | null>(null);
@@ -191,13 +222,24 @@ export default function CmsPartners() {
           }
         />
         <Card>
-          <CardHeader title={`Daftar Mitra (${(items() ?? []).length})`} />
+          <CardHeader title={`Daftar Mitra (${total()})`} />
+          <CmsListToolbar
+            list={list}
+            active={active()}
+            onActiveChange={setActive}
+            columns={SORT_COLUMNS}
+            searchLabel="Nama atau website"
+          />
           <Suspense fallback={<div class="p-8 text-center text-sm text-slate-500">Memuat...</div>}>
             <Show
-              when={(items() ?? []).length > 0}
+              when={items().length > 0}
               fallback={
                 <div class="p-10 text-center text-sm text-slate-500">
-                  Belum ada mitra. Klik "Tambah Mitra" untuk menambahkan.
+                  {list.search() || active() !== "all" ? (
+                    "Tidak ada data yang cocok dengan filter."
+                  ) : (
+                    <>Belum ada mitra. Klik "Tambah Mitra" untuk menambahkan.</>
+                  )}
                 </div>
               }
             >
@@ -259,6 +301,12 @@ export default function CmsPartners() {
                 </For>
               </div>
             </Show>
+            <TablePagination
+              page={list.page()}
+              pageSize={list.pageSize()}
+              total={total()}
+              onPageChange={list.setPage}
+            />
           </Suspense>
         </Card>
       </div>

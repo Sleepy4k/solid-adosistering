@@ -83,13 +83,13 @@ export default function ResetPassword() {
         <div class="relative z-10 w-full max-w-md px-4">
           <div class="rounded-3xl bg-white/80 p-8 shadow-2xl backdrop-blur-xl">
             <div class="mb-6">
-              <h1 class="text-2xl font-bold text-slate-900">Reset Password</h1>
-              <p class="mt-1 text-sm text-slate-500">Buat password baru untuk akun Anda.</p>
+              <h1 class="text-2xl font-bold text-slate-900">Atur Kata Sandi</h1>
+              <p class="mt-1 text-sm text-slate-500">Buat kata sandi untuk akun Anda.</p>
             </div>
 
             <Show when={!params.token}>
               <div class="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
-                Tautan reset tidak valid.{" "}
+                Tautan tidak valid.{" "}
                 <A href="/forgot-password" class="font-semibold underline">
                   Kirim ulang
                 </A>
@@ -164,7 +164,7 @@ export default function ResetPassword() {
                     disabled={loading()}
                     class="w-full rounded-xl bg-slate-900 py-3 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
                   >
-                    {loading() ? "Menyimpan…" : "Simpan Password"}
+                    {loading() ? "Menyimpan…" : "Simpan Kata Sandi"}
                   </button>
                 </form>
               </>

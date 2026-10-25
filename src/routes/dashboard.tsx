@@ -4,7 +4,7 @@ import { SkCard } from "~/components/shared/Skeleton";
 import { PageHeader } from "~/components/ui/PageHeader";
 import { ErrorBoundary, lazy, Show, Suspense } from "solid-js";
 import { getMyDashboard } from "~/server/actions/dashboard";
-import type { AdminUserCard, DashboardRegion, SuperadminSummary } from "~/types/dashboard";
+import type { AdminDashboardStats, DashboardRegion, SuperadminSummary } from "~/types/dashboard";
 import { useLiveDate } from "~/lib/client/liveDate";
 
 const loadDashboard = query(() => getMyDashboard(), "dashboard");
@@ -78,9 +78,11 @@ export default function Beranda() {
                   </Show>
                   <Show when={data().type === "admin"}>
                     <AdminDashboard
-                      users={(data() as { type: "admin"; users: AdminUserCard[]; regions: DashboardRegion[] }).users}
                       regions={
-                        (data() as { type: "admin"; users: AdminUserCard[]; regions: DashboardRegion[] }).regions
+                        (data() as { type: "admin"; regions: DashboardRegion[]; stats: AdminDashboardStats }).regions
+                      }
+                      stats={
+                        (data() as { type: "admin"; regions: DashboardRegion[]; stats: AdminDashboardStats }).stats
                       }
                     />
                   </Show>

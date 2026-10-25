@@ -1,6 +1,6 @@
 "use server";
 
-import { ActivityAction, SyncStatus } from "@prisma/client";
+import { ActivityAction, Prisma, SyncStatus } from "@prisma/client";
 import type { Region } from "@prisma/client";
 import { redirect } from "@solidjs/router";
 import { firebaseSegment } from "~/lib/shared/irrigation";
@@ -9,7 +9,16 @@ import { firebaseAdminDb, provisionRegionNode, renameRegionNode } from "../integ
 import { assertSuperadmin } from "../auth/security";
 import { getSession } from "../auth/session";
 import { decimalCoordinate, getScopedRegionIds, logActivity, type CoordinateInput } from "../domain";
-import { loadRegionList } from "../domain/regionList";
+import { loadRegionPage, pageWindow, regionOrderBy, regionSearchWhere } from "../domain/regionList";
+import {
+  REGION_CONFIG_SORT_KEYS,
+  REGION_LIST_SORT_KEYS,
+  type PagedQuery,
+  type RegionConfigSortKey,
+  type RegionListSortKey,
+} from "~/lib/shared/regionTable";
+import { resolveSort } from "~/lib/shared/tableSort";
+import { regionConfigQuerySchema, regionListQuerySchema } from "../validation/regionLists";
 import {
   assignAdminSchema,
   createRegionSchema,
@@ -19,12 +28,33 @@ import {
   updateRegionSchema,
 } from "../validation";
 
-export async function getRegions() {
+const DUPLICATE_REGION_MESSAGE = "Nama region sudah digunakan.";
+
+function isPrismaCode(error: unknown, code: string) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === code;
+}
+
+export type RegionListQuery = PagedQuery<RegionListSortKey> & {
+  syncStatus?: "SYNCED" | "PENDING" | "FAILED";
+  automaticMode?: "on" | "off";
+};
+
+/** Server-side filtered, sorted, paged region list for the management table. */
+export async function getRegions(input: RegionListQuery = {}) {
+  const query = parseInput(regionListQuerySchema, input);
   const session = await getSession();
   if (!session) throw redirect("/login");
   assertSuperadmin(session);
 
-  return loadRegionList();
+  const sort = resolveSort(REGION_LIST_SORT_KEYS, query.sort, { key: "name", dir: "asc" });
+  const and: Prisma.RegionWhereInput[] = [];
+  const search = regionSearchWhere(query.search);
+  if (search) and.push(search);
+  if (query.syncStatus) and.push({ firebaseSyncStatus: query.syncStatus });
+  if (query.automaticMode) and.push({ automaticMode: query.automaticMode === "on" });
+
+  const { take, skip } = pageWindow(query);
+  return loadRegionPage({ where: and.length > 0 ? { AND: and } : {}, orderBy: regionOrderBy(sort), take, skip });
 }
 
 export async function createRegion(input: {
@@ -37,16 +67,21 @@ export async function createRegion(input: {
   const session = await getSession();
   if (!session) throw redirect("/login");
   const actor = assertSuperadmin(session);
-  const region = await prisma.region.create({
-    data: {
-      name: data.name,
-      description: data.description,
-      latitude: decimalCoordinate(data.latitude, "Latitude"),
-      longitude: decimalCoordinate(data.longitude, "Longitude"),
-      createdById: actor.id,
-      firebaseSyncStatus: SyncStatus.PENDING,
-    },
-  });
+  const region = await prisma.region
+    .create({
+      data: {
+        name: data.name,
+        description: data.description,
+        latitude: decimalCoordinate(data.latitude, "Latitude"),
+        longitude: decimalCoordinate(data.longitude, "Longitude"),
+        createdById: actor.id,
+        firebaseSyncStatus: SyncStatus.PENDING,
+      },
+    })
+    .catch((error: unknown) => {
+      if (isPrismaCode(error, "P2002")) throw new Response(DUPLICATE_REGION_MESSAGE, { status: 409 });
+      throw error;
+    });
 
   // Firebase provisioning runs outside any database transaction, then the
   // sync status is persisted. The audit write runs after both paths so an
@@ -98,19 +133,26 @@ export async function updateRegion(input: {
   const session = await getSession();
   if (!session) throw redirect("/login");
   const actor = assertSuperadmin(session);
-  const existing = await prisma.region.findUniqueOrThrow({ where: { id: data.id } });
+  const existing = await prisma.region.findUnique({ where: { id: data.id } });
+  if (!existing) throw new Response("Region tidak ditemukan.", { status: 404 });
   const nameChanged = existing.name !== data.name;
-  const updated = await prisma.region.update({
-    where: { id: data.id },
-    data: {
-      name: data.name,
-      description: data.description,
-      latitude: decimalCoordinate(data.latitude, "Latitude"),
-      longitude: decimalCoordinate(data.longitude, "Longitude"),
-      updatedById: actor.id,
-      ...(nameChanged ? { firebaseSyncStatus: SyncStatus.PENDING } : {}),
-    },
-  });
+  const updated = await prisma.region
+    .update({
+      where: { id: data.id },
+      data: {
+        name: data.name,
+        description: data.description,
+        latitude: decimalCoordinate(data.latitude, "Latitude"),
+        longitude: decimalCoordinate(data.longitude, "Longitude"),
+        updatedById: actor.id,
+        ...(nameChanged ? { firebaseSyncStatus: SyncStatus.PENDING } : {}),
+      },
+    })
+    .catch((error: unknown) => {
+      if (isPrismaCode(error, "P2002")) throw new Response(DUPLICATE_REGION_MESSAGE, { status: 409 });
+      if (isPrismaCode(error, "P2025")) throw new Response("Region tidak ditemukan.", { status: 404 });
+      throw error;
+    });
 
   // Description/coordinate-only edits are SQL-only: the Firebase node does not
   // change, so it must not be renamed or marked as a sync failure (F-01).
@@ -299,20 +341,35 @@ export async function updateRegionConfig(input: {
   return { ok: true };
 }
 
-export async function getRegionsForConfig() {
+export type RegionConfigQuery = PagedQuery<RegionConfigSortKey>;
+
+/** Server-side searched, sorted, paged region config rows. */
+export async function getRegionsForConfig(input: RegionConfigQuery = {}) {
+  const query = parseInput(regionConfigQuerySchema, input);
   const session = await getSession();
   if (!session) throw redirect("/login");
   assertSuperadmin(session);
 
-  const rows = await prisma.region.findMany({
-    orderBy: { name: "asc" },
-    select: {
-      id: true,
-      name: true,
-      volumeDivider: true,
-      showWindDirection: true,
-      showAutoIrrigation: true,
-    },
-  });
-  return rows.map((r) => ({ ...r, volumeDivider: Number(r.volumeDivider) }));
+  const sort = resolveSort(REGION_CONFIG_SORT_KEYS, query.sort, { key: "name", dir: "asc" });
+  const searchTerm = query.search?.trim();
+  const where: Prisma.RegionWhereInput = searchTerm ? { name: { contains: searchTerm } } : {};
+  const { take, skip } = pageWindow(query);
+
+  const [total, rows] = await Promise.all([
+    prisma.region.count({ where }),
+    prisma.region.findMany({
+      where,
+      orderBy: regionOrderBy(sort),
+      take,
+      skip,
+      select: {
+        id: true,
+        name: true,
+        volumeDivider: true,
+        showWindDirection: true,
+        showAutoIrrigation: true,
+      },
+    }),
+  ]);
+  return { items: rows.map((r) => ({ ...r, volumeDivider: Number(r.volumeDivider) })), total };
 }

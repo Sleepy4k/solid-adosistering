@@ -1,1 +1,7 @@
-export type { AdminUserCard, DashboardRegion, SuperadminSummary } from "~/types/dashboard";
+export type {
+  AdminDashboardStats,
+  AdminUserCard,
+  DashboardRegion,
+  SuperadminRegionRow,
+  SuperadminSummary,
+} from "~/types/dashboard";

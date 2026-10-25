@@ -70,7 +70,7 @@ We aim to acknowledge reports within 5 business days and will coordinate disclos
 - Client configuration contains only public Firebase identifiers
 - App Check is initialized on the client when `VITE_FIREBASE_APP_CHECK_SITE_KEY` is set
 - Realtime Database rules are deny-by-default for writes
-- Public reads of the `region_settings`, `blocks`, and sprayer subtrees (including control state, telemetry, and history) are allowed by `firebase.rules.json`. Treat those nodes as public and never place personal, credential, or operational secret data in the Realtime Database; this remains a documented deployment risk.
+- Public reads of `region_settings` and of each sprayer's `live_data` and `control` (telemetry and pump state) are allowed by `firebase.rules.json`; `history` is server-only. Treat those nodes as public and never place personal, credential, or operational secret data in the Realtime Database; this remains a documented deployment risk.
 - App Check enforcement for Realtime Database must still be enabled in the Firebase Console. Client initialization alone does not enforce it, and the deny-by-default write rules remain the primary write control.
 
 ## Dependency advisories

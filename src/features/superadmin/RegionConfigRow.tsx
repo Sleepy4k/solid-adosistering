@@ -4,7 +4,7 @@ import { useToast } from "~/components/shared/ToastProvider";
 import type { getRegionsForConfig } from "~/server/actions/regions";
 import { updateRegionConfig } from "~/server/actions/regions";
 
-type RegionRow = Awaited<ReturnType<typeof getRegionsForConfig>>[number];
+type RegionRow = Awaited<ReturnType<typeof getRegionsForConfig>>["items"][number];
 
 export function RegionConfigRow(props: { region: RegionRow; onSaved: () => void }) {
   const { notify } = useToast();

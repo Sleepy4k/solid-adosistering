@@ -10,14 +10,22 @@
         ".write": false
       },
       "blocks": {
-        ".read": true,
+        ".read": false,
         ".write": false,
         "$block": {
-          ".read": true,
+          ".read": false,
           ".write": false,
           "$sprayer": {
-            ".read": true,
-            ".write": false
+            ".read": false,
+            ".write": false,
+            "live_data": {
+              ".read": true,
+              ".write": false
+            },
+            "control": {
+              ".read": true,
+              ".write": false
+            }
           }
         }
       }

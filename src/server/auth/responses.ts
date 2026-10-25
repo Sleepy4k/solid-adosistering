@@ -14,6 +14,9 @@ export function cooldownResponse(retryAfterSec: number) {
 }
 
 export function invalidCredentialsResponse(remaining: number) {
-  const suffix = remaining > 0 ? ` Sisa ${remaining} percobaan sebelum penguncian sementara.` : "";
+  const suffix =
+    remaining > 0
+      ? ` Sisa ${remaining} percobaan sebelum penguncian sementara.`
+      : " Percobaan berikutnya akan dikunci sementara.";
   return new Response(`Kredensial tidak valid.${suffix}`, { status: 401 });
 }

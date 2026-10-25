@@ -9,6 +9,7 @@ import { getNewsletterTokenSecret, serverConfig } from "../config";
 import { checkRateLimit, rateLimitResponse } from "../http/rateLimit";
 import { assertSuperadmin, constantTimeEqual, hashToken, newOpaqueToken } from "../auth/security";
 import { getSession } from "../auth/session";
+import { resolveSort } from "~/lib/shared/tableSort";
 import {
   createSmtpTransporter,
   getEmailBrandConfig,
@@ -42,6 +43,9 @@ const BULK_CURSOR_PATTERN = /^(\d{1,15})\.([A-Za-z0-9_-]{1,128})$/;
  * range checks, which would otherwise surface as an opaque 500.
  */
 const BULK_CURSOR_MAX_FUTURE_MS = 365 * 24 * HOUR_MS;
+
+/** Allow-listed sort keys; each is a real NewsletterSubscriber column. */
+const SUBSCRIBER_SORT_KEYS = ["email", "status", "subscribedAt", "confirmedAt", "unsubscribedAt"] as const;
 
 type SubscriberStatus = "PENDING" | "CONFIRMED" | "UNSUBSCRIBED";
 type SubscriberListItem = {
@@ -299,16 +303,23 @@ export async function getAllSubscribers(input?: {
   page?: number;
   pageSize?: number;
   status?: SubscriberStatus;
+  search?: string;
+  sort?: { key?: string; dir?: string };
 }): Promise<{ items: SubscriberListItem[]; total: number; counts: SubscriberCounts }> {
   const session = await getSession();
   if (!session) throw redirect("/login");
   assertSuperadmin(session);
 
-  const { page, pageSize, status } = parseInput(subscriberListSchema, input ?? {});
-  const [items, groups] = await Promise.all([
+  const { page, pageSize, status, search, sort: sortInput } = parseInput(subscriberListSchema, input ?? {});
+  const sort = resolveSort(SUBSCRIBER_SORT_KEYS, sortInput, { key: "subscribedAt", dir: "desc" });
+  const where: Prisma.NewsletterSubscriberWhereInput = {
+    ...(status ? { status } : {}),
+    ...(search ? { email: { contains: search } } : {}),
+  };
+  const [items, total, groups] = await Promise.all([
     prisma.newsletterSubscriber.findMany({
-      where: status ? { status } : undefined,
-      orderBy: [{ subscribedAt: "desc" }, { id: "desc" }],
+      where,
+      orderBy: [{ [sort.key]: sort.dir }, { id: "desc" }],
       skip: page * pageSize,
       take: pageSize,
       // Explicit projection: confirmation token material must never reach the UI.
@@ -321,6 +332,7 @@ export async function getAllSubscribers(input?: {
         unsubscribedAt: true,
       },
     }),
+    prisma.newsletterSubscriber.count({ where }),
     prisma.newsletterSubscriber.groupBy({ by: ["status"], _count: { _all: true } }),
   ]);
 
@@ -329,7 +341,6 @@ export async function getAllSubscribers(input?: {
     counts[group.status] = group._count._all;
   }
 
-  const total = status ? counts[status] : counts.PENDING + counts.CONFIRMED + counts.UNSUBSCRIBED;
   return { items, total, counts };
 }
 

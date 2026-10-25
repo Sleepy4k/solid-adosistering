@@ -22,7 +22,10 @@ export type LiveSprayerData = {
   pumpOn: boolean;
   totalVolumeLiter: number;
   windDirection: string | null;
+  /** `live_data.last_updated`: the latest watering update. */
   lastUpdated: number | null;
+  /** Newest device timestamp (`last_updated` / `last_update`); drives the offline check. */
+  lastSeen: number | null;
   mode: 0 | 1;
   relay: 0 | 1;
 };

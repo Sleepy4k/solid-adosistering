@@ -1,22 +1,17 @@
-import { createAsync, query } from "@solidjs/router";
-import { createSignal, For, Show, Suspense } from "solid-js";
+import { createSignal, For, Show } from "solid-js";
 import { ModalFrame } from "~/components/shared/ModalFrame";
 import { SelectSearch } from "~/components/ui/SelectSearch";
+import { searchAdminOptions } from "~/server/actions/options";
 import { useToast } from "~/components/shared/ToastProvider";
 import type { getRegions } from "~/server/actions/regions";
-import { getAdmins, assignAdminToRegion, removeAdminFromRegion } from "~/server/actions/regions";
+import { assignAdminToRegion, removeAdminFromRegion } from "~/server/actions/regions";
 
-type RegionRow = Awaited<ReturnType<typeof getRegions>>[number];
-
-const loadAdmins = query(() => getAdmins(), "admins-list");
+type RegionRow = Awaited<ReturnType<typeof getRegions>>["items"][number];
 
 export function AdminAssignModal(props: { region: RegionRow; onClose: () => void; onSaved: () => void }) {
   const { notify } = useToast();
-  const admins = createAsync(() => loadAdmins());
   const [selectedAdmin, setSelectedAdmin] = createSignal<string>("");
   const [saving, setSaving] = createSignal<boolean>(false);
-
-  const assignedIds = new Set(props.region.adminAssignments.map((a) => a.admin.id));
 
   const assign = async () => {
     if (!selectedAdmin()) return;
@@ -78,20 +73,13 @@ export function AdminAssignModal(props: { region: RegionRow; onClose: () => void
         </div>
 
         <div class="flex gap-2">
-          <Suspense>
-            <SelectSearch
-              class="flex-1"
-              value={selectedAdmin()}
-              placeholder="Pilih admin baru..."
-              options={[
-                { value: "", label: "Pilih admin baru..." },
-                ...(admins() ?? [])
-                  .filter((a) => !assignedIds.has(a.id))
-                  .map((a) => ({ value: a.id, label: `${a.name} (${a.email})` })),
-              ]}
-              onChange={setSelectedAdmin}
-            />
-          </Suspense>
+          <SelectSearch
+            class="flex-1"
+            value={selectedAdmin()}
+            placeholder="Pilih admin baru..."
+            loadOptions={(q) => searchAdminOptions({ query: q, limit: 50, excludeRegionId: props.region.id })}
+            onChange={setSelectedAdmin}
+          />
           <button
             type="button"
             disabled={!selectedAdmin() || saving()}

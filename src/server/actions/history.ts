@@ -1,57 +1,113 @@
 "use server";
 
 import { redirect } from "@solidjs/router";
+import type { Prisma } from "@prisma/client";
+import { z } from "zod";
 import { prisma } from "../db/prisma";
 import { getSession } from "../auth/session";
 import { historyFiltersSchema, parseInput } from "../validation";
-import { getScopedRegionIds, scheduleFirebaseRefresh } from "../domain";
-import { buildIrrigationEventWhere } from "../domain/historyQuery";
+import { getScopedRegionIds } from "../domain";
+import { buildIrrigationEventWhere, resolveHistoryBlockScope } from "../domain/historyQuery";
+import { ensureHistoryFresh } from "../domain/historyFresh";
 import { enrichIrrigationEvents, historyEventSelect } from "../domain/historyData";
 import { endOfJakartaDayExclusive, isValidDateOnly, startOfJakartaDay } from "~/lib/shared/datetime";
+import { resolveSort, type SortDir, type TableSort } from "~/lib/shared/tableSort";
 import type { HistoryFilters } from "~/types/history";
 
 export type { HistoryFilters };
+
+type HistoryRow = Awaited<
+  ReturnType<typeof prisma.irrigationEvent.findMany<{ select: typeof historyEventSelect }>>
+>[number];
 
 const MAX_PAGE_SIZE = 85;
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_CURSOR_LENGTH = 256;
 
+const HISTORY_SORT_KEYS = ["startedAt", "durationSeconds", "totalVolumeLiter"] as const;
+type HistorySortKey = (typeof HISTORY_SORT_KEYS)[number];
+const DEFAULT_SORT: TableSort<HistorySortKey> = { key: "startedAt", dir: "desc" };
+
+const historyQuerySchema = historyFiltersSchema.extend({
+  sort: z
+    .object({
+      key: z.string().trim().max(32).optional(),
+      dir: z.string().trim().max(8).optional(),
+    })
+    .optional(),
+});
+
 type HistoryCursor = {
-  startedAt: string;
+  /** Sort the cursor was issued for; a cursor is rejected under any other sort. */
+  k: HistorySortKey;
+  d: SortDir;
+  /** Sort column value of the last row (ISO date, integer, decimal string) or null. */
+  v: string | number | null;
   id: string;
 };
 
+const invalidCursor = () => new Response("Cursor riwayat tidak valid.", { status: 400 });
+
 /**
- * Opaque compound cursor for stable keyset pagination.
- * Encoded as base64url(JSON({ startedAt: ISO-8601, id })).
+ * Opaque compound cursor for stable keyset pagination, bound to the sort it was
+ * issued for. Encoded as base64url(JSON({ k, d, v, id })).
  */
-function encodeHistoryCursor(startedAt: Date, id: string) {
-  return Buffer.from(JSON.stringify({ startedAt: startedAt.toISOString(), id }), "utf8").toString("base64url");
+function encodeHistoryCursor(sort: TableSort<HistorySortKey>, row: HistoryRow): string {
+  let v: string | number | null;
+  if (sort.key === "startedAt") v = row.startedAt.toISOString();
+  else if (sort.key === "durationSeconds") v = row.durationSeconds;
+  else v = row.totalVolumeLiter == null ? null : row.totalVolumeLiter.toString();
+  const cursor: HistoryCursor = { k: sort.key, d: sort.dir, v, id: row.id };
+  return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
 }
 
-function decodeHistoryCursor(value: string): HistoryCursor {
-  if (value.length > MAX_CURSOR_LENGTH) throw new Response("Cursor riwayat tidak valid.", { status: 400 });
+function decodeHistoryCursor(value: string, sort: TableSort<HistorySortKey>): HistoryCursor {
+  if (value.length > MAX_CURSOR_LENGTH) throw invalidCursor();
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(Buffer.from(value, "base64url").toString("utf8"));
   } catch {
-    throw new Response("Cursor riwayat tidak valid.", { status: 400 });
+    throw invalidCursor();
+  }
+  if (typeof parsed !== "object" || parsed === null) throw invalidCursor();
+
+  const record = parsed as { k?: unknown; d?: unknown; v?: unknown; id?: unknown };
+  if (record.k !== sort.key || record.d !== sort.dir) throw invalidCursor();
+  if (typeof record.id !== "string" || !record.id || record.id.length > 191) throw invalidCursor();
+
+  let v: string | number | null = null;
+  if (record.v !== null) {
+    if (sort.key === "startedAt") {
+      if (typeof record.v !== "string" || Number.isNaN(new Date(record.v).getTime())) throw invalidCursor();
+      v = new Date(record.v).toISOString();
+    } else if (sort.key === "durationSeconds") {
+      if (typeof record.v !== "number" || !Number.isSafeInteger(record.v)) throw invalidCursor();
+      v = record.v;
+    } else {
+      if (typeof record.v !== "string" || !/^-?\d{1,12}(\.\d{1,2})?$/.test(record.v)) throw invalidCursor();
+      v = record.v;
+    }
+  } else if (sort.key === "startedAt") {
+    throw invalidCursor();
   }
 
-  if (typeof parsed !== "object" || parsed === null) {
-    throw new Response("Cursor riwayat tidak valid.", { status: 400 });
-  }
-  const record = parsed as { startedAt?: unknown; id?: unknown };
-  if (typeof record.startedAt !== "string" || typeof record.id !== "string") {
-    throw new Response("Cursor riwayat tidak valid.", { status: 400 });
-  }
-  if (!record.id || record.id.length > 191) throw new Response("Cursor riwayat tidak valid.", { status: 400 });
+  return { k: sort.key, d: sort.dir, v, id: record.id };
+}
 
-  const startedAt = new Date(record.startedAt);
-  if (Number.isNaN(startedAt.getTime())) throw new Response("Cursor riwayat tidak valid.", { status: 400 });
+/** Keyset predicate for the rows strictly after `cursor`, NULLs ordered last. */
+function cursorWhere(cursor: HistoryCursor): Prisma.IrrigationEventWhereInput {
+  const op = cursor.d === "desc" ? "lt" : "gt";
+  const col = cursor.k;
+  if (cursor.v === null) return { [col]: null, id: { [op]: cursor.id } };
 
-  return { startedAt: startedAt.toISOString(), id: record.id };
+  const value = col === "startedAt" ? new Date(cursor.v as string) : cursor.v;
+  const branches: Prisma.IrrigationEventWhereInput[] = [
+    { [col]: { [op]: value } },
+    { [col]: value, id: { [op]: cursor.id } },
+  ];
+  if (col !== "startedAt") branches.push({ [col]: null });
+  return { OR: branches };
 }
 
 /**
@@ -64,11 +120,9 @@ function assertValidDateFilter(value: string | undefined, label: string): void {
 }
 
 export async function getIrrigationHistory(filters: HistoryFilters = {}) {
-  const data = parseInput(historyFiltersSchema, filters);
+  const data = parseInput(historyQuerySchema, filters);
   const session = await getSession();
   if (!session) throw redirect("/login");
-  scheduleFirebaseRefresh();
-
   assertValidDateFilter(data.dateFrom, "Tanggal awal");
   assertValidDateFilter(data.dateTo, "Tanggal akhir");
 
@@ -76,24 +130,35 @@ export async function getIrrigationHistory(filters: HistoryFilters = {}) {
   if (data.dateFrom) startedAt.gte = startOfJakartaDay(data.dateFrom);
   if (data.dateTo) startedAt.lt = endOfJakartaDayExclusive(data.dateTo);
 
-  const where = await buildIrrigationEventWhere(session, {
+  const scope = {
     ...(data.regionId ? { regionId: data.regionId } : {}),
     ...(data.blockId ? { blockId: data.blockId } : {}),
+  };
+  const where = await buildIrrigationEventWhere(session, {
+    ...scope,
     ...(data.status ? { status: data.status } : {}),
     ...(data.mode ? { mode: data.mode } : {}),
     ...(startedAt.gte || startedAt.lt ? { startedAt } : {}),
   });
 
+  // Only the first page pulls from Firebase; "load more" pages read what that
+  // refresh already stored.
+  if (!data.cursor) await ensureHistoryFresh(await resolveHistoryBlockScope(session, scope));
+
   const limit = Math.min(data.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
-  const cursor = data.cursor ? decodeHistoryCursor(data.cursor) : null;
-  if (cursor) {
-    const cursorStartedAt = new Date(cursor.startedAt);
-    where.OR = [{ startedAt: { lt: cursorStartedAt } }, { startedAt: cursorStartedAt, id: { lt: cursor.id } }];
-  }
+  const sort = resolveSort(HISTORY_SORT_KEYS, data.sort, DEFAULT_SORT);
+  if (data.cursor) where.AND = [cursorWhere(decodeHistoryCursor(data.cursor, sort))];
+
+  // NULL durations/volumes always sort last, in both directions; id is the
+  // deterministic tiebreaker and follows the sort direction.
+  const orderBy: Prisma.IrrigationEventOrderByWithRelationInput[] =
+    sort.key === "startedAt"
+      ? [{ startedAt: sort.dir }, { id: sort.dir }]
+      : [{ [sort.key]: { sort: sort.dir, nulls: "last" } }, { id: sort.dir }];
 
   const events = await prisma.irrigationEvent.findMany({
     where,
-    orderBy: [{ startedAt: "desc" }, { id: "desc" }],
+    orderBy,
     take: limit + 1,
     select: historyEventSelect,
   });
@@ -106,18 +171,6 @@ export async function getIrrigationHistory(filters: HistoryFilters = {}) {
 
   return {
     items,
-    nextCursor: hasMore && lastEvent ? encodeHistoryCursor(lastEvent.startedAt, lastEvent.id) : null,
+    nextCursor: hasMore && lastEvent ? encodeHistoryCursor(sort, lastEvent) : null,
   };
-}
-
-export async function getMyBlocks() {
-  const session = await getSession();
-  if (!session) throw redirect("/login");
-
-  const regionIds = await getScopedRegionIds(session);
-  return prisma.block.findMany({
-    where: regionIds ? { regionId: { in: regionIds } } : undefined,
-    select: { id: true, name: true, region: { select: { id: true, name: true } } },
-    orderBy: [{ region: { name: "asc" } }, { name: "asc" }],
-  });
 }

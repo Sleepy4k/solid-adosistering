@@ -1,10 +1,12 @@
 import { query, createAsync, revalidate } from "@solidjs/router";
-import { batch, createEffect, createSignal, For, Show, Suspense } from "solid-js";
-import { Mail, RefreshCw, Send, Trash2 } from "lucide-solid";
+import { createEffect, createSignal, For, Show, Suspense } from "solid-js";
+import { Mail, RefreshCw, Search, Send, Trash2 } from "lucide-solid";
 import { PageMeta } from "~/components/shared/PageMeta";
 import { PageHeader } from "~/components/ui/PageHeader";
 import { Card, CardHeader } from "~/components/ui/Card";
 import { Badge } from "~/components/ui/Badge";
+import { ListSortBar } from "~/features/superadmin/ListSortBar";
+import { useServerList } from "~/features/superadmin/useServerList";
 import { PageSizeSelect, TablePagination } from "~/components/ui/TablePagination";
 import { useToast } from "~/components/shared/ToastProvider";
 import { useConfirm } from "~/components/shared/ConfirmProvider";
@@ -35,15 +37,37 @@ type Subscriber = {
 };
 
 type StatusFilter = "ALL" | SubscriberStatus;
+type SubscriberSortKey = "email" | "status" | "subscribedAt" | "confirmedAt" | "unsubscribedAt";
+
+const SORT_COLUMNS: { key: SubscriberSortKey; label: string }[] = [
+  { key: "email", label: "Email" },
+  { key: "status", label: "Status" },
+  { key: "subscribedAt", label: "Tanggal Daftar" },
+  { key: "confirmedAt", label: "Tanggal Konfirmasi" },
+  { key: "unsubscribedAt", label: "Tanggal Berhenti" },
+];
 
 type BulkProgress = { sent: number; failed: number };
 
 const load = query(
-  (page: number, pageSize: number, status: StatusFilter) =>
-    getAllSubscribers({ page, pageSize, status: status === "ALL" ? undefined : status }),
+  (
+    page: number,
+    pageSize: number,
+    status: StatusFilter,
+    search: string,
+    sortKey: SubscriberSortKey,
+    sortDir: "asc" | "desc",
+  ) =>
+    getAllSubscribers({
+      page,
+      pageSize,
+      status: status === "ALL" ? undefined : status,
+      search: search || undefined,
+      sort: { key: sortKey, dir: sortDir },
+    }),
   KEY,
 );
-export const route = { preload: () => load(0, DEFAULT_PAGE_SIZE, "ALL") };
+export const route = { preload: () => load(0, DEFAULT_PAGE_SIZE, "ALL", "", "subscribedAt", "desc") };
 
 const STATUS_META: Record<SubscriberStatus, { label: string; tone: "success" | "warning" | "muted" }> = {
   CONFIRMED: { label: "Terkonfirmasi", tone: "success" },
@@ -79,8 +103,11 @@ export default function CmsSubscribers() {
     };
   };
 
-  const [page, setPage] = createSignal<number>(0);
-  const [pageSize, setPageSize] = createSignal<number>(DEFAULT_PAGE_SIZE);
+  const list = useServerList<SubscriberSortKey>({
+    defaultSort: { key: "subscribedAt", dir: "desc" },
+    pageSize: DEFAULT_PAGE_SIZE,
+  });
+  const { page, setPage, pageSize } = list;
   const [statusFilter, setStatusFilter] = createSignal<StatusFilter>("ALL");
   const [subject, setSubject] = createSignal<string>("");
   const [body, setBody] = createSignal<string>("");
@@ -89,7 +116,9 @@ export default function CmsSubscribers() {
   const [tab, setTab] = createSignal<"tulis" | "preview">("tulis");
   const [resendingId, setResendingId] = createSignal<string | null>(null);
 
-  const data = createAsync(() => load(page(), pageSize(), statusFilter()));
+  const data = createAsync(() =>
+    load(page(), pageSize(), statusFilter(), list.search(), list.sort().key, list.sort().dir),
+  );
   const subscribers = () => (data()?.items ?? []) as Subscriber[];
   const total = () => data()?.total ?? 0;
   const confirmedCount = () => data()?.counts.CONFIRMED ?? 0;
@@ -104,19 +133,7 @@ export default function CmsSubscribers() {
     if (page() > lastPage) setPage(lastPage);
   });
 
-  const changePageSize = (value: number) => {
-    batch(() => {
-      setPageSize(value);
-      setPage(0);
-    });
-  };
-
-  const changeStatusFilter = (value: StatusFilter) => {
-    batch(() => {
-      setStatusFilter(value);
-      setPage(0);
-    });
-  };
+  const changeStatusFilter = (value: StatusFilter) => list.resetPageWith(() => setStatusFilter(value));
 
   const handleDelete = async (item: Subscriber) => {
     const ok = await confirm({
@@ -325,7 +342,7 @@ export default function CmsSubscribers() {
             title={`Daftar Subscriber (${total()})`}
             actions={
               <div class="flex flex-wrap items-end gap-2">
-                <PageSizeSelect value={pageSize()} onChange={changePageSize} />
+                <PageSizeSelect value={pageSize()} onChange={list.setPageSize} />
                 <div class="flex flex-wrap items-center gap-0.5 self-end rounded-lg border border-slate-200 p-0.5 text-xs">
                   <For each={STATUS_FILTERS}>
                     {(option) => (
@@ -347,14 +364,31 @@ export default function CmsSubscribers() {
               </div>
             }
           />
+          <div class="border-b border-gray-100 px-4 py-3 sm:px-5">
+            <label class="relative block">
+              <span class="sr-only">Cari email subscriber</span>
+              <Search size={14} class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="search"
+                value={list.searchInput()}
+                onInput={(e) => list.onSearchInput(e.currentTarget.value)}
+                placeholder="Cari email subscriber"
+                maxLength={100}
+                class={`${inp} pl-9`}
+              />
+            </label>
+          </div>
+          <ListSortBar columns={SORT_COLUMNS} sort={list.sort()} onSort={list.setSort} />
           <Suspense fallback={<div class="p-8 text-center text-sm text-slate-500">Memuat...</div>}>
             <Show
               when={subscribers().length > 0}
               fallback={
                 <div class="p-10 text-center text-sm text-slate-500">
-                  {statusFilter() === "ALL"
-                    ? "Belum ada subscriber. Email dari landing page akan muncul di sini."
-                    : "Tidak ada subscriber dengan status ini."}
+                  {list.search()
+                    ? "Tidak ada subscriber yang cocok dengan pencarian."
+                    : statusFilter() === "ALL"
+                      ? "Belum ada subscriber. Email dari landing page akan muncul di sini."
+                      : "Tidak ada subscriber dengan status ini."}
                 </div>
               }
             >

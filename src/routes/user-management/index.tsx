@@ -1,14 +1,18 @@
 import { query, createAsync, useNavigate, useSearchParams } from "@solidjs/router";
-import { createEffect, createMemo, createSignal, For, lazy, Show, Suspense } from "solid-js";
+import { createEffect, createMemo, createSignal, For, lazy, onCleanup, Show, Suspense } from "solid-js";
 import { Download, Plus, RotateCcw } from "lucide-solid";
 import { ExportDataModal } from "~/features/export/ExportDataModal";
 import { PageMeta } from "~/components/shared/PageMeta";
 import { PageSizeSelect, TablePagination } from "~/components/ui/TablePagination";
-import { deleteUser, getUserFormOptions, getUsers, setUserActive } from "~/server/actions/users";
+import { ariaSort, SortHeader } from "~/components/ui/SortHeader";
+import { SimpleSelect } from "~/components/ui/SimpleSelect";
+import { debounce } from "~/lib/shared/debounce";
+import type { TableSort } from "~/lib/shared/tableSort";
+import type { UserSortKey } from "~/lib/shared/userSort";
+import { deleteUser, getUserFormOptions, getUsers, resendSetPasswordLink, setUserActive } from "~/server/actions/users";
 import { SkTableRow } from "~/components/shared/Skeleton";
 import { useToast } from "~/components/shared/ToastProvider";
 import { useConfirm } from "~/components/shared/ConfirmProvider";
-import { SelectSearch } from "~/components/ui/SelectSearch";
 import { roleBadge, formatDate, regionLabel } from "~/features/user-management/utils";
 import type { Role } from "@prisma/client";
 import type { UserListItem } from "~/types/users";
@@ -19,12 +23,35 @@ const EditUserModal = lazy(() =>
   import("~/features/user-management/EditUserModal").then((m) => ({ default: m.EditUserModal })),
 );
 
-const loadUsers = query((role: string, search: string, refreshKey: number) => {
-  void refreshKey;
-  return getUsers({ role: (role as Role) || undefined, search: search || undefined });
-}, "users-list");
+const DEFAULT_SORT: TableSort<UserSortKey> = { key: "createdAt", dir: "asc" };
+
+const loadUsers = query(
+  (
+    role: string,
+    status: string,
+    search: string,
+    sortKey: string,
+    sortDir: string,
+    page: number,
+    pageSize: number,
+    refreshKey: number,
+  ) => {
+    void refreshKey;
+    return getUsers({
+      role: (role as Role) || undefined,
+      status: (status as "active" | "inactive") || undefined,
+      search: search || undefined,
+      sort: { key: sortKey, dir: sortDir as "asc" | "desc" },
+      limit: pageSize,
+      offset: page * pageSize,
+    });
+  },
+  "users-list",
+);
 const loadFormOptions = query(() => getUserFormOptions(), "users-form-options");
-export const route = { preload: () => Promise.all([loadUsers("", "", 0), loadFormOptions()]) };
+export const route = {
+  preload: () => Promise.all([loadUsers("", "", "", DEFAULT_SORT.key, DEFAULT_SORT.dir, 0, 10, 0), loadFormOptions()]),
+};
 
 function normalizedSearchParam(value: unknown) {
   return typeof value === "string" ? value : "";
@@ -37,6 +64,8 @@ export default function ManajemenUser() {
   const confirm = useConfirm();
 
   const [roleFilter, setRoleFilter] = createSignal<string>("");
+  const [statusFilter, setStatusFilter] = createSignal<string>("");
+  const [sort, setSort] = createSignal<TableSort<UserSortKey>>(DEFAULT_SORT);
   const [search, setSearch] = createSignal<string>(normalizedSearchParam(params.search));
   const [searchInput, setSearchInput] = createSignal<string>(normalizedSearchParam(params.search));
   const [editTarget, setEditTarget] = createSignal<UserListItem | null>(null);
@@ -54,26 +83,63 @@ export default function ManajemenUser() {
   });
 
   const formOptions = createAsync(() => loadFormOptions());
-  const users = createAsync(() => loadUsers(roleFilter(), search(), refreshKey()));
-  const userRows = createMemo(() => users() ?? []);
-  const pagedUsers = createMemo(() => userRows().slice(page() * pageSize(), (page() + 1) * pageSize()));
+  const data = createAsync(() =>
+    loadUsers(roleFilter(), statusFilter(), search(), sort().key, sort().dir, page(), pageSize(), refreshKey()),
+  );
+  const userRows = createMemo(() => data()?.items ?? []);
+  const total = createMemo(() => data()?.total ?? 0);
 
+  // Debounced server-side search: refetch 300ms after the last keystroke.
+  const applySearch = debounce((value: string) => {
+    setSearch(value);
+    setPage(0);
+  }, 300);
+  onCleanup(() => applySearch.cancel());
+
+  // Out-of-range page (e.g. rows removed elsewhere): step back to the last real page.
   createEffect(() => {
-    const lastPage = Math.max(0, Math.ceil(userRows().length / pageSize()) - 1);
+    const result = data();
+    if (!result) return;
+    const lastPage = Math.max(0, Math.ceil(result.total / pageSize()) - 1);
     if (page() > lastPage) setPage(lastPage);
   });
 
   const handleSearch = (e: SubmitEvent) => {
     e.preventDefault();
+    applySearch.cancel();
     setSearch(searchInput());
     setPage(0);
   };
 
   const resetFilters = () => {
+    applySearch.cancel();
     setRoleFilter("");
+    setStatusFilter("");
+    setSort(DEFAULT_SORT);
     setSearch("");
     setSearchInput("");
     setPage(0);
+  };
+
+  const changeSort = (next: TableSort<UserSortKey>) => {
+    setSort(next);
+    setPage(0);
+  };
+
+  const handleResend = async (user: UserListItem) => {
+    const ok = await confirm({
+      title: "Kirim Ulang Tautan",
+      message: `Kirim ulang tautan atur kata sandi ke ${user.email}? Tautan sebelumnya akan dinonaktifkan.`,
+      confirmLabel: "Kirim",
+    });
+    if (!ok) return;
+    try {
+      await resendSetPasswordLink({ id: user.id });
+      notify({ kind: "success", title: "Tautan atur kata sandi dikirim" });
+    } catch (err) {
+      const message = err instanceof Response ? await err.text() : "";
+      notify({ kind: "error", title: "Gagal mengirim tautan", message: message || undefined });
+    }
   };
 
   const handleToggleActive = async (user: UserListItem) => {
@@ -104,6 +170,8 @@ export default function ManajemenUser() {
     try {
       await deleteUser({ id: user.id });
       notify({ kind: "success", title: "Pengguna berhasil dihapus" });
+      // Last row of a page: go back one page instead of showing an empty one.
+      if (userRows().length <= 1 && page() > 0) setPage(page() - 1);
       setRefreshKey((k) => k + 1);
     } catch {
       notify({ kind: "error", title: "Gagal menghapus pengguna" });
@@ -145,7 +213,10 @@ export default function ManajemenUser() {
                 type="text"
                 placeholder="Nama, email, atau WhatsApp..."
                 value={searchInput()}
-                onInput={(e) => setSearchInput(e.currentTarget.value)}
+                onInput={(e) => {
+                  setSearchInput(e.currentTarget.value);
+                  applySearch(e.currentTarget.value);
+                }}
                 class="w-full min-w-0 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 sm:w-56"
               />
             </div>
@@ -160,9 +231,8 @@ export default function ManajemenUser() {
           <Show when={formOptions()?.actorRole === "SUPERADMIN"}>
             <div class="flex flex-col gap-1.5">
               <label class="text-xs font-medium text-slate-600">Role</label>
-              <SelectSearch
+              <SimpleSelect
                 value={roleFilter()}
-                placeholder="Semua Role"
                 align="end"
                 options={[
                   { value: "", label: "Semua Role" },
@@ -177,6 +247,23 @@ export default function ManajemenUser() {
               />
             </div>
           </Show>
+
+          <div class="flex flex-col gap-1.5">
+            <label class="text-xs font-medium text-slate-600">Status</label>
+            <SimpleSelect
+              value={statusFilter()}
+              align="end"
+              options={[
+                { value: "", label: "Semua Status" },
+                { value: "active", label: "Aktif" },
+                { value: "inactive", label: "Nonaktif" },
+              ]}
+              onChange={(value) => {
+                setStatusFilter(value);
+                setPage(0);
+              }}
+            />
+          </div>
 
           <PageSizeSelect
             value={pageSize()}
@@ -210,25 +297,37 @@ export default function ManajemenUser() {
             }
           >
             <Show
-              when={userRows().length > 0}
+              when={total() > 0}
               fallback={<div class="p-10 text-center text-sm text-slate-500">Tidak ada pengguna ditemukan.</div>}
             >
               <div class="overflow-x-auto">
                 <table class="w-full min-w-[960px] text-sm">
                   <thead class="border-b border-slate-100 bg-slate-50 text-xs font-medium text-slate-500">
                     <tr>
-                      <th class="whitespace-nowrap px-5 py-3 text-left">Nama</th>
-                      <th class="whitespace-nowrap px-5 py-3 text-left">Email</th>
-                      <th class="whitespace-nowrap px-5 py-3 text-left">WhatsApp</th>
-                      <th class="whitespace-nowrap px-5 py-3 text-left">Role</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left" aria-sort={ariaSort(sort(), "name")}>
+                        <SortHeader label="Nama" column="name" sort={sort()} onSort={changeSort} />
+                      </th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left" aria-sort={ariaSort(sort(), "email")}>
+                        <SortHeader label="Email" column="email" sort={sort()} onSort={changeSort} />
+                      </th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left" aria-sort={ariaSort(sort(), "whatsapp")}>
+                        <SortHeader label="WhatsApp" column="whatsapp" sort={sort()} onSort={changeSort} />
+                      </th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left" aria-sort={ariaSort(sort(), "role")}>
+                        <SortHeader label="Role" column="role" sort={sort()} onSort={changeSort} />
+                      </th>
                       <th class="whitespace-nowrap px-5 py-3 text-left">Region</th>
-                      <th class="whitespace-nowrap px-5 py-3 text-left">Status</th>
-                      <th class="whitespace-nowrap px-5 py-3 text-left">Bergabung</th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left" aria-sort={ariaSort(sort(), "status")}>
+                        <SortHeader label="Status" column="status" sort={sort()} onSort={changeSort} />
+                      </th>
+                      <th class="whitespace-nowrap px-5 py-3 text-left" aria-sort={ariaSort(sort(), "createdAt")}>
+                        <SortHeader label="Bergabung" column="createdAt" sort={sort()} onSort={changeSort} />
+                      </th>
                       <th class="whitespace-nowrap px-5 py-3 text-left">Aksi</th>
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-slate-100">
-                    <For each={pagedUsers()}>
+                    <For each={userRows()}>
                       {(user) => (
                         <tr class="hover:bg-slate-50">
                           <td class="px-5 py-3 font-medium text-slate-900">{user.name}</td>
@@ -253,6 +352,15 @@ export default function ManajemenUser() {
                               >
                                 Edit
                               </button>
+                              <Show when={user.pendingSetup && user.isActive}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleResend(user)}
+                                  class="rounded-lg border border-sky-200 px-2.5 py-1 text-xs font-medium text-sky-700 hover:bg-sky-50"
+                                >
+                                  Kirim ulang tautan
+                                </button>
+                              </Show>
                               <button
                                 type="button"
                                 onClick={() => handleToggleActive(user)}
@@ -275,7 +383,7 @@ export default function ManajemenUser() {
                   </tbody>
                 </table>
               </div>
-              <TablePagination page={page()} pageSize={pageSize()} total={userRows().length} onPageChange={setPage} />
+              <TablePagination page={page()} pageSize={pageSize()} total={total()} onPageChange={setPage} />
             </Show>
           </Suspense>
         </div>
@@ -296,8 +404,12 @@ export default function ManajemenUser() {
         title="User"
         dateRange="optional"
         dateLabel="Tanggal bergabung"
-        filters={{ role: roleFilter(), search: search() }}
-        filterNote={roleFilter() || search() ? "Filter role dan pencarian yang aktif ikut diterapkan." : undefined}
+        filters={{ role: roleFilter(), status: statusFilter(), search: search() }}
+        filterNote={
+          roleFilter() || statusFilter() || search()
+            ? "Filter role, status, dan pencarian yang aktif ikut diterapkan."
+            : undefined
+        }
       />
     </>
   );

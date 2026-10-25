@@ -1,13 +1,13 @@
 import { PageMeta } from "~/components/shared/PageMeta";
 import { PageHeader } from "~/components/ui/PageHeader";
-import { loadRegionsConfig, loadMapDisplayConfig } from "~/features/superadmin/loaders";
+import { DEFAULT_REGION_CONFIG_QUERY, loadRegionsConfig, loadMapDisplayConfig } from "~/features/superadmin/loaders";
 import { loadWebConfig } from "~/lib/shared/webConfig";
 import { RegionConfigSection } from "~/features/superadmin/RegionConfigSection";
 import { WebConfigSection } from "~/features/superadmin/WebConfigSection";
 import { MapDisplayConfigSection } from "~/features/superadmin/MapDisplayConfigSection";
 
 export const route = {
-  preload: () => Promise.all([loadRegionsConfig(), loadWebConfig(), loadMapDisplayConfig()]),
+  preload: () => Promise.all([loadRegionsConfig(DEFAULT_REGION_CONFIG_QUERY), loadWebConfig(), loadMapDisplayConfig()]),
 };
 
 export default function SuperadminSettings() {

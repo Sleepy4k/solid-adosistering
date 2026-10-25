@@ -50,6 +50,20 @@ async function resolveScopedBlockIds(
 }
 
 /**
+ * Block ids the session may see for the requested region/block, or `null`
+ * when the scope is unrestricted (SUPERADMIN without region/block filters).
+ */
+export async function resolveHistoryBlockScope(
+  session: SessionUser,
+  filters: Pick<HistoryScopeFilters, "regionId" | "blockId">,
+): Promise<string[] | null> {
+  if (session.role !== "SUPERADMIN" || filters.blockId || filters.regionId) {
+    return resolveScopedBlockIds(session, filters.regionId, filters.blockId);
+  }
+  return null;
+}
+
+/**
  * Build the Prisma `where` for irrigation events visible to `session`.
  *
  * - SUPERADMIN without explicit filters sees every event.
@@ -64,10 +78,8 @@ export async function buildIrrigationEventWhere(
 ): Promise<Prisma.IrrigationEventWhereInput> {
   const where: Prisma.IrrigationEventWhereInput = {};
 
-  if (session.role !== "SUPERADMIN" || filters.blockId || filters.regionId) {
-    const scopedBlockIds = await resolveScopedBlockIds(session, filters.regionId, filters.blockId);
-    where.sprayer = { blockId: { in: scopedBlockIds } };
-  }
+  const scopedBlockIds = await resolveHistoryBlockScope(session, filters);
+  if (scopedBlockIds) where.sprayer = { blockId: { in: scopedBlockIds } };
 
   if (filters.status) where.relay = filters.status === "ON" ? RelayState.ON : RelayState.OFF;
   if (filters.mode) where.mode = filters.mode === "AUTO" ? IrrigationMode.AUTO : IrrigationMode.MANUAL;

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SORT_DIRS } from "~/lib/shared/tableSort";
 import {
   emailSchema,
   idSchema,
@@ -6,24 +7,33 @@ import {
   optionalDateSchema,
   optionalPhoneSchema,
   optionalText,
-  passwordSchema,
   roleSchema,
 } from "./common";
 
+/** Scope filters shared with the export dataset. */
 export const userListFiltersSchema = z.object({
   role: roleSchema.optional(),
   search: z.string().trim().max(100, "Pencarian maksimal 100 karakter.").optional(),
+});
+
+/** Full list query: filters + sort + pagination, all resolved server-side. */
+export const userListQuerySchema = userListFiltersSchema.extend({
+  status: z.enum(["active", "inactive"]).optional(),
+  sort: z.object({ key: z.string().max(32), dir: z.enum(SORT_DIRS) }).optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+  offset: z.number().int().min(0).max(1_000_000).optional(),
 });
 
 export const idInputSchema = z.object({ id: idSchema });
 
 export const setUserActiveSchema = z.object({ id: idSchema, active: z.boolean() });
 export const deleteUserSchema = z.object({ id: idSchema });
+export const resendSetPasswordLinkSchema = z.object({ id: idSchema });
 
+/** No password: new accounts get a one-time set-password link by email. */
 export const createUserSchema = z.object({
   name: nameSchema,
   email: emailSchema,
-  password: passwordSchema,
   role: roleSchema,
   regionIds: z.array(idSchema).max(50, "Terlalu banyak region.").optional(),
   whatsapp: optionalPhoneSchema,

@@ -98,6 +98,8 @@ export default function RiwayatIrigasi() {
   const [isFetching, setIsFetching] = createSignal(false);
   const [initialLoading, setInitialLoading] = createSignal(true);
   const [loadMoreFailed, setLoadMoreFailed] = createSignal(false);
+  // Successful page loads since the last reset; the back-to-top button needs two.
+  const [pagesLoaded, setPagesLoaded] = createSignal(0);
   const [exportOpen, setExportOpen] = createSignal(false);
 
   const regions = createAsync(() => loadRegionCount());
@@ -113,6 +115,7 @@ export default function RiwayatIrigasi() {
     if (isReset) {
       setInitialLoading(true);
       setItems([]);
+      setPagesLoaded(0);
       setNextCursor(null);
       setHasMore(false);
     }
@@ -139,6 +142,7 @@ export default function RiwayatIrigasi() {
       }
       setNextCursor(result.nextCursor);
       setHasMore(result.nextCursor !== null);
+      setPagesLoaded((count) => count + 1);
       succeeded = true;
     } catch (error) {
       if (mySeq !== fetchSeq) return;
@@ -443,7 +447,7 @@ export default function RiwayatIrigasi() {
         <div ref={sentinel} class="h-px" />
       </div>
 
-      <BackToTop />
+      <BackToTop enabled={pagesLoaded() >= 2} />
 
       <ExportHistoryModal
         open={exportOpen()}

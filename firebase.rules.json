@@ -9,6 +9,12 @@
         ".read": true,
         ".write": false
       },
+      "pump": {
+        "state": {
+          ".read": true,
+          ".write": false
+        }
+      },
       "blocks": {
         ".read": false,
         ".write": false,

@@ -74,3 +74,36 @@ export function createFlowEstimator(): FlowEstimator {
     },
   };
 }
+
+/** A gap longer than this between two observations is not integrated over. */
+export const VOLUME_MAX_GAP_MS = 15_000;
+
+export type VolumeTracker = {
+  /**
+   * Add `flowLmin x elapsed` (L/min -> liters: minutes = ms / 60000) to the
+   * running total of `key` and return it. The first call only sets the clock.
+   */
+  advance(key: string, flowLmin: number, nowMs: number): number;
+};
+
+/**
+ * Integrates the reported flow rate into liters while a page is open. Used when
+ * the device reports `flow_Lmin` but no cumulative counter (the V2 firmware):
+ * the total is `lifetime from stored sessions + this running session`.
+ */
+export function createVolumeTracker(): VolumeTracker {
+  const state = new Map<string, { atMs: number; liters: number }>();
+  return {
+    advance(key, flowLmin, nowMs) {
+      const current = state.get(key);
+      if (!current) {
+        state.set(key, { atMs: nowMs, liters: 0 });
+        return 0;
+      }
+      const elapsedMs = Math.min(Math.max(nowMs - current.atMs, 0), VOLUME_MAX_GAP_MS);
+      if (Number.isFinite(flowLmin) && flowLmin > 0) current.liters += (flowLmin * elapsedMs) / 60_000;
+      current.atMs = nowMs;
+      return current.liters;
+    },
+  };
+}

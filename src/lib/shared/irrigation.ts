@@ -4,7 +4,8 @@ import type { MoistureStatusLabel, Threshold } from "~/types/irrigation";
 export function calculateMoistureStatus(moisturePercent: number, threshold: Threshold): MoistureStatusLabel {
   const dryMax = threshold.displayDryMaxPercent ?? threshold.dryMaxPercent;
   const wetMin = threshold.displayWetMinPercent ?? threshold.wetMinPercent;
-  if (moisturePercent <= dryMax) return "Kering";
+  // Same boundaries as the firmware: below dry = Kering, below wet = Lembab.
+  if (moisturePercent < dryMax) return "Kering";
   if (moisturePercent >= wetMin) return "Basah";
   return "Lembab";
 }

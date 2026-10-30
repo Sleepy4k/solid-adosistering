@@ -11,6 +11,8 @@ export type SprayerMeta = {
   displayName: string;
   /** Stored "latest data update" (ISO), kept in the website database. */
   lastDataAt?: string | null;
+  /** End of the most recent irrigation session (ISO), from the stored history. */
+  lastWateredAt?: string | null;
 };
 
 export function SprayerCard(props: {
@@ -30,8 +32,9 @@ export function SprayerCard(props: {
   const status = () => deriveLiveStatus(props.data, props.nowMs, props.monitorError);
   const statusMeta = () => liveStatusMeta(status());
   const moisture = () => moistureTone(props.data?.moisturePercent ?? 0, props.threshold);
-  // `live_data.last_updated` is the device's latest watering timestamp.
-  const lastWatered = () => props.data?.lastUpdated ?? null;
+  // `live_data.last_updated` is only the device heartbeat; "Terakhir siram" is the
+  // end of the latest stored session, or "Sedang menyiram" while water is flowing.
+  const lastWatered = () => props.meta?.lastWateredAt ?? null;
 
   return (
     <div class="rounded-xl border border-gray-200 bg-white p-5">
@@ -90,14 +93,26 @@ export function SprayerCard(props: {
             {(data) => <Badge tone={pumpBadgeTone(data().pumpStatus)}>{data().pumpOn ? "Aktif" : "Mati"}</Badge>}
           </Show>
         </div>
-        <Show when={lastWatered()}>
+        <Show
+          when={status() !== "watering" && lastWatered()}
+          fallback={
+            <Show when={status() === "watering"}>
+              <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <span class="inline-flex min-w-0 items-center gap-2 text-[#4F4F4F]">
+                  <CalendarClock size={16} class="shrink-0" /> Terakhir siram
+                </span>
+                <span class="min-w-0 break-words text-right font-semibold text-[#186D3C]">Sedang menyiram</span>
+              </div>
+            </Show>
+          }
+        >
           {(value) => (
             <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
               <span class="inline-flex min-w-0 items-center gap-2 text-[#4F4F4F]">
                 <CalendarClock size={16} class="shrink-0" /> Terakhir siram
               </span>
               <span class="min-w-0 break-words text-right font-semibold text-[#186D3C]">
-                {formatLastUpdated(value())}
+                {formatLastUpdated(new Date(value() as string))}
               </span>
             </div>
           )}

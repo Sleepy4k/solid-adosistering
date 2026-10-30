@@ -32,6 +32,18 @@ export function moistureStatus(value?: string): MoistureStatus {
   return MoistureStatus.KERING;
 }
 
+/**
+ * Soil moisture class from the percentage, with the firmware's boundaries
+ * (`moistureToStatus`): below the dry limit is Kering, below the wet limit is
+ * Lembab, otherwise Basah. The firmware never writes `moisture_status` into
+ * `live_data`, so a stored label there would be stale; always classify.
+ */
+export function moistureFromPercent(percent: number, dryLimit: number, wetLimit: number): MoistureStatus {
+  if (percent < dryLimit) return MoistureStatus.KERING;
+  if (percent < wetLimit) return MoistureStatus.LEMBAB;
+  return MoistureStatus.BASAH;
+}
+
 export function relayState(value?: boolean): RelayState {
   return value ? RelayState.ON : RelayState.OFF;
 }

@@ -20,7 +20,12 @@ export type LiveSprayerData = {
   moistureStatus: MoistureStatusLabel;
   pumpStatus: string;
   pumpOn: boolean;
+  /** Cumulative counter reported by the device (`total_liter`), 0 when the device has none. */
   totalVolumeLiter: number;
+  /** True when the device reports a cumulative counter; otherwise volume is derived from flow. */
+  hasVolumeCounter: boolean;
+  /** Liters integrated from `flow_Lmin` since this page started watching (derived volume only). */
+  sessionVolumeLiter: number;
   windDirection: string | null;
   /** `live_data.last_updated`: the latest watering update. */
   lastUpdated: number | null;

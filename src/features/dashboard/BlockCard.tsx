@@ -12,7 +12,7 @@ import { useConfirm } from "~/components/shared/ConfirmProvider";
 import { InlineError } from "~/components/shared/AppErrorBoundary";
 import { useToast } from "~/components/shared/ToastProvider";
 import { aggregateLive, deriveLiveStatus, moistureTone } from "./helpers";
-import { createDataClock, latestDataUpdate, liveFingerprint } from "./dataClock";
+import { createVolumeTotals } from "./useVolumeTotals";
 import { SprayerCard, type SprayerMeta } from "./SprayerCard";
 
 export function BlockCard(props: {
@@ -32,7 +32,7 @@ export function BlockCard(props: {
   const confirm = useConfirm();
   const { notify } = useToast();
   const nowMs = useNow(30_000);
-  const dataClock = createDataClock();
+  const volumes = createVolumeTotals(() => props.sprayers.map((sprayer) => sprayer.id));
 
   /**
    * Live rows are keyed by the Firebase node key: usually the exact
@@ -60,31 +60,34 @@ export function BlockCard(props: {
   const sprayerRows = createMemo(() =>
     props.sprayers.map((meta) => {
       const data = liveByMetaId().get(meta.id) ?? null;
-      return {
-        meta,
-        data,
-        dataUpdatedAtMs: latestDataUpdate(meta.lastDataAt, data ? dataClock.changedAt()[data.sprayerId] : undefined),
-      };
+      // "Terakhir update": the device heartbeat (`last_updated`), falling back to
+      // the stored data stamp until the device has reported.
+      const stored = meta.lastDataAt ? Date.parse(meta.lastDataAt) : Number.NaN;
+      const dataUpdatedAtMs = data?.lastUpdated ? data.lastUpdated * 1000 : Number.isFinite(stored) ? stored : null;
+      return { meta, data, dataUpdatedAtMs };
     }),
   );
 
-  const freshLive = createMemo(() => {
+  const freshRows = createMemo(() => {
     const tick = nowMs();
     const failed = monitorError();
-    return sprayerRows()
-      .map((row) => row.data)
-      .filter((row): row is LiveSprayerData => row !== null)
-      .filter((row) => {
-        const status = deriveLiveStatus(row, tick, failed);
-        return status === "watering" || status === "no-flow" || status === "idle";
-      });
+    return sprayerRows().filter((row): row is typeof row & { data: LiveSprayerData } => {
+      if (row.data === null) return false;
+      const status = deriveLiveStatus(row.data, tick, failed);
+      return status === "watering" || status === "no-flow" || status === "idle";
+    });
   });
+  const freshLive = createMemo(() => freshRows().map((row) => row.data));
 
   // Zeros are not a measurement: when no device is fresh there is no aggregate
   // at all, and the card renders an explicit empty state instead of `0.00`.
   const aggregate = createMemo(() => {
     const rows = freshLive();
-    return rows.length > 0 ? aggregateLive(rows) : null;
+    if (rows.length === 0) return null;
+    const summary = aggregateLive(rows);
+    // Volume is stored sessions + the running one (or the device counter).
+    const totalVolume = freshRows().reduce((sum, row) => sum + volumes.volumeFor(row.meta.id, row.data), 0);
+    return { ...summary, totalVolume };
   });
   const liveSummary = () => {
     if (loading()) return { label: "Memuat", tone: "muted" as const };
@@ -140,7 +143,6 @@ export function BlockCard(props: {
         threshold: threshold(),
       },
       (sprayers) => {
-        for (const row of sprayers) dataClock.observe(row.sprayerId, liveFingerprint(row));
         setLiveData(sprayers);
         setLoading(false);
         setError("");

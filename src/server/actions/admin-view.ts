@@ -6,6 +6,7 @@ import { assertAdminOrHigher } from "../auth/security";
 import { getSession } from "../auth/session";
 import { getScopedRegionIds, getRegionThresholdMap, refreshFirebaseWithin } from "../domain";
 import { getDataStampBySprayer } from "../domain/dataStamp";
+import { getLastWateredBySprayer } from "../domain/lastWatered";
 import type { DashboardRegion } from "~/types/dashboard";
 
 export async function getUserDashboardView(userId: string): Promise<{ regions: DashboardRegion[] }> {
@@ -50,12 +51,13 @@ export async function getUserDashboardView(userId: string): Promise<{ regions: D
   const assignedSprayerIds = assignments.flatMap((a) =>
     a.region.blocks.flatMap((block) => block.sprayers.map((sprayer) => sprayer.id)),
   );
-  const [thresholdMap, dataStampMap] = await Promise.all([
+  const [thresholdMap, dataStampMap, lastWateredMap] = await Promise.all([
     getRegionThresholdMap(
       userId,
       assignments.map((a) => a.regionId),
     ),
     getDataStampBySprayer(assignedSprayerIds),
+    getLastWateredBySprayer(assignedSprayerIds),
   ]);
 
   return {
@@ -90,6 +92,7 @@ export async function getUserDashboardView(userId: string): Promise<{ regions: D
             hardwareId: sprayer.hardwareId,
             displayName: sprayer.displayName,
             lastDataAt: dataStampMap.get(sprayer.id) ?? null,
+            lastWateredAt: lastWateredMap.get(sprayer.id) ?? null,
           })),
         })),
       };

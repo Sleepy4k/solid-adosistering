@@ -17,8 +17,12 @@ export function average(values: number[]) {
   return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 }
 
-/** A live reading older than this is treated as offline. */
-export const LIVE_STALE_MS = 5 * 60_000;
+/**
+ * A live reading older than this is treated as offline. The firmware writes
+ * `last_updated` every few seconds and itself closes valves after 120 s without
+ * a readable control node, so two minutes without a heartbeat means offline.
+ */
+export const LIVE_STALE_MS = 120_000;
 /** Tolerated device clock drift into the future before a reading is rejected. */
 export const CLOCK_SKEW_MS = 60_000;
 

@@ -74,7 +74,8 @@ export function displayMoistureStatus(
 ) {
   const dryMax = threshold?.displayDryMaxPercent ?? threshold?.dryMaxPercent ?? 40;
   const wetMin = threshold?.displayWetMinPercent ?? threshold?.wetMinPercent ?? 80;
-  if (moisturePercent <= dryMax) return MoistureStatus.KERING;
+  // Same boundaries as the firmware: below dry = Kering, below wet = Lembab.
+  if (moisturePercent < dryMax) return MoistureStatus.KERING;
   if (moisturePercent >= wetMin) return MoistureStatus.BASAH;
   return MoistureStatus.LEMBAB;
 }

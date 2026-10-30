@@ -76,7 +76,9 @@ function fallbackStats(args: StatsArgs): StatsResult {
     summary: {
       averageMoisture: null,
       averageFlow: null,
-      totalFlow: 0,
+      totalVolume: 0,
+      totalDurationMinutes: 0,
+      sessionCount: 0,
       readingCount: 0,
       irrigationCount: 0,
       autoCount: 0,
@@ -243,6 +245,7 @@ export default function Statistik() {
       moisture: buckets.map((bucket) => bucket.averageMoisture),
       water: buckets.map((bucket) => bucket.averageFlow),
       hasData: (stats()?.summary.readingCount ?? 0) > 0,
+      hasWaterData: (stats()?.summary.sessionCount ?? 0) > 0,
     };
   });
 
@@ -256,18 +259,25 @@ export default function Statistik() {
     const value = avgMoisture();
     return value === null || !hasReadings() ? "-" : `${value.toFixed(2)}%`;
   };
+  const hasSessions = () => (summary()?.sessionCount ?? 0) > 0;
   const avgFlowText = () => {
     const value = avgFlow();
-    return value === null || !hasReadings() ? "-" : value.toFixed(2);
+    return value === null || !hasSessions() ? "-" : value.toFixed(2);
   };
+  // Liters from the stored sessions (device `totalVolume`), not a sum of rates.
   const totalWaterText = () => {
-    const value = summary()?.totalFlow;
-    return value === undefined || !hasReadings() ? "-" : value.toFixed(2);
+    const value = summary()?.totalVolume;
+    return value === undefined || !hasSessions() ? "-" : value.toFixed(2);
+  };
+  // Session seconds converted to minutes.
+  const totalMinutesText = () => {
+    const value = summary()?.totalDurationMinutes;
+    return value === undefined || !hasSessions() || value <= 0 ? "-" : value.toFixed(1);
   };
   const moistureLabel = () => {
     const value = avgMoisture();
     if (value === null || !hasReadings()) return "Belum ada data";
-    if (value <= 40) return "Kering";
+    if (value < 40) return "Kering";
     if (value >= 80) return "Basah";
     return "Lembab";
   };
@@ -371,8 +381,8 @@ export default function Statistik() {
                 labelColor="text-amber-600"
               />
               <MiniStat label="Kelembaban Rata Rata" value={avgMoistureText()} sub={moistureLabel()} />
-              <MiniStat label="Total Debit Tercatat" value={totalWaterText()} sub="L/mnt (jumlah pembacaan)" />
-              <MiniStat label="Debit Air Rata Rata" value={avgFlowText()} sub="Liter/menit" />
+              <MiniStat label="Total Volume Air" value={totalWaterText()} sub="Liter (total sesi irigasi)" />
+              <MiniStat label="Total Durasi Irigasi" value={totalMinutesText()} sub="Menit" />
             </div>
 
             <div class="grid gap-5 p-5 lg:grid-cols-2">
@@ -394,8 +404,8 @@ export default function Statistik() {
               <div class="rounded-xl border border-slate-100 p-4">
                 <div class="mb-3 flex items-center justify-between gap-3">
                   <h3 class="text-sm font-semibold text-slate-700">Debit Air</h3>
-                  <Show when={!chartSeries().hasData}>
-                    <span class="text-xs text-slate-400">Belum ada data debit air</span>
+                  <Show when={!chartSeries().hasWaterData}>
+                    <span class="text-xs text-slate-400">Belum ada sesi irigasi</span>
                   </Show>
                 </div>
                 <LineChart

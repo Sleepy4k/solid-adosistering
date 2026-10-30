@@ -3,7 +3,7 @@ import { firebaseBlockPath, firebaseSegment, firebaseSprayerPath, toFirebaseCont
 import { serverConfig } from "../../config";
 import { prisma } from "../../db/prisma";
 import { firebaseAdminApp, firebaseAdminDb } from "./admin";
-import { clampNumber, fromEpoch, liveTotalLiter, moistureStatus, stableSourceKey } from "./convert";
+import { clampNumber, fromEpoch, liveTotalLiter, moistureFromPercent, stableSourceKey } from "./convert";
 import { importSprayerHistory, type HistorySprayerTarget } from "./historyImport";
 import { recentHistoryDateKeys } from "./historyNormalize";
 
@@ -130,13 +130,17 @@ export async function renameBlockNode(oldBlockName: string, block: BlockNode) {
   await db.ref(`${regionKey}/blocks/${oldKey}`).remove();
 }
 
+/**
+ * The V2 firmware updates exactly `flow_Lmin`, `moisture_percent` and
+ * `last_updated` on `live_data` (updateNode, so other keys survive);
+ * `arah_angin` comes from another source. No label or counter is provisioned,
+ * because nothing would keep it current.
+ */
 const defaultLiveData = () => ({
   arah_angin: "barat laut",
   flow_Lmin: 0,
   last_updated: Math.floor(Date.now() / 1000),
   moisture_percent: 0,
-  moisture_status: "Kering",
-  total_liter: 0,
 });
 
 export async function provisionSprayerNode(sprayer: SprayerNode) {
@@ -284,6 +288,7 @@ async function storeLiveReading(
   sprayerId: string,
   live: NonNullable<FirebaseSprayerNode["live_data"]>,
   control: FirebaseSprayerNode["control"],
+  limits: { dryMaxPercent: number; wetMinPercent: number },
 ) {
   const lastUpdated = live.last_updated;
   if (typeof lastUpdated !== "number" || !Number.isFinite(lastUpdated)) {
@@ -307,7 +312,11 @@ async function storeLiveReading(
         moisturePercent: clampNumber(live.moisture_percent, 0, 100),
         flowLmin: clampNumber(live.flow_Lmin, 0, 999_999),
         totalVolumeLiter: totalVolumeLiter === null ? null : clampNumber(totalVolumeLiter, 0, 9_999_999_999),
-        moistureStatus: moistureStatus(live.moisture_status),
+        moistureStatus: moistureFromPercent(
+          clampNumber(live.moisture_percent, 0, 100),
+          limits.dryMaxPercent,
+          limits.wetMinPercent,
+        ),
         pumpStatus: control?.pump_status ? "ON" : "OFF",
         windDirection: live.arah_angin?.slice(0, 100) ?? null,
         recordedAt,
@@ -322,7 +331,9 @@ async function storeLiveReading(
  * nodes that can still change. The full history is read once by
  * `ensureSprayerHistory`.
  */
-async function syncSprayer(target: HistorySprayerTarget, stats: FirebaseSyncStats) {
+type SprayerSyncTarget = HistorySprayerTarget & { dryMaxPercent: number; wetMinPercent: number };
+
+async function syncSprayer(target: SprayerSyncTarget, stats: FirebaseSyncStats) {
   const db = firebaseAdminDb();
   const path = firebaseSprayerPath(target.regionName, target.blockName, target.hardwareId);
   const [liveSnapshot, controlSnapshot] = await Promise.all([
@@ -334,7 +345,7 @@ async function syncSprayer(target: HistorySprayerTarget, stats: FirebaseSyncStat
     if (liveSnapshot.exists()) {
       const live = liveSnapshot.val() as NonNullable<FirebaseSprayerNode["live_data"]>;
       const control = controlSnapshot.exists() ? (controlSnapshot.val() as FirebaseSprayerNode["control"]) : undefined;
-      const inserted = await storeLiveReading(target.id, live, control);
+      const inserted = await storeLiveReading(target.id, live, control, target);
       stats.readings += inserted;
       // "Latest data update": advance it only when the device reported
       // something new, so an offline device does not look freshly updated.
@@ -439,7 +450,7 @@ async function runFirebaseSync(input: { staleMs?: number } = {}) {
 
   try {
     const regions = await prisma.region.findMany({
-      select: { id: true, name: true, createdById: true },
+      select: { id: true, name: true, createdById: true, dryMaxPercent: true, wetMinPercent: true },
       orderBy: { name: "asc" },
     });
     // Enforce FIREBASE_SYNC_DISABLED / missing config before any Firebase read
@@ -456,7 +467,7 @@ async function runFirebaseSync(input: { staleMs?: number } = {}) {
         if (blockNames === null) return;
         stats.regions += 1;
 
-        const targets: HistorySprayerTarget[] = [];
+        const targets: SprayerSyncTarget[] = [];
         for (const blockName of blockNames) {
           if (blockName.startsWith("_")) continue;
           const hardwareIds = (await childKeys(`${regionKey}/blocks/${firebaseSegment(blockName)}`)) ?? [];
@@ -489,7 +500,14 @@ async function runFirebaseSync(input: { staleMs?: number } = {}) {
               },
             });
             stats.sprayers += 1;
-            targets.push({ id: sprayer.id, regionName: region.name, blockName, hardwareId });
+            targets.push({
+              id: sprayer.id,
+              regionName: region.name,
+              blockName,
+              hardwareId,
+              dryMaxPercent: region.dryMaxPercent,
+              wetMinPercent: region.wetMinPercent,
+            });
           }
         }
 

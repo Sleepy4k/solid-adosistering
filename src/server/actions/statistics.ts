@@ -18,9 +18,17 @@ type AggregateRow = {
   bucket: Numeric;
   moistureSum: Numeric;
   moistureCount: Numeric;
-  flowSum: Numeric;
-  flowCount: Numeric;
   readingCount: Numeric;
+};
+
+/** Irrigation sessions per bucket, aggregated from the stored device history. */
+type SessionRow = {
+  bucket: Numeric;
+  sessionCount: Numeric;
+  volumeSum: Numeric;
+  /** Seconds of the sessions that also have a volume, so flow is volume / time. */
+  timedSeconds: Numeric;
+  timedVolumeSum: Numeric;
 };
 
 type ModeGroup = { mode: string; _count: { _all: number } };
@@ -73,6 +81,54 @@ function buildBuckets(granularity: Granularity, from: Date, to: Date): BucketDes
   return buckets;
 }
 
+/** WIB (UTC+7) bucket of a timestamp column; `column` is always a fixed literal. */
+function bucketSql(granularity: Granularity, column: Prisma.Sql) {
+  return granularity === "2h"
+    ? Prisma.sql`FLOOR(HOUR(DATE_ADD(${column}, INTERVAL 7 HOUR)) / 2)`
+    : Prisma.sql`DATE_FORMAT(DATE_ADD(${column}, INTERVAL 7 HOUR), '%Y-%m-%d')`;
+}
+
+/**
+ * Water statistics come from the irrigation sessions the device reports
+ * (history: `totalVolume` in liters and `duration` in seconds), not from
+ * summing instantaneous flow readings, which are rates and idle zeros.
+ *   volume   = sum of session liters (/ region volume divider)
+ *   minutes  = sum of session seconds / 60
+ *   avg flow = volume / minutes   (L/min while watering)
+ */
+async function fetchSessionAggregates(
+  granularity: Granularity,
+  from: Date,
+  to: Date,
+  scopedBlockIds: string[] | null,
+): Promise<SessionRow[]> {
+  if (scopedBlockIds !== null && scopedBlockIds.length === 0) return [];
+
+  const bucketExpression = bucketSql(granularity, Prisma.raw("ie.started_at"));
+  const blockClause =
+    scopedBlockIds === null ? Prisma.empty : Prisma.sql`AND sp.block_id IN (${Prisma.join(scopedBlockIds)})`;
+
+  return prisma.$queryRaw<SessionRow[]>`
+    SELECT
+      ${bucketExpression} AS bucket,
+      COUNT(*) AS sessionCount,
+      SUM(ie.total_volume_liter / COALESCE(NULLIF(reg.volume_divider, 0), 1)) AS volumeSum,
+      SUM(CASE WHEN ie.total_volume_liter IS NOT NULL AND ie.duration_seconds > 0
+               THEN ie.duration_seconds ELSE 0 END) AS timedSeconds,
+      SUM(CASE WHEN ie.total_volume_liter IS NOT NULL AND ie.duration_seconds > 0
+               THEN ie.total_volume_liter / COALESCE(NULLIF(reg.volume_divider, 0), 1) ELSE 0 END) AS timedVolumeSum
+    FROM irrigation_event ie
+    INNER JOIN sprayer sp ON sp.id = ie.sprayer_id
+    INNER JOIN block b ON b.id = sp.block_id
+    INNER JOIN region reg ON reg.id = b.region_id
+    WHERE ie.relay = 'ON'
+      AND ie.started_at >= ${from} AND ie.started_at < ${to}
+      ${blockClause}
+    GROUP BY ${bucketExpression}
+    ORDER BY bucket ASC
+  `;
+}
+
 /**
  * Aggregate inside MySQL so long windows never stream raw sensor rows into the
  * app (the previous raw-read cap silently truncated 7d/30d charts).
@@ -90,10 +146,7 @@ async function fetchReadingAggregates(
   // `IN ()` would otherwise depend on driver-specific SQL generation.
   if (scopedBlockIds !== null && scopedBlockIds.length === 0) return [];
 
-  const bucketExpression =
-    granularity === "2h"
-      ? Prisma.sql`FLOOR(HOUR(DATE_ADD(sr.recorded_at, INTERVAL 7 HOUR)) / 2)`
-      : Prisma.sql`DATE_FORMAT(DATE_ADD(sr.recorded_at, INTERVAL 7 HOUR), '%Y-%m-%d')`;
+  const bucketExpression = bucketSql(granularity, Prisma.raw("sr.recorded_at"));
   const blockClause =
     scopedBlockIds === null ? Prisma.empty : Prisma.sql`AND sp.block_id IN (${Prisma.join(scopedBlockIds)})`;
 
@@ -102,8 +155,6 @@ async function fetchReadingAggregates(
       ${bucketExpression} AS bucket,
       SUM(sr.moisture_percent) AS moistureSum,
       COUNT(sr.moisture_percent) AS moistureCount,
-      SUM(sr.flow_lmin / COALESCE(NULLIF(reg.volume_divider, 0), 1)) AS flowSum,
-      COUNT(sr.flow_lmin) AS flowCount,
       COUNT(*) AS readingCount
     FROM sensor_reading sr
     INNER JOIN sprayer sp ON sp.id = sr.sprayer_id
@@ -184,8 +235,9 @@ async function computeStatistics(from: Date, to: Date, scopedBlockIds: string[] 
     : {};
   const hasNoScope = scopedBlockIds !== null && scopedBlockIds.length === 0;
 
-  const [rows, modeGroups] = await Promise.all([
+  const [rows, sessionRows, modeGroups] = await Promise.all([
     hasNoScope ? Promise.resolve<AggregateRow[]>([]) : fetchReadingAggregates(granularity, from, to, scopedBlockIds),
+    hasNoScope ? Promise.resolve<SessionRow[]>([]) : fetchSessionAggregates(granularity, from, to, scopedBlockIds),
     hasNoScope
       ? Promise.resolve<ModeGroup[]>([])
       : prisma.irrigationEvent.groupBy({
@@ -197,18 +249,26 @@ async function computeStatistics(from: Date, to: Date, scopedBlockIds: string[] 
 
   const rowsByBucket = new Map<string, AggregateRow>();
   for (const row of rows) rowsByBucket.set(bucketKey(granularity, row.bucket), row);
+  const sessionsByBucket = new Map<string, SessionRow>();
+  for (const row of sessionRows) sessionsByBucket.set(bucketKey(granularity, row.bucket), row);
 
   let totalMoistureSum = 0;
   let totalMoistureCount = 0;
-  let totalFlowSum = 0;
-  let totalFlowCount = 0;
   let totalReadingCount = 0;
+  let totalVolume = 0;
+  let totalSessions = 0;
+  let timedSeconds = 0;
+  let timedVolume = 0;
   for (const row of rows) {
     totalMoistureSum += toNumber(row.moistureSum);
     totalMoistureCount += toNumber(row.moistureCount);
-    totalFlowSum += toNumber(row.flowSum);
-    totalFlowCount += toNumber(row.flowCount);
     totalReadingCount += toNumber(row.readingCount);
+  }
+  for (const row of sessionRows) {
+    totalVolume += toNumber(row.volumeSum);
+    totalSessions += toNumber(row.sessionCount);
+    timedSeconds += toNumber(row.timedSeconds);
+    timedVolume += toNumber(row.timedVolumeSum);
   }
 
   let irrigationCount = 0;
@@ -226,12 +286,16 @@ async function computeStatistics(from: Date, to: Date, scopedBlockIds: string[] 
     : buildBuckets(granularity, from, to).map(({ key, label }) => {
         const row = rowsByBucket.get(key);
         const bucketMoistureCount = row ? toNumber(row.moistureCount) : 0;
-        const bucketFlowCount = row ? toNumber(row.flowCount) : 0;
+        const session = sessionsByBucket.get(key);
+        const bucketTimedMinutes = session ? toNumber(session.timedSeconds) / 60 : 0;
         return {
           key,
           label,
           averageMoisture: bucketMoistureCount > 0 ? toNumber(row?.moistureSum ?? null) / bucketMoistureCount : null,
-          averageFlow: bucketFlowCount > 0 ? toNumber(row?.flowSum ?? null) / bucketFlowCount : null,
+          // L/min while watering = liters / minutes of the same sessions.
+          averageFlow: session && bucketTimedMinutes > 0 ? toNumber(session.timedVolumeSum) / bucketTimedMinutes : null,
+          totalVolume: session ? toNumber(session.volumeSum) : null,
+          sessionCount: session ? toNumber(session.sessionCount) : 0,
           readingCount: row ? toNumber(row.readingCount) : 0,
         };
       });
@@ -241,8 +305,10 @@ async function computeStatistics(from: Date, to: Date, scopedBlockIds: string[] 
     buckets,
     summary: {
       averageMoisture: totalMoistureCount > 0 ? totalMoistureSum / totalMoistureCount : null,
-      averageFlow: totalFlowCount > 0 ? totalFlowSum / totalFlowCount : null,
-      totalFlow: totalFlowSum,
+      averageFlow: timedSeconds > 0 ? timedVolume / (timedSeconds / 60) : null,
+      totalVolume,
+      totalDurationMinutes: timedSeconds / 60,
+      sessionCount: totalSessions,
       readingCount: totalReadingCount,
       irrigationCount,
       autoCount,

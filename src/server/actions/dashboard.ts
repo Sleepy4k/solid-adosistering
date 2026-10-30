@@ -12,6 +12,7 @@ import {
   scheduleFirebaseRefresh,
 } from "../domain";
 import { getDataStampBySprayer } from "../domain/dataStamp";
+import { getLastWateredBySprayer } from "../domain/lastWatered";
 import { assertAdminOrHigher, assertSuperadmin } from "../auth/security";
 import { pageWindow, regionOrderBy, regionSearchWhere } from "../domain/regionList";
 import { adminUserQuerySchema, regionSummaryQuerySchema } from "../validation/regionLists";
@@ -102,12 +103,13 @@ export async function getMyDashboard(): Promise<
     const assignedSprayerIds = assignments.flatMap((a) =>
       a.region.blocks.flatMap((block) => block.sprayers.map((sprayer) => sprayer.id)),
     );
-    const [thresholdMap, dataStampMap] = await Promise.all([
+    const [thresholdMap, dataStampMap, lastWateredMap] = await Promise.all([
       getRegionThresholdMap(
         session.id,
         assignments.map((a) => a.regionId),
       ),
       getDataStampBySprayer(assignedSprayerIds),
+      getLastWateredBySprayer(assignedSprayerIds),
     ]);
 
     return {
@@ -143,6 +145,7 @@ export async function getMyDashboard(): Promise<
               hardwareId: s.hardwareId,
               displayName: s.displayName,
               lastDataAt: dataStampMap.get(s.id) ?? null,
+              lastWateredAt: lastWateredMap.get(s.id) ?? null,
             })),
           })),
         };
@@ -178,7 +181,10 @@ export async function getMyDashboard(): Promise<
   const adminSprayerIds = adminRegions.flatMap((region) =>
     region.blocks.flatMap((block) => block.sprayers.map((sprayer) => sprayer.id)),
   );
-  const dataStampMap = await getDataStampBySprayer(adminSprayerIds);
+  const [dataStampMap, lastWateredMap] = await Promise.all([
+    getDataStampBySprayer(adminSprayerIds),
+    getLastWateredBySprayer(adminSprayerIds),
+  ]);
   const defaultDisplay = displayThresholdDefaults();
 
   return {
@@ -208,6 +214,7 @@ export async function getMyDashboard(): Promise<
           hardwareId: s.hardwareId,
           displayName: s.displayName,
           lastDataAt: dataStampMap.get(s.id) ?? null,
+          lastWateredAt: lastWateredMap.get(s.id) ?? null,
         })),
       })),
     })),

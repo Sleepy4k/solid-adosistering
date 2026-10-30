@@ -1,10 +1,11 @@
 import { initializeApp, type FirebaseApp } from "firebase/app";
 import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 import { getDatabase, onValue, ref, type Database } from "firebase/database";
-import { createFlowEstimator, type FlowEstimator } from "~/lib/shared/flow";
+import { createFlowEstimator, createVolumeTracker, type FlowEstimator, type VolumeTracker } from "~/lib/shared/flow";
 import {
   calculateMoistureStatus,
   firebaseBlockPath,
+  firebaseSegment,
   firebaseSprayerPath,
   type LiveSprayerData,
   type Threshold,
@@ -70,39 +71,44 @@ const FLOW_REFRESH_MS = 5_000;
 
 type FlowContext = {
   estimator: FlowEstimator;
+  volume: VolumeTracker;
   nowMs: number;
   /** True for a real Firebase snapshot; false for a decay-only re-evaluation. */
   observe: boolean;
 };
 
 /**
- * `total_liter` is the cumulative counter written by the devices; the older
- * keys remain as fallbacks for nodes provisioned by earlier firmware.
+ * Optional cumulative liter counter. The V2 firmware does not write one (it
+ * reports `flow_Lmin` only); older firmware wrote `total_liter`. `null` means
+ * "no counter", which makes the volume derive from the flow rate instead.
  */
-function liveTotalLiter(liveData: Record<string, unknown>) {
-  return Number(
+function liveTotalLiter(liveData: Record<string, unknown>): number | null {
+  const raw =
     liveData.total_liter ??
-      liveData.totalVolume ??
-      liveData.totalVolume_L ??
-      liveData.total_volume_L ??
-      liveData.total_volume ??
-      liveData.volume_L ??
-      liveData.waterVolume ??
-      0,
-  );
+    liveData.totalVolume ??
+    liveData.totalVolume_L ??
+    liveData.total_volume_L ??
+    liveData.total_volume ??
+    liveData.volume_L ??
+    liveData.waterVolume;
+  if (raw === undefined || raw === null) return null;
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
+/** Device epochs before this are an unsynced RTC (1970 + uptime), not a time. */
+const MIN_VALID_EPOCH_SECONDS = 1_700_000_000;
+
 /**
- * `last_updated` is the latest watering update and may stay old while the
- * device idles, so liveness also considers `last_update`; the newest wins.
- * Values are epoch seconds (legacy firmware wrote milliseconds).
+ * `last_updated` is the device heartbeat: the firmware stamps it (epoch
+ * seconds, `time(nullptr)`) on every `live_data` write. Legacy firmware wrote
+ * milliseconds. A value before the NTP-synced epoch means the clock was unset.
  */
-function latestDeviceSeen(liveData: Record<string, unknown>) {
-  const candidates = [liveData.last_updated, liveData.last_update, liveData.timestamp]
-    .map((value) => Number(value))
-    .filter((value) => Number.isFinite(value) && value > 0)
-    .map((value) => (value > 1e12 ? value / 1000 : value));
-  return candidates.length > 0 ? Math.max(...candidates) : null;
+function deviceHeartbeat(liveData: Record<string, unknown>) {
+  const raw = Number(liveData.last_updated ?? liveData.timestamp);
+  if (!Number.isFinite(raw) || raw <= 0) return null;
+  const seconds = raw > 1e12 ? raw / 1000 : raw;
+  return seconds >= MIN_VALID_EPOCH_SECONDS ? seconds : null;
 }
 
 function mapSprayerNode(
@@ -117,17 +123,28 @@ function mapSprayerNode(
   const control = (value?.control ?? {}) as Record<string, unknown>;
   const moisturePercent = Number(liveData.moisture_percent ?? liveData.moisture ?? 0);
   const volumeDivider = threshold.volumeDivider ?? 1;
-  const totalVolumeLiter = liveTotalLiter(liveData) / volumeDivider;
   const pumpOn =
-    control.pump_status === true || control.pump_status === 1 || control.relay === 1 || control.relay === "1";
+    control.pump_status === true ||
+    control.pump_status === 1 ||
+    control.pump_status === "true" ||
+    control.pump_status === "1" ||
+    control.relay === 1 ||
+    control.relay === "1";
   const autoMode = control.mode === "AUTO" || control.mode === 1 || control.mode === "1";
-  const moistureStatus = String(liveData.moisture_status ?? "");
 
-  // `flow_Lmin` is not reported by the devices, so the rate is derived from the
-  // counter instead of being read from Firebase.
+  // Flow: the firmware reports `flow_Lmin` in L/min (pulses / 27 per liter,
+  // 0 while the block's valve is closed). Only when a device has no usable
+  // rate but does keep a liter counter is the rate derived from that counter.
   const flowKey = `${regionName}/${blockName}/${sprayerId}`;
-  if (flow.observe) flow.estimator.push(flowKey, totalVolumeLiter, flow.nowMs);
-  const flowLmin = flow.estimator.estimate(flowKey, flow.nowMs, pumpOn);
+  const counter = liveTotalLiter(liveData);
+  const reportedFlow = Number(liveData.flow_Lmin ?? liveData.flowRate);
+  let flowLmin = Number.isFinite(reportedFlow) && reportedFlow > 0 ? reportedFlow / volumeDivider : 0;
+  if (counter !== null) {
+    if (flow.observe) flow.estimator.push(flowKey, counter / volumeDivider, flow.nowMs);
+    if (flowLmin === 0) flowLmin = flow.estimator.estimate(flowKey, flow.nowMs, pumpOn);
+  }
+  // Liters of the running session: L/min x minutes, integrated between updates.
+  const sessionVolumeLiter = flow.volume.advance(flowKey, flowLmin, flow.nowMs);
 
   return {
     regionName,
@@ -135,16 +152,17 @@ function mapSprayerNode(
     sprayerId,
     flowLmin,
     moisturePercent,
-    moistureStatus:
-      moistureStatus === "Kering" || moistureStatus === "Lembab" || moistureStatus === "Basah"
-        ? moistureStatus
-        : calculateMoistureStatus(moisturePercent, threshold),
+    // The firmware never writes `moisture_status`; classify from the percentage
+    // with the same boundaries the device uses.
+    moistureStatus: calculateMoistureStatus(moisturePercent, threshold),
     pumpStatus: pumpOn ? "ON" : "OFF",
     pumpOn,
-    totalVolumeLiter,
+    totalVolumeLiter: counter === null ? 0 : counter / volumeDivider,
+    hasVolumeCounter: counter !== null,
+    sessionVolumeLiter,
     windDirection: typeof liveData.arah_angin === "string" ? liveData.arah_angin : null,
-    lastUpdated: Number(liveData.last_updated ?? liveData.timestamp ?? 0) || null,
-    lastSeen: latestDeviceSeen(liveData),
+    lastUpdated: deviceHeartbeat(liveData),
+    lastSeen: deviceHeartbeat(liveData),
     mode: autoMode ? 0 : 1,
     relay: pumpOn ? 1 : 0,
   };
@@ -168,13 +186,14 @@ function watch<T>(
   onError?: FirebaseErrorHandler,
 ): () => void {
   const estimator = createFlowEstimator();
+  const volume = createVolumeTracker();
   const values: unknown[] = paths.map(() => null);
   const received = new Set<number>();
   let lastSignature = "";
 
   const emit = (observe: boolean) => {
     if (received.size < paths.length) return;
-    const value = project(values, { estimator, nowMs: Date.now(), observe });
+    const value = project(values, { estimator, volume, nowMs: Date.now(), observe });
     const next = signature(value);
     // Decay ticks only publish when something visible actually changed.
     if (!observe && next === lastSignature) return;
@@ -183,7 +202,7 @@ function watch<T>(
   };
 
   if (paths.length === 0) {
-    onData(project(values, { estimator, nowMs: Date.now(), observe: true }));
+    onData(project(values, { estimator, volume, nowMs: Date.now(), observe: true }));
     return () => {};
   }
 
@@ -215,7 +234,7 @@ function watch<T>(
 }
 
 const sprayerListSignature = (list: LiveSprayerData[]) =>
-  list.map((item) => `${item.sprayerId}:${item.flowLmin.toFixed(3)}`).join("|");
+  list.map((item) => `${item.sprayerId}:${item.flowLmin.toFixed(3)}:${item.sessionVolumeLiter.toFixed(1)}`).join("|");
 
 /** Rebuild the `{ live_data, control }` shape `mapSprayerNode` expects. */
 function sprayerNodeFrom(liveData: unknown, control: unknown): Record<string, unknown> | null {
@@ -246,7 +265,7 @@ export function subscribeToSprayer(
         input.threshold,
         flow,
       ),
-    (item) => item.flowLmin.toFixed(3),
+    (item) => `${item.flowLmin.toFixed(3)}:${item.sessionVolumeLiter.toFixed(1)}`,
     onData,
     onError,
   );
@@ -286,6 +305,35 @@ export function subscribeToBlock(
     onData,
     onError,
   );
+}
+
+/**
+ * The shared pump of a region. The firmware writes `{ state: "ON" | "OFF" }` to
+ * `<region>/pump` whenever any block's valve is open.
+ */
+export function subscribeToRegionPump(
+  input: { regionName: string },
+  onData: (on: boolean | null) => void,
+  onError?: FirebaseErrorHandler,
+): () => void {
+  const db = clientDb();
+  if (!db) {
+    onError?.(new Error("Konfigurasi Firebase belum lengkap."));
+    return () => {};
+  }
+  try {
+    return onValue(
+      ref(db, `${firebaseSegment(input.regionName)}/pump/state`),
+      (snap) => {
+        const value: unknown = snap.val();
+        onData(value === null || value === undefined ? null : value === "ON" || value === true);
+      },
+      (error) => onError?.(toError(error)),
+    );
+  } catch (error) {
+    onError?.(toError(error));
+    return () => {};
+  }
 }
 
 export function isFirebaseConfigured(): boolean {

@@ -8,7 +8,7 @@ import type { LiveSprayerData, Threshold } from "~/lib/shared/irrigation";
 import { isFirebaseConfigured, subscribeToBlock } from "~/lib/client/firebaseClient";
 import { useNow } from "~/lib/client/liveDate";
 import type { AdminUserCard } from "./DashboardTypes";
-import { createDataClock, latestDataUpdate, liveFingerprint } from "./dataClock";
+import { createVolumeTotals } from "./useVolumeTotals";
 import { deriveLiveStatus, formatLastUpdated } from "./helpers";
 import { ROUTES } from "~/constants/routes";
 
@@ -18,7 +18,12 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
   const [error, setError] = createSignal<string>("");
   const [menuOpen, setMenuOpen] = createSignal<boolean>(false);
   const nowMs = useNow(30_000);
-  const dataClock = createDataClock();
+  const volumes = createVolumeTotals(() => props.user.sprayersByBlock.map((sprayer) => sprayer.sprayerId));
+  // Firebase node key (hardware id) -> database sprayer id, per region/block.
+  const sprayerDbId = (blockKey: string, hardwareId: string) =>
+    props.user.sprayersByBlock.find(
+      (s) => `${s.regionName}::${s.blockName}` === blockKey && s.hardwareId === hardwareId,
+    )?.sprayerId;
 
   onMount(() => {
     if (props.user.sprayersByBlock.length === 0) {
@@ -70,7 +75,6 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
           threshold: block.threshold,
         },
         (sprayers) => {
-          for (const row of sprayers) dataClock.observe(`${key}::${row.sprayerId}`, liveFingerprint(row));
           setAllLive((prev) => {
             const next = new Map(prev);
             next.set(key, sprayers);
@@ -96,7 +100,12 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
     onCleanup(() => unsubscribers.forEach((u) => u()));
   });
 
-  const allSprayers = createMemo(() => [...allLive().values()].flat());
+  const allEntries = createMemo(() =>
+    [...allLive().entries()].flatMap(([blockKey, rows]) =>
+      rows.map((row) => ({ row, id: sprayerDbId(blockKey, row.sprayerId) })),
+    ),
+  );
+  const allSprayers = createMemo(() => allEntries().map((entry) => entry.row));
   const monitorError = () => error().length > 0;
   // Only fresh rows may feed the aggregate. Stale snapshots stay visible as a
   // "last seen" timestamp, never as current moisture, volume, or pump state.
@@ -108,15 +117,23 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
       return status === "watering" || status === "no-flow" || status === "idle";
     });
   });
+  const freshEntries = createMemo(() => {
+    const tick = nowMs();
+    const failed = monitorError();
+    return allEntries().filter((entry) => {
+      const status = deriveLiveStatus(entry.row, tick, failed);
+      return status === "watering" || status === "no-flow" || status === "idle";
+    });
+  });
   const avgMoisture = () => {
     const items = freshSprayers();
     if (!items.length) return null;
     return items.reduce((sum, s) => sum + s.moisturePercent, 0) / items.length;
   };
   const totalVolume = () => {
-    const items = freshSprayers();
-    if (!items.length) return null;
-    return items.reduce((sum, s) => sum + s.totalVolumeLiter, 0);
+    const entries = freshEntries();
+    if (!entries.length) return null;
+    return entries.reduce((sum, entry) => sum + volumes.volumeFor(entry.id ?? "", entry.row), 0);
   };
   const activePumps = () => {
     const items = freshSprayers();
@@ -136,15 +153,17 @@ export function AdminUserSensorCard(props: { user: AdminUserCard }) {
     return value === null ? "-" : `${value} / ${freshSprayers().length}`;
   };
 
-  // "Terakhir update" is the stored latest data update across this user's
-  // sprayers, advanced by any change observed while the card is open.
+  // "Terakhir update": the newest device heartbeat (`last_updated`) across this
+  // user's sprayers, falling back to the stored data stamps before any report.
   const latestDataAt = () => {
     let latest: number | null = null;
-    const observed = Object.values(dataClock.changedAt());
-    const observedMax = observed.length > 0 ? Math.max(...observed) : undefined;
+    for (const { row } of allEntries()) {
+      if (row.lastUpdated) latest = Math.max(latest ?? 0, row.lastUpdated * 1000);
+    }
+    if (latest !== null) return latest;
     for (const sprayer of props.user.sprayersByBlock) {
-      const value = latestDataUpdate(sprayer.lastDataAt, observedMax);
-      if (value !== null && (latest === null || value > latest)) latest = value;
+      const stored = sprayer.lastDataAt ? Date.parse(sprayer.lastDataAt) : Number.NaN;
+      if (Number.isFinite(stored)) latest = Math.max(latest ?? 0, stored);
     }
     return latest;
   };

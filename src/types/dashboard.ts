@@ -21,7 +21,13 @@ export type DashboardRegion = {
     id: string;
     name: string;
     polygonGeojson: Prisma.JsonValue | null;
-    sprayers: { id: string; hardwareId: string; displayName: string; lastDataAt: string | null }[];
+    sprayers: {
+      id: string;
+      hardwareId: string;
+      displayName: string;
+      lastDataAt: string | null;
+      lastWateredAt: string | null;
+    }[];
   }[];
 };
 
